@@ -12,6 +12,9 @@ export const env = cleanEnv(process.env, {
 
   SUPABASE_URL: url({ default: '' }),
   SUPABASE_ANON_KEY: str({ default: '' }),
+  /** HS256 shared secret for Supabase JWT verification. When set, tokens are
+   *  verified with HS256 using this value. When absent, RS256/JWKS is used. */
+  SUPABASE_JWT_SECRET: str({ default: '' }),
 
   REDIS_URL: str({ default: '' }),
   JWT_SECRET: str({ default: 'dev-secret' }),

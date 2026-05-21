@@ -9,6 +9,7 @@ export interface RedisLike {
   ): Promise<string | null>;
   del(key: string): Promise<number>;
   publish(channel: string, message: string): Promise<number>;
+  keys?(pattern: string): Promise<string[]>;
   quit?(): Promise<unknown>;
 }
 
@@ -56,6 +57,22 @@ class MemoryRedis implements RedisLike {
 
   async publish(_channel: string, _message: string): Promise<number> {
     return 0;
+  }
+
+  async keys(pattern: string): Promise<string[]> {
+    // Simple glob: only supports '*' wildcard (Redis KEYS-style for our use case).
+    const regex = new RegExp(
+      '^' + pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$',
+    );
+    const out: string[] = [];
+    for (const [k, entry] of this.store) {
+      if (entry.expiresAt > 0 && entry.expiresAt < Date.now()) {
+        this.store.delete(k);
+        continue;
+      }
+      if (regex.test(k)) out.push(k);
+    }
+    return out;
   }
 }
 
