@@ -94,6 +94,12 @@ function startOfWeek(d: DateTime): DateTime {
   return d.startOf("day").minus({ days: weekday });
 }
 
+interface MakeShiftOpts {
+  isOpen?: boolean;
+  lockedByUserId?: string;
+  lockedByName?: string;
+}
+
 function makeShift(
   id: string,
   scheduleId: string,
@@ -103,6 +109,7 @@ function makeShift(
   hours: number,
   required: number,
   assigneeIds: string[],
+  opts: MakeShiftOpts = {},
 ): Shift {
   return {
     id,
@@ -113,6 +120,9 @@ function makeShift(
     endsAt: startsAt.plus({ hours }).toISO() ?? "",
     requiredCount: required,
     version: 1,
+    isOpen: opts.isOpen,
+    lockedByUserId: opts.lockedByUserId ?? null,
+    lockedByName: opts.lockedByName ?? null,
     assignments: assigneeIds.map((employeeId, idx) => ({
       id: `${id}_a${idx}`,
       shiftId: id,
@@ -140,7 +150,11 @@ export function buildMockSchedule(weekStart?: DateTime): Schedule {
       for (const startHour of [9, 17]) {
         const sid = `shift_${day}_${idx++}`;
         const startsAt = dayStart.set({ hour: startHour });
-        const assignees = day < 3 && startHour === 9 ? [mockEmployees[idx % mockEmployees.length]!.id] : [];
+        const assignees =
+          day < 3 && startHour === 9 ? [mockEmployees[idx % mockEmployees.length]!.id] : [];
+        // exercise visual states: day 3 morning ברמנית is OPEN, day 4 evening טבח is LOCKED.
+        const isOpen = day === 3 && startHour === 9 && r.role === "ברמנית";
+        const isLocked = day === 4 && startHour === 17 && r.role === "טבח";
         shifts.push(
           makeShift(
             sid,
@@ -151,6 +165,11 @@ export function buildMockSchedule(weekStart?: DateTime): Schedule {
             r.hours,
             r.count,
             assignees,
+            {
+              isOpen: isOpen || undefined,
+              lockedByUserId: isLocked ? "mgr_other" : undefined,
+              lockedByName: isLocked ? "מנהל אחר" : undefined,
+            },
           ),
         );
       }

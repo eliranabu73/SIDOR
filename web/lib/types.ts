@@ -50,6 +50,11 @@ export interface Shift {
   requiredCount: number;
   version: number;
   notes?: string | null;
+  /** Backend `isOpenShift` — shift is opted-in for employees to claim. */
+  isOpen?: boolean;
+  /** Soft-lock from Redis (when another manager is editing). */
+  lockedByUserId?: ID | null;
+  lockedByName?: string | null;
   assignments: ShiftAssignment[];
 }
 

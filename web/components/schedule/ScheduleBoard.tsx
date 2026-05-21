@@ -43,6 +43,11 @@ interface Props {
    */
   locationFilter?: string | "all";
   roleFilter?: string | "all";
+  /**
+   * Current viewer's user id. Used to compare against `shift.lockedByUserId`
+   * — locks held by *me* should not appear as locked in my UI.
+   */
+  currentUserId?: string;
 }
 
 interface PendingDrop {
@@ -58,6 +63,7 @@ export function ScheduleBoard({
   weekStart,
   locationFilter = "all",
   roleFilter = "all",
+  currentUserId,
 }: Props) {
   const employeesById = React.useMemo(
     () => Object.fromEntries(employees.map((e) => [e.id, e])),
@@ -283,15 +289,22 @@ export function ScheduleBoard({
                 </div>
               </div>
               <div className="flex flex-col gap-2 min-h-32">
-                {(shiftsByDay[day] ?? []).map((shift) => (
-                  <ShiftCard
-                    key={shift.id}
-                    shift={shift}
-                    employees={employeesById}
-                    validationTone={validationByShift[shift.id] ?? "neutral"}
-                    onUnassign={(empId) => unassign(shift, empId)}
-                  />
-                ))}
+                {(shiftsByDay[day] ?? []).map((shift) => {
+                  const lockedByOther =
+                    !!shift.lockedByUserId &&
+                    shift.lockedByUserId !== currentUserId;
+                  return (
+                    <ShiftCard
+                      key={shift.id}
+                      shift={shift}
+                      employees={employeesById}
+                      validationTone={validationByShift[shift.id] ?? "neutral"}
+                      isLocked={lockedByOther}
+                      lockedByName={lockedByOther ? shift.lockedByName ?? undefined : undefined}
+                      onUnassign={(empId) => unassign(shift, empId)}
+                    />
+                  );
+                })}
                 {(shiftsByDay[day] ?? []).length === 0 ? (
                   <div className={cn("rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground")}>
                     אין משמרות

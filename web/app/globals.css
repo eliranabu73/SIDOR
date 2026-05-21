@@ -37,6 +37,60 @@
   --color-popover-foreground: hsl(222.2 84% 4.9%);
 
   --radius: 0.5rem;
+
+  /* ---------------------------------------------------------------
+   * Schedule board — design system co-authored with ChatGPT (GPT-5).
+   * Dark-first, neutral base + accent strip per state.
+   * Rule: the card background almost never changes. Only border,
+   * accent strip, status dot, or drag overlay change. This keeps the
+   * visual noise low when 30–120 shifts share the screen.
+   * --------------------------------------------------------------- */
+
+  /* Base shift card (the default neutral fill all states share) */
+  --color-shift-bg: hsl(220 18% 11%);
+  --color-shift-fg: hsl(220 15% 92%);
+  --color-shift-border: hsl(220 12% 22%);
+
+  /* Empty shift — dashed border, muted fg, looks like an active placeholder */
+  --color-shift-empty-bg: hsl(220 18% 11%);
+  --color-shift-empty-fg: hsl(220 10% 68%);
+  --color-shift-empty-border: hsl(220 12% 22%);
+
+  /* Assigned + healthy. Accent strip only — no full fill. */
+  --color-shift-ok-bg: hsl(220 18% 11%);
+  --color-shift-ok-fg: hsl(220 15% 92%);
+  --color-shift-ok-border: hsl(150 60% 42%);
+  --color-shift-ok-accent: hsl(150 65% 50%);
+
+  /* Assigned but with non-blocking warning (overtime, preference mismatch) */
+  --color-shift-warning-bg: hsl(220 18% 11%);
+  --color-shift-warning-fg: hsl(220 15% 92%);
+  --color-shift-warning-border: hsl(35 85% 52%);
+  --color-shift-warning-accent: hsl(35 90% 58%);
+
+  /* Assigned + blocking rule violation */
+  --color-shift-conflict-bg: hsl(220 18% 11%);
+  --color-shift-conflict-fg: hsl(220 15% 92%);
+  --color-shift-conflict-border: hsl(0 75% 56%);
+  --color-shift-conflict-accent: hsl(0 85% 62%);
+
+  /* Drag-over overlays — the ONLY place a full color fill is OK */
+  --color-drag-valid-bg: hsl(150 60% 18%);
+  --color-drag-valid-border: hsl(150 70% 48%);
+  --color-drag-warning-bg: hsl(35 70% 18%);
+  --color-drag-warning-border: hsl(35 90% 58%);
+  --color-drag-blocked-bg: hsl(0 65% 18%);
+  --color-drag-blocked-border: hsl(0 85% 62%);
+
+  /* Open-shift (has demand, no employee yet). Blue to differ from empty. */
+  --color-open-shift-bg: hsl(220 18% 13%);
+  --color-open-shift-border: hsl(215 85% 58%);
+  --color-open-shift-accent: hsl(215 90% 62%);
+
+  /* Locked by another manager — calm grey, NOT red. */
+  --color-shift-locked-bg: hsl(220 10% 10%);
+  --color-shift-locked-fg: hsl(220 8% 60%);
+  --color-shift-locked-border: hsl(220 8% 35%);
 }
 
 @layer base {
@@ -74,4 +128,16 @@
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s linear infinite;
+}
+
+/* ---------------------------------------------------------------
+ * Schedule board hover (universal across all shift states)
+ * 1px lift + soft shadow. 120ms transition.
+ * --------------------------------------------------------------- */
+.shift-card {
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+.shift-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px hsl(220 40% 2% / 0.35);
 }
