@@ -14,11 +14,17 @@ import {
 import type { Employee, Shift } from "@/lib/types";
 
 export type ShiftValidationTone = "neutral" | "ok" | "warning" | "error";
+export type ShiftDensity = "compact" | "standard" | "dense";
 
 interface Props {
   shift: Shift;
   employees: Record<string, Employee>;
   validationTone?: ShiftValidationTone;
+  /**
+   * Density — Compact = identify, Standard = manage, Dense = decide.
+   * Card height, padding, and chip variant cascade off this prop.
+   */
+  density?: ShiftDensity;
   isLocked?: boolean;
   lockedByName?: string;
   onUnassign: (employeeId: string) => void;
@@ -37,6 +43,7 @@ export function ShiftCard({
   shift,
   employees,
   validationTone = "neutral",
+  density = "standard",
   isLocked = false,
   lockedByName,
   onUnassign,
@@ -84,13 +91,13 @@ export function ShiftCard({
     <div
       ref={setNodeRef}
       className={cn(
-        "shift-card group relative rounded-lg p-2 min-h-24 border",
+        "shift-card group relative rounded-lg border",
         // empty / dashed
         restingState === "empty" && "border-dashed opacity-95",
         // locked is visually quieter
         restingState === "locked" && "opacity-90 cursor-not-allowed",
       )}
-      style={shiftCardStyle(restingState, dragOverlay)}
+      style={{ ...shiftCardStyle(restingState, dragOverlay), ...densitySizing(density) }}
       aria-label={`משמרת ${shift.role}, ${start} עד ${end}, ${assigned.length} מתוך ${shift.requiredCount} עובדים${isLocked ? " — נעולה לעריכה" : ""}`}
     >
       {/* Accent strip — pinned to inline-start (RTL = right side) */}
@@ -152,6 +159,7 @@ export function ShiftCard({
                   >
                     <EmployeeChip
                       employee={emp}
+                      density={density}
                       onRemove={() => onUnassign(emp.id)}
                     />
                   </button>
@@ -238,6 +246,30 @@ function shiftCardStyle(
         backgroundColor: "var(--color-shift-locked-bg)",
         borderColor: "var(--color-shift-locked-border)",
         color: "var(--color-shift-locked-fg)",
+      };
+  }
+}
+
+function densitySizing(density: ShiftDensity): React.CSSProperties {
+  switch (density) {
+    case "compact":
+      return {
+        height: "var(--shift-card-compact-h)",
+        paddingInline: "var(--shift-card-compact-px)",
+        paddingBlock: "var(--shift-card-compact-py)",
+      };
+    case "dense":
+      return {
+        minHeight: "var(--shift-card-dense-min-h)",
+        paddingInline: "var(--shift-card-dense-px)",
+        paddingBlock: "var(--shift-card-dense-py)",
+      };
+    case "standard":
+    default:
+      return {
+        minHeight: "var(--shift-card-standard-min-h)",
+        paddingInline: "var(--shift-card-standard-px)",
+        paddingBlock: "var(--shift-card-standard-py)",
       };
   }
 }

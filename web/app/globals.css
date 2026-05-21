@@ -91,6 +91,36 @@
   --color-shift-locked-bg: hsl(220 10% 10%);
   --color-shift-locked-fg: hsl(220 8% 60%);
   --color-shift-locked-border: hsl(220 8% 35%);
+
+  /* ---------------------------------------------------------------
+   * Density variants (co-designed with ChatGPT — 2nd pass).
+   * Three levels:
+   *   compact  = zoom-out / 5+ days on screen → identify
+   *   standard = single week @ 1440px (default) → manage
+   *   dense    = single day / focus → decide
+   * The information density follows the use case, not the screen size.
+   * --------------------------------------------------------------- */
+  --shift-card-compact-h: 72px;
+  --shift-card-compact-px: 10px;
+  --shift-card-compact-py: 8px;
+
+  --shift-card-standard-min-h: 112px;
+  --shift-card-standard-px: 12px;
+  --shift-card-standard-py: 10px;
+
+  --shift-card-dense-min-h: 168px;
+  --shift-card-dense-px: 14px;
+  --shift-card-dense-py: 12px;
+
+  /* EmployeeChip — same base, 3 sizes */
+  --employee-chip-compact-size: 24px;
+  --employee-chip-standard-h: 28px;
+  --employee-chip-dense-h: 34px;
+  --employee-chip-gap: 6px;
+  --employee-chip-radius: 999px;
+  --employee-chip-bg: hsl(220 15% 16%);
+  --employee-chip-fg: hsl(220 15% 92%);
+  --employee-chip-border: hsl(220 12% 26%);
 }
 
 @layer base {
