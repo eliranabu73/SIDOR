@@ -12,6 +12,7 @@ import { assignmentsRoutes } from './modules/assignments/assignments.routes';
 import { openShiftsRoutes } from './modules/openshifts/openshifts.routes';
 import { swapsRoutes } from './modules/swaps/swaps.routes';
 import { realtimeRoutes } from './modules/realtime/realtime.routes';
+import { schedulerRoutes } from './modules/scheduler/scheduler.routes';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -39,6 +40,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(assignmentsRoutes, { prefix: '/v1' });
   await app.register(openShiftsRoutes, { prefix: '/v1' });
   await app.register(swapsRoutes, { prefix: '/v1' });
+  await app.register(schedulerRoutes, { prefix: '/v1' });
   await app.register(realtimeRoutes);
 
   return app;
