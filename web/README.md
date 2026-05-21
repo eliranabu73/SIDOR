@@ -1,0 +1,67 @@
+# sidor4s-web
+
+Frontend for **sidor4S** — Next.js 16 + React 19 + Tailwind v4 + dnd-kit + react-query.
+
+## Getting started
+
+```bash
+cd web
+cp .env.example .env.local
+npm install
+npm run dev
+```
+
+Dev server runs on **http://localhost:3001** (the Fastify backend keeps port 3000).
+
+## Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `NEXT_PUBLIC_API_URL` | Backend base URL (default `http://localhost:3000`) |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL — used for magic-link auth |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase publishable key |
+| `NEXT_PUBLIC_USE_MOCKS` | Set to `false` to hit the live backend. Defaults to mock data. |
+| `NEXT_PUBLIC_AUTH_DISABLED` | Set to `true` to bypass `AuthGuard` locally (mirrors backend `AUTH_DISABLED`) |
+
+## Routes
+
+| Path | Description |
+|---|---|
+| `/` | Redirects to `/schedule` |
+| `/login` | Supabase magic-link sign-in |
+| `/schedule` | Weekly schedule board with drag-and-drop assignments |
+| `/employees` | CRUD table for employees |
+
+## Architecture notes
+
+- **State:** `@tanstack/react-query` v5 for server state. Optimistic updates happen
+  inside `useAssignMutation`. Validate-on-hover is a separate mutation, debounced
+  by 200 ms inside `ScheduleBoard.onDragOver`.
+- **DnD:** `@dnd-kit/core` with `PointerSensor` + `KeyboardSensor` so the board
+  is fully keyboard-accessible.
+- **Mock mode:** All queries first check `NEXT_PUBLIC_USE_MOCKS`. By default the
+  UI runs against `lib/mocks.ts` so the UI is verifiable without the backend.
+  Flip the env var to `false` and the same hooks call the real Fastify routes
+  defined in `lib/api.ts`.
+- **RTL:** `<html dir="rtl" lang="he">` in `app/layout.tsx`. Layout uses Tailwind's
+  logical-property utilities (`ms-`, `me-`, `start-`, `end-`).
+- **Tailwind v4:** No `tailwind.config.ts` — design tokens live in `app/globals.css`
+  under `@theme`.
+
+## Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Next dev on port 3001 (Turbopack) |
+| `npm run build` | Production build |
+| `npm run start` | Production server on port 3001 |
+| `npm run typecheck` | `tsc --noEmit` |
+
+## Integration TODOs
+
+- Wire `EmployeesPage` create/edit/toggle handlers to real `/v1/employees` endpoints.
+- Replace `lib/mocks.ts` org/locations with `GET /v1/orgs/:id` once endpoint exists.
+- Add WebSocket subscription (`ws://.../ws`) to invalidate `["schedule"]` on
+  remote changes — currently the board re-fetches only on mutation success.
+- Wire swap dialog (right-click → "החלפה…") to `POST /v1/swaps`.
+- Implement claim flows for employee role (out of scope for first drop).
