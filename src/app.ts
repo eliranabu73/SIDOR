@@ -15,14 +15,19 @@ import { realtimeRoutes } from './modules/realtime/realtime.routes';
 import { schedulerRoutes } from './modules/scheduler/scheduler.routes';
 
 export async function buildApp(): Promise<FastifyInstance> {
+  // pino-pretty is a devDependency — only enable transport when explicitly
+  // requested locally via PRETTY_LOGS=true (so Vercel production builds don't
+  // crash on the missing module).
+  const usePrettyLogs =
+    env.NODE_ENV === 'development' && process.env['PRETTY_LOGS'] === 'true';
+
   const app = Fastify({
     logger: {
       level: env.LOG_LEVEL,
       redact: ['req.headers.authorization'],
-      transport:
-        env.NODE_ENV === 'development'
-          ? { target: 'pino-pretty', options: { translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } }
-          : undefined,
+      transport: usePrettyLogs
+        ? { target: 'pino-pretty', options: { translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } }
+        : undefined,
     },
   }).withTypeProvider<ZodTypeProvider>();
 
