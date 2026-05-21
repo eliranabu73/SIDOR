@@ -57,12 +57,49 @@ Backend + frontend + auto-scheduler v0 + design system. Vercel REST live.
 - `<SabbathBadge>` — appears on shifts that cross/touch the Sabbath window when location lacks permit
 
 ### v0.3 — Distribution: WhatsApp
+
 The single biggest moat. Israeli shift workers won't install a new app.
-- WhatsApp Business API integration (Twilio / Vonage / Meta Cloud API).
+
+**Provider: Meta WhatsApp Cloud API direct** (NOT Twilio). Rationale (Gemini deep research, 2026-05-21):
+- Product-led: interactive buttons + list messages — first-class on Meta direct, lag via middlemen.
+- Pricing: 1,000 Service Conversations / month FREE per business, then agorot per conversation. Twilio adds revenue-shaving markup.
+- Business verification 3-10 days (ח.פ + matching address utility bill + verified domain).
+
+**Critical multitenancy decision**: sidor4S runs **one central WABA bot** (single phone number), routing inbound messages by employee phone. Do NOT require each customer org to open its own WABA — that kills onboarding stone-dead.
+
+Functionality:
 - Outbound: published schedule → personal weekly summary message.
 - Inbound: bot accepts `swap`, `availability`, `claim open shift` commands.
-- Acks via interactive WhatsApp buttons.
+- Acks via interactive WhatsApp buttons + list messages.
 - Owns the entire employee-side UX without an app install.
+
+### v0.4 — Israeli compliance depth (new — surfaced by Gemini round 3)
+
+Three IL-specific feature gaps that no competitor (local or foreign) handles:
+
+1. **Hebrew Holidays Calendar API integration** (`hebcal.com` or equivalent). חוקי המנוחה והשכר על ערב חג / חג עצמו. Constraint engine must apply "Friday-Saturday" rule profile to mid-week holiday days. Without this, the scheduler crashes every תשרי / פסח.
+2. **Reserve Duty status (מילואים)**. Not just "time off". Triggers ביטוח לאומי-specific reporting AND freezes employee from Fairness Metrics so returning reservists don't get punished by the auto-scheduler.
+3. **Travel Expenses Tracking (דוח נסיעות)**. Each work-day-count gets exported for accountant — חופשי חודשי vs יומי. Schema: `Employee.travelReimbursementProfile`, monthly aggregation report.
+
+These are zero-cost to a competitor to copy AFTER we ship them, but each is a high-pain accounting / legal exposure point for Israeli SMBs.
+
+### v0.5 — Payroll export (was v0.4 in earlier draft)
+Single-click export to `מכפל`, `חשבשבת`, `עוקץ`. Validate against `RuleViolation` history so accountant doesn't recompute classifications.
+
+### v0.6 — Mobile responsive board (was v0.5)
+
+### v0.7 — OR-Tools backend (was v0.6)
+
+## GTM — Summer 2026 sweet spot
+
+**Target verticals**: restaurants/cafes + retail fashion chains.
+- High turnover (50%+ annual) → WhatsApp Onboarding wins.
+- Young workforce (students, discharged soldiers) → comfortable with chat UX.
+- Real pain: 90-second swaps before service.
+
+**Avoid for v1.0**:
+- Clinics / nursing: clinical regulation, license matching, slow cloud adoption.
+- Security guarding (ענף השמירה): collective bargaining agreement with draconian pension / overtime / break rules. A scheduling mistake here = labor-court fine that bankrupts the startup.
 
 ### v0.4 — Payroll export
 Manager pain-point per Gemini. Single-click export to:

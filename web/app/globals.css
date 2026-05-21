@@ -121,6 +121,19 @@
   --employee-chip-bg: hsl(220 15% 16%);
   --employee-chip-fg: hsl(220 15% 92%);
   --employee-chip-border: hsl(220 12% 26%);
+
+  /* ---------------------------------------------------------------
+   * State tokens (Q4 review with ChatGPT, 2026-05-21)
+   * --------------------------------------------------------------- */
+  /* Sticky network-error banner — persistent, NOT a toast */
+  --banner-error-bg: hsl(0 40% 16%);
+  --banner-error-border: hsl(0 55% 38%);
+  --banner-error-fg: hsl(0 0% 96%);
+
+  /* Background-process banner (auto-schedule etc.) — not warning, not success */
+  --color-processing-bg: hsl(220 25% 14%);
+  --color-processing-border: hsl(215 70% 52%);
+  --color-processing-fg: hsl(220 15% 94%);
 }
 
 @layer base {
@@ -188,4 +201,24 @@
   opacity: 0.45;
   border-style: dashed !important;
   pointer-events: none;
+}
+
+/* Indeterminate top-bar for AutoScheduleProgress — Linear-style sweep. */
+.indeterminate-bar {
+  position: relative;
+  height: 2px;
+  overflow: hidden;
+  background-color: hsl(220 25% 18%);
+}
+.indeterminate-bar::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  width: 33%;
+  background-color: var(--color-processing-border);
+  animation: indeterminate-sweep 1.6s ease-in-out infinite;
+}
+@keyframes indeterminate-sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
 }
