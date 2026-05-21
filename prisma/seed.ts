@@ -230,31 +230,36 @@ function shiftUuid(dayIdx: number, slotIdx: number): string {
   // the same week replaces the same shift IDs.
   const day = dayIdx.toString().padStart(2, '0');
   const slot = slotIdx.toString().padStart(2, '0');
-  return `10000000-0000-0000-0000-0000003${day}${slot}00`;
+  // 6 prefix + 2 day + 2 slot + 2 padding = 12
+  return `10000000-0000-0000-0000-000030${day}${slot}00`;
 }
 
 function assignmentUuid(dayIdx: number, slotIdx: number, empIdx: number): string {
   const day = dayIdx.toString().padStart(2, '0');
   const slot = slotIdx.toString().padStart(2, '0');
   const emp = empIdx.toString().padStart(2, '0');
-  return `10000000-0000-0000-0000-00000040${day}${slot}${emp}`;
+  // 6 prefix + 2 day + 2 slot + 2 emp = 12
+  return `10000000-0000-0000-0000-000040${day}${slot}${emp}`;
 }
 
 function availabilityUuid(empIdx: number, ruleIdx: number): string {
   const emp = empIdx.toString().padStart(2, '0');
   const rule = ruleIdx.toString().padStart(2, '0');
-  return `10000000-0000-0000-0000-0000005000${emp}${rule}`;
+  // Last group must be exactly 12 hex chars: 8 prefix + 2 emp + 2 rule = 12
+  return `10000000-0000-0000-0000-00005000${emp}${rule}`;
 }
 
 function employeeRoleUuid(empIdx: number, roleIdx: number): string {
   const emp = empIdx.toString().padStart(2, '0');
   const role = roleIdx.toString().padStart(2, '0');
-  return `10000000-0000-0000-0000-000000600${emp}${role}`;
+  // 8 prefix + 2 emp + 2 role = 12
+  return `10000000-0000-0000-0000-00006000${emp}${role}`;
 }
 
 function metricsUuid(empIdx: number): string {
   const emp = empIdx.toString().padStart(2, '0');
-  return `10000000-0000-0000-0000-0000007000${emp}00`;
+  // 8 prefix + 2 emp + 2 suffix = 12
+  return `10000000-0000-0000-0000-00007000${emp}00`;
 }
 
 const SCHEDULE_ID = '10000000-0000-0000-0000-000000000300';
