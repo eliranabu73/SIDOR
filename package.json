@@ -19,7 +19,11 @@
     "prisma:format": "prisma format",
     "prisma:validate": "prisma validate",
     "prisma:studio": "prisma studio",
-    "lint:types": "tsc --noEmit"
+    "lint:types": "tsc --noEmit",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "engines": {
     "node": "20.x"
