@@ -27,22 +27,34 @@ Distilled from the multi-AI strategy session (Claude + ChatGPT + Gemini, 2026-05
 Backend + frontend + auto-scheduler v0 + design system. Vercel REST live.
 
 ### v0.2 — Compliance backbone (next)
-- **Israeli labor-law Fast Rules** (in `src/modules/rules/rules/`):
-  - `youth-strict` — under-18: max 8h/day, 40h/week, no work between 20:00-08:00, 14h min rest. No override.
-  - `pregnancy-protection` — 5th month+: no night, no overtime, no weekly-rest work unless written consent. Hidden privacy badge.
-  - `weekly-rest-36h` — 36 contiguous hours rest per week; blocking by default, configurable per business.
-  - `night-week-streak` — max 1 night-shift week per 3-week window.
-  - `weekly-hours-overtime` — progressive: 40h orange, 42h+ red, audit.
-- **Schema additions** (new migration):
-  - `Employee.dateOfBirth` (compute under-18)
-  - `Employee.pregnancyStatus` enum + `pregnancyDeclaredAt`
-  - `Organization.laborRulesProfile` enum (`hospitality`, `retail`, `manufacturing`, `none`) — preset overrides
-- **UI badges** (new components):
-  - `<MoonBadge>` — auto on shifts with 2+ hours between 22:00-06:00
-  - `<WeeklyHoursBar>` — progress bar next to employee name (40→orange, 42→red)
-  - `<YouthBadge>` — visible "נוער" tag on employee card
-  - `<PregnancyShield>` — manager-only visibility (privacy)
-  - `<RestTimer>` — 36h countdown when shifting near weekly-rest boundary
+
+**Schema additions** (new migration `006_il_compliance`):
+- `Employee.dateOfBirth: Date?` — drives the youth rule
+- `Employee.pregnancyStatus: PregnancyStatus enum` (`NONE` | `DECLARED` | `WAIVED_RESTRICTIONS`)
+- `Employee.pregnancyDeclaredAt: DateTime?`
+- `Employee.religiousProfile: ReligiousProfile?` (`JEWISH` | `MUSLIM` | `CHRISTIAN` | `OTHER` | `UNSPECIFIED`) — drives Sabbath alignment
+- `Location.hasSabbathPermit: Boolean @default(false)` — היתר העסקה בשבת
+- `Organization.laborRulesProfile: enum?` (`HOSPITALITY` | `RETAIL` | `MANUFACTURING` | `NONE`) — preset overrides
+
+**RLS policies** (Supabase):
+- `Employee.pregnancyStatus` + `pregnancyDeclaredAt` visible to: the employee herself, AND managers in the same org.
+- Hidden from: peers querying for shift-swap candidates. Filter at column level via Supabase RLS.
+
+**Israeli labor-law Fast Rules** (in `src/modules/rules/rules/`):
+- `youth-strict` — under-18 (computed from `dateOfBirth`): max 8h/day, 40h/week, no work between 20:00-08:00, 14h min rest. **No override** (strict blocking).
+- `pregnancy-protection` — when `pregnancyStatus === 'DECLARED'`: no night, no overtime, no weekly-rest work. Blocking modal cites חוק עבודת נשים. When `WAIVED_RESTRICTIONS`: downgrade to warning (medical waiver on file).
+- `weekly-rest-36h` — **fixed week** Sun 00:00 → Sat 23:59 (NOT rolling). At least one gap ≥36h. For Jewish employees: the 36h block must include Friday evening through Saturday evening UNLESS `Location.hasSabbathPermit === true`. For other religious profiles: must include their day of rest (Fri / Sat / Sun configurable).
+- `night-week-streak` — max 1 night-shift week per 3-week rolling window. Blocking modal.
+- `weekly-hours-overtime` — progressive: 40h orange warning, 42h+ red blocking. Triggers `<WeeklyHoursBar>` color change.
+- `daily-rest-8h` — already exists. Stays as warning + acknowledge.
+
+**UI badges** (new components):
+- `<MoonBadge>` — auto on shifts with 2+ hours between 22:00-06:00
+- `<WeeklyHoursBar>` — progress bar next to employee name (40→orange, 42→red)
+- `<YouthBadge>` — visible "נוער" tag on employee card
+- `<PregnancyShield>` — manager-only visibility (privacy via RLS). Employee sees own status in her settings.
+- `<RestTimer>` — 36h countdown when shifting near weekly-rest boundary
+- `<SabbathBadge>` — appears on shifts that cross/touch the Sabbath window when location lacks permit
 
 ### v0.3 — Distribution: WhatsApp
 The single biggest moat. Israeli shift workers won't install a new app.

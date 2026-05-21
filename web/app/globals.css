@@ -171,3 +171,21 @@
   transform: translateY(-1px);
   box-shadow: 0 4px 12px hsl(220 40% 2% / 0.35);
 }
+
+/* Drag-over: Fade + Scale (1.02), NOT pulse. Per design review with ChatGPT. */
+.shift-card[data-drag-over="true"] {
+  animation: shift-drag-in 120ms ease forwards;
+}
+
+@keyframes shift-drag-in {
+  from { transform: scale(1); opacity: 0.92; }
+  to   { transform: scale(1.02); opacity: 1; }
+}
+
+/* Ghost EmployeeChip — appears inside ShiftCard during a valid drag-over,
+ * showing the future state. Stronger signal than any external badge. */
+.ghost-chip {
+  opacity: 0.45;
+  border-style: dashed !important;
+  pointer-events: none;
+}

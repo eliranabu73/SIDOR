@@ -27,6 +27,12 @@ interface Props {
   density?: ShiftDensity;
   isLocked?: boolean;
   lockedByName?: string;
+  /**
+   * When the user is currently dragging an employee, the board passes that
+   * employee here so a "ghost chip" preview can render in this card when
+   * `isOver === true && validationTone === 'ok'` — Future-State Preview.
+   */
+  ghostEmployee?: Employee | null;
   onUnassign: (employeeId: string) => void;
   onSwap?: (employeeId: string) => void;
 }
@@ -46,6 +52,7 @@ export function ShiftCard({
   density = "standard",
   isLocked = false,
   lockedByName,
+  ghostEmployee = null,
   onUnassign,
   onSwap,
 }: Props) {
@@ -90,6 +97,7 @@ export function ShiftCard({
   return (
     <div
       ref={setNodeRef}
+      data-drag-over={isOver && !isLocked ? "true" : undefined}
       className={cn(
         "shift-card group relative rounded-lg border",
         // empty / dashed
@@ -140,6 +148,12 @@ export function ShiftCard({
       )}
 
       <div className="flex flex-wrap gap-1">
+        {/* Ghost chip preview — "Future State Preview" per design review */}
+        {ghostEmployee && isOver && !isLocked && validationTone === "ok" && (
+          <div className="ghost-chip">
+            <EmployeeChip employee={ghostEmployee} density={density} />
+          </div>
+        )}
         {empty ? (
           <span className="text-[11px] italic inline-flex items-center gap-1 opacity-80">
             {understaffed && !isOpen && <AlertTriangle className="h-3 w-3" />}

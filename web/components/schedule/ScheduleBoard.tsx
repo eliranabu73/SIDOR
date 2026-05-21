@@ -15,6 +15,7 @@ import {
 } from "@dnd-kit/core";
 import { DateTime } from "luxon";
 import { toast } from "sonner";
+import { Check, AlertTriangle, Ban } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ApiError } from "@/lib/api";
 import { ShiftCard, type ShiftValidationTone } from "./ShiftCard";
@@ -301,6 +302,7 @@ export function ScheduleBoard({
                       validationTone={validationByShift[shift.id] ?? "neutral"}
                       isLocked={lockedByOther}
                       lockedByName={lockedByOther ? shift.lockedByName ?? undefined : undefined}
+                      ghostEmployee={activeEmployee}
                       onUnassign={(empId) => unassign(shift, empId)}
                     />
                   );
@@ -318,9 +320,10 @@ export function ScheduleBoard({
 
       <DragOverlay dropAnimation={null}>
         {activeEmployee ? (
-          <div className="rounded-lg border bg-card px-2 py-1 text-sm font-medium shadow-lg">
-            {activeEmployee.fullName}
-          </div>
+          <DragChip
+            employee={activeEmployee}
+            tone={activeOverTone(validationByShift)}
+          />
         ) : null}
       </DragOverlay>
 
@@ -333,4 +336,63 @@ export function ScheduleBoard({
       />
     </DndContext>
   );
+}
+
+/**
+ * DragChip — the floating element pinned to the cursor while dragging.
+ * Per design review (ChatGPT, 2026-05-21):
+ *   - EmployeeChip + tiny status pill, max 2 lines.
+ *   - NO score, NO ghost shift card, NO rotation.
+ *   - Status pill: ✓ מתאים · ⚠ אזהרה · ✕ חסום.
+ */
+function DragChip({
+  employee,
+  tone,
+}: {
+  employee: Employee;
+  tone: ShiftValidationTone;
+}) {
+  const initials = employee.fullName
+    .split(/\s+/)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2);
+  return (
+    <div className="flex flex-col items-start gap-1 select-none">
+      <div className="inline-flex items-center gap-2 rounded-full border bg-card px-2.5 py-1 text-sm font-medium shadow-lg">
+        <span
+          aria-hidden
+          className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/20 text-[10px]"
+        >
+          {initials}
+        </span>
+        <span className="max-w-44 truncate">{employee.fullName}</span>
+      </div>
+      {tone !== "neutral" && (
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium shadow-md",
+            tone === "ok" && "border-[var(--color-shift-ok-accent)] bg-[var(--color-drag-valid-bg)] text-[var(--color-shift-ok-accent)]",
+            tone === "warning" && "border-[var(--color-shift-warning-accent)] bg-[var(--color-drag-warning-bg)] text-[var(--color-shift-warning-accent)]",
+            tone === "error" && "border-[var(--color-shift-conflict-accent)] bg-[var(--color-drag-blocked-bg)] text-[var(--color-shift-conflict-accent)]",
+          )}
+        >
+          {tone === "ok" && <><Check className="h-3 w-3" /> מתאים</>}
+          {tone === "warning" && <><AlertTriangle className="h-3 w-3" /> אזהרה</>}
+          {tone === "error" && <><Ban className="h-3 w-3" /> חסום</>}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Returns the strongest non-neutral tone across all currently-hovered shifts. */
+function activeOverTone(
+  validationByShift: Record<string, ShiftValidationTone>,
+): ShiftValidationTone {
+  const tones = Object.values(validationByShift);
+  if (tones.includes("error")) return "error";
+  if (tones.includes("warning")) return "warning";
+  if (tones.includes("ok")) return "ok";
+  return "neutral";
 }
