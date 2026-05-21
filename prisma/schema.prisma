@@ -1,0 +1,700 @@
+// sidor4S — Work-scheduling SaaS schema
+// Spec: see C:\Users\elira\.claude\plans\velvet-stirring-fog.md
+// Conventions:
+//   * UTC for all instants (`*AtUtc`); local Time/Date for human-facing rules.
+//   * `version` Int @default(1) on every concurrency-sensitive aggregate.
+//   * Soft locks live in Redis, NOT in this schema.
+//   * No `crossesMidnight` on EmployeeAvailabilityRule — service layer splits.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// =========================================================
+// Enums
+// =========================================================
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACTOR
+  TEMPORARY
+  INTERN
+}
+
+enum AvailabilityType {
+  AVAILABLE
+  PREFERRED
+  UNAVAILABLE
+}
+
+enum TimeOffStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ScheduleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+  LOCKED
+}
+
+enum ShiftStatus {
+  PLANNED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum AssignmentStatus {
+  PROPOSED
+  CONFIRMED
+  DECLINED
+  CANCELLED
+  COMPLETED
+}
+
+enum AssignmentSource {
+  MANUAL
+  AUTO_SCHEDULER
+  OPEN_SHIFT_CLAIM
+  SHIFT_SWAP
+  IMPORT
+}
+
+enum BreakType {
+  PAID
+  UNPAID
+  MEAL
+  REST
+  CUSTOM
+}
+
+enum OpenShiftClaimStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+enum SwapStatus {
+  PENDING
+  APPROVED_BY_TARGET
+  APPROVED_BY_MANAGER
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+enum RuleSeverity {
+  INFO
+  WARNING
+  BLOCKING
+}
+
+enum RuleOperator {
+  EQ
+  NEQ
+  GT
+  GTE
+  LT
+  LTE
+  IN
+  NOT_IN
+  CONTAINS
+}
+
+enum AuditActionType {
+  CREATE
+  UPDATE
+  DELETE
+  ASSIGN
+  UNASSIGN
+  PUBLISH
+  LOCK
+  UNLOCK
+  AUTO_SCHEDULE
+  IMPORT
+}
+
+enum DomainEventType {
+  SHIFT_ASSIGNED
+  SHIFT_UNASSIGNED
+  SHIFT_REPLACED
+  SHIFT_UPDATED
+  OPEN_SHIFT_CLAIMED
+  OPEN_SHIFT_APPROVED
+  SWAP_REQUESTED
+  SWAP_APPROVED
+  SWAP_REJECTED
+  SCHEDULE_PUBLISHED
+  SCHEDULE_LOCKED
+  RULE_VIOLATED
+}
+
+// =========================================================
+// Tenancy & topology
+// =========================================================
+
+model Organization {
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String
+  defaultTimezone String   @default("Asia/Jerusalem")
+  weekStartDay    Int      @default(0) // 0 = Sunday
+  laborRulesJsonb Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  locations      Location[]
+  departments    Department[]
+  roles          Role[]
+  employees      Employee[]
+  schedules      Schedule[]
+  shiftTemplates ShiftTemplate[]
+  shifts         Shift[]
+  swaps          ShiftSwapRequest[]
+  customRules    CustomRuleDefinition[]
+  violations     RuleViolation[]
+  events         ScheduleEvent[]
+  auditLogs      ScheduleAuditLog[]
+  metrics        EmployeeScheduleMetrics[]
+  candidates     SchedulingCandidate[]
+
+  @@map("organizations")
+}
+
+model Location {
+  id              String   @id @default(uuid()) @db.Uuid
+  organizationId  String   @db.Uuid
+  name            String
+  timezone        String
+  address         String?
+  laborRulesJsonb Json     @default("{}")
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  departments    Department[]
+  schedules      Schedule[]
+  shiftTemplates ShiftTemplate[]
+  shifts         Shift[]
+  defaultedBy    Employee[]      @relation("EmployeeDefaultLocation")
+
+  @@index([organizationId])
+  @@map("locations")
+}
+
+model Department {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  locationId     String?  @db.Uuid
+  name           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location       Location?       @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  shiftTemplates ShiftTemplate[]
+  shifts         Shift[]
+
+  @@index([organizationId])
+  @@index([locationId])
+  @@map("departments")
+}
+
+model Role {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String
+  description    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeRoles  EmployeeRole[]
+  shiftTemplates ShiftTemplate[]
+  shifts         Shift[]
+
+  @@unique([organizationId, name])
+  @@map("roles")
+}
+
+// =========================================================
+// Employees
+// =========================================================
+
+model Employee {
+  id                String         @id @default(uuid()) @db.Uuid
+  organizationId    String         @db.Uuid
+  fullName          String
+  email             String?
+  phone             String?
+  employmentType    EmploymentType @default(FULL_TIME)
+  defaultLocationId String?        @db.Uuid
+  defaultTimezone   String?
+  isActive          Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  defaultLocation Location?    @relation("EmployeeDefaultLocation", fields: [defaultLocationId], references: [id], onDelete: SetNull)
+
+  roles             EmployeeRole[]
+  availabilityRules EmployeeAvailabilityRule[]
+  preferences       EmployeePreferences?
+  shiftPreferences  EmployeeShiftPreference[]
+  timeOffRequests   EmployeeTimeOffRequest[]
+  assignments       ShiftAssignment[]
+  openShiftClaims   OpenShiftClaim[]
+  swapsRequested    ShiftSwapRequest[]         @relation("SwapRequester")
+  swapsTargeted     ShiftSwapRequest[]         @relation("SwapTarget")
+  violations        RuleViolation[]
+  metrics           EmployeeScheduleMetrics[]
+  candidates        SchedulingCandidate[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@index([organizationId, isActive])
+  @@map("employees")
+}
+
+model EmployeeRole {
+  id         String   @id @default(uuid()) @db.Uuid
+  employeeId String   @db.Uuid
+  roleId     String   @db.Uuid
+  skillLevel Int      @default(1)
+  isPrimary  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  role     Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, roleId])
+  @@index([roleId])
+  @@map("employee_roles")
+}
+
+model EmployeeAvailabilityRule {
+  id               String           @id @default(uuid()) @db.Uuid
+  employeeId       String           @db.Uuid
+  dayOfWeek        Int // 0..6 (0 = Sunday)
+  startLocalTime   String // "HH:mm:ss" — stored as Time in Postgres
+  endLocalTime     String
+  availabilityType AvailabilityType @default(AVAILABLE)
+  timezone         String
+  validFrom        DateTime?
+  validUntil       DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, dayOfWeek])
+  @@map("employee_availability_rules")
+}
+
+model EmployeePreferences {
+  id                     String   @id @default(uuid()) @db.Uuid
+  employeeId             String   @unique @db.Uuid
+  minShiftsPerWeek       Int?
+  maxShiftsPerWeek       Int?
+  preferredShiftsPerWeek Int?
+  maxHoursPerWeek        Int?
+  preferredHoursPerWeek  Int?
+  prefersMornings        Boolean  @default(false)
+  prefersEvenings        Boolean  @default(false)
+  prefersWeekends        Boolean  @default(false)
+  avoidBackToBackShifts  Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("employee_preferences")
+}
+
+model EmployeeShiftPreference {
+  id              String   @id @default(uuid()) @db.Uuid
+  employeeId      String   @db.Uuid
+  dayOfWeek       Int
+  startLocalTime  String
+  endLocalTime    String
+  preferenceScore Int // -10..10
+  timezone        String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, dayOfWeek])
+  @@map("employee_shift_preferences")
+}
+
+model EmployeeTimeOffRequest {
+  id               String        @id @default(uuid()) @db.Uuid
+  employeeId       String        @db.Uuid
+  startAtUtc       DateTime
+  endAtUtc         DateTime
+  timezone         String
+  reason           String?
+  status           TimeOffStatus @default(PENDING)
+  approvedByUserId String?       @db.Uuid
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, startAtUtc])
+  @@map("employee_time_off_requests")
+}
+
+// =========================================================
+// Schedules & shifts
+// =========================================================
+
+model Schedule {
+  id              String         @id @default(uuid()) @db.Uuid
+  organizationId  String         @db.Uuid
+  locationId      String?        @db.Uuid
+  name            String
+  periodStartDate DateTime       @db.Date
+  periodEndDate   DateTime       @db.Date
+  timezone        String
+  status          ScheduleStatus @default(DRAFT)
+  version         Int            @default(1)
+  lockedByUserId  String?        @db.Uuid
+  lockedUntil     DateTime?
+  createdByUserId String?        @db.Uuid
+  publishedAt     DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location?          @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  shifts       Shift[]
+  violations   RuleViolation[]
+  auditLogs    ScheduleAuditLog[]
+
+  @@index([organizationId, periodStartDate])
+  @@index([locationId, status])
+  @@map("schedules")
+}
+
+model ShiftTemplate {
+  id                    String   @id @default(uuid()) @db.Uuid
+  organizationId        String   @db.Uuid
+  locationId            String?  @db.Uuid
+  departmentId          String?  @db.Uuid
+  roleId                String?  @db.Uuid
+  name                  String
+  startLocalTime        String
+  endLocalTime          String
+  timezone              String
+  crossesMidnight       Boolean  @default(false)
+  requiredEmployeeCount Int      @default(1)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  department   Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  role         Role?        @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  shifts       Shift[]
+
+  @@index([organizationId])
+  @@map("shift_templates")
+}
+
+model Shift {
+  id                    String      @id @default(uuid()) @db.Uuid
+  organizationId        String      @db.Uuid
+  locationId            String?     @db.Uuid
+  departmentId          String?     @db.Uuid
+  roleId                String?     @db.Uuid
+  templateId            String?     @db.Uuid
+  scheduleId            String?     @db.Uuid
+  startAtUtc            DateTime
+  endAtUtc              DateTime
+  timezone              String
+  localStartDate        DateTime    @db.Date
+  localEndDate          DateTime    @db.Date
+  requiredEmployeeCount Int         @default(1)
+  status                ShiftStatus @default(PLANNED)
+  isOpenShift           Boolean     @default(false)
+  version               Int         @default(1)
+  createdByUserId       String?     @db.Uuid
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location?      @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  department   Department?    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  role         Role?          @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  template     ShiftTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  schedule     Schedule?      @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+
+  assignments     ShiftAssignment[]
+  breaks          ShiftBreak[]
+  openShiftClaims OpenShiftClaim[]
+  violations      RuleViolation[]
+  candidates      SchedulingCandidate[]
+
+  @@index([organizationId, startAtUtc])
+  @@index([scheduleId])
+  @@index([roleId, startAtUtc])
+  @@map("shifts")
+}
+
+model ShiftAssignment {
+  id               String           @id @default(uuid()) @db.Uuid
+  shiftId          String           @db.Uuid
+  employeeId       String           @db.Uuid
+  assignmentStatus AssignmentStatus @default(CONFIRMED)
+  source           AssignmentSource @default(MANUAL)
+  assignedByUserId String?          @db.Uuid
+  version          Int              @default(1)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  shift          Shift              @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  employee       Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  sourceForSwaps ShiftSwapRequest[] @relation("SwapSourceAssignment")
+
+  @@unique([shiftId, employeeId])
+  @@index([shiftId, assignmentStatus])
+  @@index([employeeId, assignmentStatus])
+  @@map("shift_assignments")
+}
+
+model ShiftBreak {
+  id              String    @id @default(uuid()) @db.Uuid
+  shiftId         String    @db.Uuid
+  breakType       BreakType @default(UNPAID)
+  durationMinutes Int
+  startAtUtc      DateTime?
+  isPaid          Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  shift Shift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  @@index([shiftId])
+  @@map("shift_breaks")
+}
+
+// =========================================================
+// Open shifts & swaps
+// =========================================================
+
+model OpenShiftClaim {
+  id               String               @id @default(uuid()) @db.Uuid
+  shiftId          String               @db.Uuid
+  employeeId       String               @db.Uuid
+  status           OpenShiftClaimStatus @default(PENDING)
+  claimedAt        DateTime             @default(now())
+  approvedByUserId String?              @db.Uuid
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  shift    Shift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([shiftId, status])
+  @@index([employeeId, status])
+  @@map("open_shift_claims")
+}
+
+model ShiftSwapRequest {
+  id                   String     @id @default(uuid()) @db.Uuid
+  organizationId       String     @db.Uuid
+  sourceAssignmentId   String     @db.Uuid
+  requestingEmployeeId String     @db.Uuid
+  targetEmployeeId     String?    @db.Uuid
+  status               SwapStatus @default(PENDING)
+  approvedByManagerId  String?    @db.Uuid
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  organization       Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sourceAssignment   ShiftAssignment @relation("SwapSourceAssignment", fields: [sourceAssignmentId], references: [id], onDelete: Cascade)
+  requestingEmployee Employee        @relation("SwapRequester", fields: [requestingEmployeeId], references: [id], onDelete: Cascade)
+  targetEmployee     Employee?       @relation("SwapTarget", fields: [targetEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@map("shift_swap_requests")
+}
+
+// =========================================================
+// Rules engine (EAV) — for non-standard custom rules only
+// =========================================================
+
+model CustomRuleDefinition {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  code           String
+  name           String
+  description    String?
+  severity       RuleSeverity @default(WARNING)
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conditions   CustomRuleCondition[]
+
+  @@unique([organizationId, code])
+  @@map("custom_rule_definitions")
+}
+
+model CustomRuleCondition {
+  id                     String       @id @default(uuid()) @db.Uuid
+  customRuleDefinitionId String       @db.Uuid
+  field                  String
+  operator               RuleOperator
+  valueJsonb             Json
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  rule CustomRuleDefinition @relation(fields: [customRuleDefinitionId], references: [id], onDelete: Cascade)
+
+  @@index([customRuleDefinitionId])
+  @@map("custom_rule_conditions")
+}
+
+model RuleViolation {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  scheduleId     String?      @db.Uuid
+  shiftId        String?      @db.Uuid
+  employeeId     String?      @db.Uuid
+  ruleCode       String
+  severity       RuleSeverity
+  message        String
+  metadataJsonb  Json         @default("{}")
+  isResolved     Boolean      @default(false)
+  detectedAt     DateTime     @default(now())
+  resolvedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  schedule     Schedule?    @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  shift        Shift?       @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  employee     Employee?    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, isResolved])
+  @@index([shiftId])
+  @@index([employeeId])
+  @@map("rule_violations")
+}
+
+// =========================================================
+// Cached metrics (Cached Rules layer)
+// =========================================================
+
+model EmployeeScheduleMetrics {
+  id                    String    @id @default(uuid()) @db.Uuid
+  organizationId        String    @db.Uuid
+  scheduleId            String?   @db.Uuid
+  employeeId            String    @db.Uuid
+  weekStartDate         DateTime  @db.Date
+  totalScheduledMinutes Int       @default(0)
+  totalPaidMinutes      Int       @default(0)
+  shiftCount            Int       @default(0)
+  consecutiveWorkDays   Int       @default(0)
+  lastShiftEndAtUtc     DateTime?
+  nextShiftStartAtUtc   DateTime?
+  weekendShiftCount     Int       @default(0)
+  nightShiftCount       Int       @default(0)
+  morningShiftCount     Int       @default(0)
+  eveningShiftCount     Int       @default(0)
+  fairnessScore         Float     @default(0)
+  updatedAt             DateTime  @updatedAt
+  createdAt             DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, weekStartDate])
+  @@index([organizationId, weekStartDate])
+  @@map("employee_schedule_metrics")
+}
+
+// =========================================================
+// Audit + domain events
+// =========================================================
+
+model ScheduleAuditLog {
+  id              String          @id @default(uuid()) @db.Uuid
+  organizationId  String          @db.Uuid
+  scheduleId      String?         @db.Uuid
+  userId          String?         @db.Uuid
+  actionType      AuditActionType
+  entityType      String
+  entityId        String
+  beforeDataJsonb Json?
+  afterDataJsonb  Json?
+  createdAt       DateTime        @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  schedule     Schedule?    @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+  @@map("schedule_audit_logs")
+}
+
+model ScheduleEvent {
+  id              String          @id @default(uuid()) @db.Uuid
+  organizationId  String          @db.Uuid
+  eventType       DomainEventType
+  aggregateType   String
+  aggregateId     String
+  payloadJsonb    Json            @default("{}")
+  createdByUserId String?         @db.Uuid
+  createdAt       DateTime        @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([aggregateType, aggregateId])
+  @@index([eventType, createdAt])
+  @@map("schedule_events")
+}
+
+// =========================================================
+// Scheduler prep (OR-Tools handoff — populated later)
+// =========================================================
+
+model SchedulingCandidate {
+  id               String   @id @default(uuid()) @db.Uuid
+  organizationId   String   @db.Uuid
+  shiftId          String   @db.Uuid
+  employeeId       String   @db.Uuid
+  eligibilityScore Float    @default(0)
+  violationsCount  Int      @default(0)
+  warningsCount    Int      @default(0)
+  generatedAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  shift        Shift        @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([shiftId, employeeId])
+  @@index([organizationId, generatedAt])
+  @@index([shiftId, eligibilityScore])
+  @@map("scheduling_candidates")
+}
