@@ -18,6 +18,13 @@ export const env = cleanEnv(process.env, {
 
   REDIS_URL: str({ default: '' }),
   JWT_SECRET: str({ default: 'dev-secret' }),
+
+  /** Sentry DSN — when set, errors are reported. When empty, all calls no-op. */
+  SENTRY_DSN: str({ default: '' }),
+  /** Used to sign employee share-link tokens. Falls back to JWT_SECRET. */
+  EMPLOYEE_SHARE_SECRET: str({ default: '' }),
+  /** Public landing URL — used to build /e/[token] share links. */
+  PUBLIC_WEB_URL: str({ default: 'https://sidor-eta.vercel.app' }),
 });
 
 export type Env = typeof env;

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { DateTime } from "luxon";
-import { Printer, Search, Sparkles, Upload } from "lucide-react";
+import { MessageCircle, Printer, Search, Sparkles, Upload } from "lucide-react";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppShell } from "@/components/layout/AppShell";
 import { ScheduleBoard } from "@/components/schedule/ScheduleBoard";
@@ -14,6 +14,7 @@ import {
 } from "@/components/schedule/WeekSelector";
 import { AutoScheduleDialog } from "@/components/schedule/AutoScheduleDialog";
 import { ProposalOverlay } from "@/components/schedule/ProposalOverlay";
+import { PublishWhatsAppDialog } from "@/components/schedule/PublishWhatsAppDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -50,6 +51,7 @@ function ScheduleInner() {
   const [roleFilter, setRoleFilter] = React.useState<string | "all">("all");
   const [search, setSearch] = React.useState("");
   const [autoOpen, setAutoOpen] = React.useState(false);
+  const [publishOpen, setPublishOpen] = React.useState(false);
   const [pendingProposals, setPendingProposals] = React.useState<
     AssignmentProposal[] | null
   >(null);
@@ -146,7 +148,16 @@ function ScheduleInner() {
           title="ייצא ל-PDF / הדפסה לשליחה ב-WhatsApp"
         >
           <Printer className="h-4 w-4" />
-          ייצוא לעובדים
+          ייצוא PDF
+        </Button>
+        <Button
+          variant="glow"
+          onClick={() => setPublishOpen(true)}
+          disabled={!scheduleQuery.data}
+          title="פרסום בוואטסאפ עם קישור אישי לכל עובד"
+        >
+          <MessageCircle className="h-4 w-4" />
+          פרסום ב-WhatsApp
         </Button>
         <Button onClick={publishNow} disabled={publish.isPending || !scheduleQuery.data}>
           <Upload className="h-4 w-4" />
@@ -280,6 +291,11 @@ function ScheduleInner() {
         onApply={() => void applyNow()}
         onDismiss={() => setPendingProposals(null)}
         pending={applyProposals.isPending}
+      />
+      <PublishWhatsAppDialog
+        open={publishOpen}
+        onOpenChange={setPublishOpen}
+        scheduleId={scheduleQuery.data?.id ?? null}
       />
     </div>
   );

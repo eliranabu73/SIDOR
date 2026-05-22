@@ -115,6 +115,57 @@ export function createOrg(body: CreateOrgBody): Promise<CreateOrgResult> {
   });
 }
 
+// --------- Share / Publish to WhatsApp ---------
+
+export interface PublishLink {
+  employeeId: ID;
+  fullName: string;
+  phone: string | null;
+  url: string;
+  whatsapp: string;
+}
+export interface PublishBundle {
+  weekStart: string;
+  weekEnd: string;
+  groupMessage: string;
+  links: PublishLink[];
+}
+export function fetchPublishBundle(scheduleId: ID): Promise<PublishBundle> {
+  return request<PublishBundle>(
+    `/v1/schedules/${scheduleId}/publish-message`,
+    { method: "POST" },
+  );
+}
+
+export interface EmployeeShareShift {
+  id: ID;
+  startsAt: string;
+  endsAt: string;
+  role: string | null;
+  location: string | null;
+  status: string;
+}
+export interface EmployeeShareView {
+  employee: { id: ID; fullName: string; phone: string | null; email: string | null };
+  organization: { name: string; defaultTimezone: string } | null;
+  shifts: EmployeeShareShift[];
+}
+export async function fetchEmployeeShare(
+  token: string,
+): Promise<EmployeeShareView> {
+  // Public endpoint — no auth headers.
+  const res = await fetch(`${API_URL}/v1/share/${encodeURIComponent(token)}/me`);
+  const body = (await res.json().catch(() => null)) as unknown;
+  if (!res.ok) {
+    const msg =
+      body && typeof body === "object" && "message" in body
+        ? String((body as { message: unknown }).message)
+        : `Request failed: ${res.status}`;
+    throw new ApiError(msg, res.status, body);
+  }
+  return body as EmployeeShareView;
+}
+
 export function validateAssignment(
   shiftId: ID,
   body: { employeeId: ID; action: "assign" | "unassign" | "replace" },
