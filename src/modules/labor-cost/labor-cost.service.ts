@@ -19,26 +19,43 @@ export async function fetchLaborCostForWeek(input: {
   const start = input.weekStart;
   const end = new Date(start.getTime() + 7 * 86400000);
 
-  // All shifts in the week (live, not cancelled), with assignments + employees
-  const shifts = await prisma.shift.findMany({
-    where: {
-      organizationId: input.organizationId,
-      startAtUtc: { gte: start, lt: end },
-      status: { not: 'CANCELLED' },
-    },
-    include: {
-      role: { select: { name: true } },
-      location: { select: { name: true } },
-      assignments: {
-        where: { assignmentStatus: { in: ['CONFIRMED', 'COMPLETED', 'PROPOSED'] } },
-        include: {
-          employee: {
-            select: { id: true, fullName: true, hourlyRate: true },
+  // All shifts in the week (live, not cancelled), with assignments + employees.
+  // hourlyRate may not exist in DB yet (migration pending) — try with it
+  // first; on column-missing error, fall back to a query without it.
+  type ShiftWithRels = Awaited<ReturnType<typeof loadShifts>>;
+  async function loadShifts(includeRate: boolean) {
+    return prisma.shift.findMany({
+      where: {
+        organizationId: input.organizationId,
+        startAtUtc: { gte: start, lt: end },
+        status: { not: 'CANCELLED' },
+      },
+      include: {
+        role: { select: { name: true } },
+        location: { select: { name: true } },
+        assignments: {
+          where: { assignmentStatus: { in: ['CONFIRMED', 'COMPLETED', 'PROPOSED'] } },
+          include: {
+            employee: includeRate
+              ? { select: { id: true, fullName: true, hourlyRate: true } }
+              : { select: { id: true, fullName: true } },
           },
         },
       },
-    },
-  });
+    });
+  }
+  let shifts: ShiftWithRels;
+  try {
+    shifts = await loadShifts(true);
+  } catch (err) {
+    const code = (err as { code?: string }).code;
+    if (code === 'P2022') {
+      // Column doesn't exist yet — degrade gracefully to default rate for everyone.
+      shifts = await loadShifts(false);
+    } else {
+      throw err;
+    }
+  }
 
   const employeesById = new Map<
     string,
@@ -78,10 +95,9 @@ export async function fetchLaborCostForWeek(input: {
     }
 
     for (const a of s.assignments) {
-      const rate = a.employee.hourlyRate
-        ? Number(a.employee.hourlyRate)
-        : DEFAULT_HOURLY_RATE_ILS;
-      if (!a.employee.hourlyRate && !seenWithoutRate.has(a.employee.id)) {
+      const empRate = (a.employee as { hourlyRate?: unknown }).hourlyRate;
+      const rate = empRate ? Number(empRate) : DEFAULT_HOURLY_RATE_ILS;
+      if (!empRate && !seenWithoutRate.has(a.employee.id)) {
         seenWithoutRate.add(a.employee.id);
         employeesWithoutRate += 1;
       }
@@ -94,7 +110,7 @@ export async function fetchLaborCostForWeek(input: {
       const e = employeesById.get(a.employee.id) ?? {
         employeeId: a.employee.id,
         fullName: a.employee.fullName,
-        hourlyRate: a.employee.hourlyRate ? Number(a.employee.hourlyRate) : null,
+        hourlyRate: empRate ? Number(empRate) : null,
         hours: 0,
         cost: 0,
       };
