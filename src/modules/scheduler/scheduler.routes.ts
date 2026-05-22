@@ -4,6 +4,24 @@ import { SchedulerService, type ProviderName } from './scheduler.service';
 import { HttpError } from '../../shared/errors';
 
 const ScheduleIdParam = z.object({ scheduleId: z.string().uuid() });
+
+const ApplyProposalsBody = z.object({
+  proposals: z.array(
+    z.object({
+      shiftId: z.string().uuid(),
+      employeeId: z.string().uuid(),
+      score: z.number().optional(),
+      breakdown: z.unknown().optional(),
+    }),
+  ),
+});
+
+function devActingUserId(req: { headers: Record<string, unknown> }): string {
+  const v = req.headers['x-user-id'];
+  if (typeof v === 'string' && v.length > 0) return v;
+  return '00000000-0000-0000-0000-0000000000aa';
+}
+
 const AutoScheduleBody = z.object({
   provider: z.enum(['greedy', 'or-tools']).optional().default('greedy'),
   dryRun: z.boolean().optional().default(true),
@@ -30,6 +48,45 @@ function devAllowed(): boolean {
 export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
   const authHandlers = devAllowed() ? [] : [app.authenticate];
   const svc = new SchedulerService();
+
+  app.post(
+    '/schedules/:scheduleId/apply-proposals',
+    {
+      schema: { params: ScheduleIdParam, body: ApplyProposalsBody },
+      preHandler: authHandlers,
+    },
+    async (req, reply) => {
+      const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
+      const body = req.body as z.infer<typeof ApplyProposalsBody>;
+      const actingUserId = devAllowed() ? devActingUserId(req) : req.user!.id;
+
+      try {
+        const result = await svc.applyProposals(scheduleId, body.proposals, actingUserId);
+        return reply.send(result);
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
+
+  app.post(
+    '/schedules/:scheduleId/publish',
+    {
+      schema: { params: ScheduleIdParam },
+      preHandler: authHandlers,
+    },
+    async (req, reply) => {
+      const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
+      const actingUserId = devAllowed() ? devActingUserId(req) : req.user!.id;
+
+      try {
+        const updated = await svc.publishSchedule(scheduleId, actingUserId);
+        return reply.send(updated);
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
 
   app.post(
     '/schedules/:scheduleId/auto-schedule',
