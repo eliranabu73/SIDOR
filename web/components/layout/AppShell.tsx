@@ -33,7 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="sticky top-0 z-30 border-b border-border bg-card/70 backdrop-blur-xl">
+      <header className="sticky top-0 z-30 border-b border-border bg-card/80 backdrop-blur-sm">
         <div className="flex h-14 items-center gap-6 px-4 sm:px-6">
           <Link href="/schedule" aria-label="סידור4S">
             <Logo size={26} />

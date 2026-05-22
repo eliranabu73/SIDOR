@@ -4,10 +4,29 @@ import { Button } from "@/components/ui/button";
 
 export function Hero() {
   return (
-    <section className="mesh-bg mesh-bg-animated overflow-hidden border-b border-border">
-      <div className="mx-auto grid max-w-6xl items-center gap-12 px-6 py-24 lg:grid-cols-[1.1fr_0.9fr] lg:py-32">
-        {/* Copy column */}
-        <div className="text-center lg:text-start">
+    <section className="mesh-bg relative overflow-hidden min-h-[85vh] flex items-center border-b border-border">
+      {/* Floating preview card — desktop only */}
+      <div className="hidden lg:block absolute left-8 top-1/2 -translate-y-1/2 w-72" aria-hidden>
+        <div className="glass-card rounded-2xl p-4 shadow-2xl">
+          <div className="text-xs font-semibold mb-3 opacity-70">תצוגה מקדימה — לוח משמרות</div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {Array.from({ length: 9 }).map((_, i) => (
+              <div
+                key={i}
+                className={`h-10 rounded-lg ${i === 4 ? "bg-gradient-to-br from-[#6366F1] to-[#22D3EE] animate-pulse" : "bg-muted"}`}
+              />
+            ))}
+          </div>
+          <div className="mt-3 flex gap-2">
+            <div className="h-6 w-16 rounded-full bg-muted animate-pulse" />
+            <div className="h-6 w-12 rounded-full bg-muted" />
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-6xl px-6 py-24 lg:py-32 w-full">
+        {/* Copy column — centered on mobile, offset right on desktop to leave room for the card */}
+        <div className="text-center lg:text-start lg:ml-auto lg:max-w-2xl">
           <span className="inline-flex items-center gap-2 rounded-full glass-card px-3 py-1 text-xs font-medium text-foreground">
             <Sparkles className="h-3.5 w-3.5 text-indigo-500" aria-hidden />
             בטא פתוחה · חינם לזמן מוגבל
@@ -30,7 +49,7 @@ export function Hero() {
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
-            <Button asChild size="lg" variant="outline" className="min-w-44">
+            <Button asChild size="lg" variant="ghost" className="min-w-44">
               <Link href="/schedule">ראה דמו חי</Link>
             </Button>
           </div>
@@ -38,70 +57,7 @@ export function Hero() {
             ללא כרטיס אשראי · התקנה ב-2 דקות
           </p>
         </div>
-
-        {/* Floating preview card — desktop only */}
-        <div className="hidden lg:block" aria-hidden>
-          <PreviewBoard />
-        </div>
       </div>
     </section>
   );
-}
-
-function PreviewBoard() {
-  const days = ["א", "ב", "ג", "ד", "ה"];
-  const cells: Array<"ok" | "warn" | "empty" | "shimmer" | "open"> = [
-    "ok", "ok", "warn", "empty", "open",
-    "ok", "ok", "ok", "shimmer", "ok",
-    "warn", "ok", "ok", "ok", "empty",
-  ];
-  return (
-    <div className="relative">
-      <div
-        className="absolute -inset-6 -z-10 rounded-[2rem] bg-gradient-to-br from-indigo-500/30 via-cyan-400/20 to-pink-400/20 blur-2xl"
-        aria-hidden
-      />
-      <div className="glass-card rounded-3xl p-5">
-        <div className="mb-3 flex items-center justify-between text-xs text-muted-foreground">
-          <span className="font-semibold text-foreground">שבוע 19</span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            חי
-          </span>
-        </div>
-        <div className="grid grid-cols-5 gap-1.5 text-center text-[10px]">
-          {days.map((d) => (
-            <div key={d} className="py-1 text-muted-foreground">{d}</div>
-          ))}
-          {cells.map((kind, i) => (
-            <div
-              key={i}
-              className={`h-12 rounded-md border ${cellClass(kind)}`}
-            />
-          ))}
-        </div>
-        <div className="mt-4 flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span className="inline-flex items-center gap-1">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" /> משובץ
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <span className="h-2 w-2 rounded-full bg-amber-500" /> אזהרה
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <span className="h-2 w-2 rounded-full bg-sky-500" /> פתוח
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function cellClass(kind: "ok" | "warn" | "empty" | "shimmer" | "open"): string {
-  switch (kind) {
-    case "ok":      return "border-emerald-500/60 bg-emerald-500/10";
-    case "warn":    return "border-amber-500/60 bg-amber-500/10";
-    case "open":    return "border-sky-500/60 bg-sky-500/10";
-    case "shimmer": return "skeleton border-transparent";
-    default:        return "border-dashed border-border bg-transparent";
-  }
 }

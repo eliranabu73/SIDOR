@@ -75,11 +75,11 @@ function OnboardingForm() {
           <div className="mb-3 flex justify-center">
             <Logo size={36} />
           </div>
-          {/* 3-dot progress (single step today; visual cue we're in a flow) */}
-          <div className="mx-auto mb-4 flex items-center gap-1.5" aria-hidden>
-            <span className="h-1.5 w-8 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400" />
-            <span className="h-1.5 w-3 rounded-full bg-border" />
-            <span className="h-1.5 w-3 rounded-full bg-border" />
+          {/* 3-dot progress */}
+          <div className="flex gap-2 mb-8 justify-center" aria-label="שלב 1 מתוך 3">
+            {[0,1,2].map(i => (
+              <div key={i} className={`w-2 h-2 rounded-full transition-colors ${i === 0 ? 'bg-[#6366F1]' : 'bg-muted'}`} />
+            ))}
           </div>
           <CardTitle className="text-center">בוא נכין את העסק שלך</CardTitle>
           <CardDescription className="text-center">
