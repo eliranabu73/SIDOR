@@ -24,7 +24,7 @@ import { createOrg } from "@/lib/api";
 const schema = z.object({
   name: z.string().min(2, "שם הארגון חייב להיות לפחות 2 תווים"),
   defaultLocationName: z.string().min(1).optional(),
-  industry: z.enum(["restaurant", "retail", "other"]),
+  industry: z.enum(["restaurant", "retail", "pharmacy", "other"]),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -38,7 +38,7 @@ function OnboardingForm() {
     defaultValues: {
       name: "",
       defaultLocationName: "ראשי",
-      industry: "restaurant",
+      industry: "other",
     },
   });
 
@@ -97,7 +97,7 @@ function OnboardingForm() {
               <Input
                 id="name"
                 type="text"
-                placeholder="לדוגמה: מסעדת אלירן"
+                placeholder="לדוגמה: העסק שלי"
                 aria-invalid={!!form.formState.errors.name}
                 {...form.register("name")}
               />
@@ -126,7 +126,8 @@ function OnboardingForm() {
                 {...form.register("industry")}
               >
                 <option value="restaurant">מסעדה / קפה</option>
-                <option value="retail">קמעונאות / חנות</option>
+                <option value="retail">קמעונאות / חנות בגדים</option>
+                <option value="pharmacy">פארם / בית מרקחת</option>
                 <option value="other">אחר</option>
               </select>
             </div>

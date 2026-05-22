@@ -54,7 +54,7 @@ const features = [
   {
     icon: CalendarCheck,
     title: "תבניות מוכנות",
-    description: "6 תבניות לפי ענף: מסעדה, מלון, קמעונאות ועוד.",
+    description: "תבניות מוכנות לפי ענף: מסעדה, קמעונאות, פארם ועוד — התחל תוך דקה.",
     wide: false,
     gradient: false,
   },
