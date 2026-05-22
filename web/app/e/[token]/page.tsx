@@ -2,12 +2,23 @@
 
 import * as React from "react";
 import { use } from "react";
-import { Calendar, Check, Clock, MapPin, RefreshCw, ShieldAlert } from "lucide-react";
+import {
+  Calendar,
+  CalendarRange,
+  Check,
+  Clock,
+  MapPin,
+  Plane,
+  RefreshCw,
+  ShieldAlert,
+} from "lucide-react";
 import { DateTime } from "luxon";
 import { Logo } from "@/components/brand/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TimeOffDialog } from "@/components/share/TimeOffDialog";
+import { AvailabilityDialog } from "@/components/share/AvailabilityDialog";
 import {
   ApiError,
   createSwapRequestFromShare,
@@ -73,6 +84,8 @@ export default function EmployeeSharePage({
 
 function ShareContent({ data, token }: { data: EmployeeShareView; token: string }) {
   const tz = data.organization?.defaultTimezone ?? "Asia/Jerusalem";
+  const [timeOffOpen, setTimeOffOpen] = React.useState(false);
+  const [availOpen, setAvailOpen] = React.useState(false);
   const upcoming = data.shifts.filter(
     (s) => DateTime.fromISO(s.endsAt, { zone: tz }) >= DateTime.now(),
   );
@@ -102,7 +115,37 @@ function ShareContent({ data, token }: { data: EmployeeShareView; token: string 
         <p className="mt-2 text-sm text-muted-foreground">
           המשמרות שלך לשלושת השבועות הקרובים. עדכון מנהל = רענון אוטומטי.
         </p>
+        <div className="mt-4 flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setAvailOpen(true)}
+            className="flex-1"
+          >
+            <CalendarRange className="h-4 w-4" />
+            הזמינות שלי
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setTimeOffOpen(true)}
+            className="flex-1"
+          >
+            <Plane className="h-4 w-4" />
+            בקש חופש
+          </Button>
+        </div>
       </div>
+      <TimeOffDialog
+        open={timeOffOpen}
+        onOpenChange={setTimeOffOpen}
+        token={token}
+      />
+      <AvailabilityDialog
+        open={availOpen}
+        onOpenChange={setAvailOpen}
+        token={token}
+      />
 
       {/* Counters */}
       <div className="grid grid-cols-2 gap-3">

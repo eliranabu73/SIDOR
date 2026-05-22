@@ -307,6 +307,96 @@ export interface EmployeeShareView {
   organization: { name: string; defaultTimezone: string } | null;
   shifts: EmployeeShareShift[];
 }
+// --------- Employee actions via share token (time-off + availability) ---------
+
+export interface EmployeeTimeOffItem {
+  id: ID;
+  startsAt: string;
+  endsAt: string;
+  reason: string | null;
+  status: string;
+}
+export type AvailabilityType = "available" | "unavailable" | "preferred";
+export interface EmployeeAvailabilityRule {
+  id: ID;
+  dayOfWeek: number;
+  startLocalTime: string;
+  endLocalTime: string;
+  type: AvailabilityType;
+}
+export interface EmployeeActivity {
+  timeOff: EmployeeTimeOffItem[];
+  availability: EmployeeAvailabilityRule[];
+}
+
+export async function fetchEmployeeActivity(
+  token: string,
+): Promise<EmployeeActivity> {
+  const r = await fetch(
+    `${API_URL}/v1/share/${encodeURIComponent(token)}/activity`,
+  );
+  const body = (await r.json().catch(() => null)) as unknown;
+  if (!r.ok) {
+    const msg =
+      body && typeof body === "object" && "message" in body
+        ? String((body as { message: unknown }).message)
+        : `Request failed: ${r.status}`;
+    throw new ApiError(msg, r.status, body);
+  }
+  return body as EmployeeActivity;
+}
+
+export async function createTimeOff(
+  token: string,
+  body: { startsAt: string; endsAt: string; reason?: string },
+): Promise<EmployeeTimeOffItem> {
+  const r = await fetch(
+    `${API_URL}/v1/share/${encodeURIComponent(token)}/time-off`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  const j = (await r.json().catch(() => null)) as unknown;
+  if (!r.ok) {
+    const msg =
+      j && typeof j === "object" && "message" in j
+        ? String((j as { message: unknown }).message)
+        : `Request failed: ${r.status}`;
+    throw new ApiError(msg, r.status, j);
+  }
+  return j as EmployeeTimeOffItem;
+}
+
+export async function saveAvailability(
+  token: string,
+  rules: Array<{
+    dayOfWeek: number;
+    startLocalTime: string;
+    endLocalTime: string;
+    type: "AVAILABLE" | "UNAVAILABLE" | "PREFERRED";
+  }>,
+): Promise<{ rules: EmployeeAvailabilityRule[] }> {
+  const r = await fetch(
+    `${API_URL}/v1/share/${encodeURIComponent(token)}/availability`,
+    {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ rules }),
+    },
+  );
+  const j = (await r.json().catch(() => null)) as unknown;
+  if (!r.ok) {
+    const msg =
+      j && typeof j === "object" && "message" in j
+        ? String((j as { message: unknown }).message)
+        : `Request failed: ${r.status}`;
+    throw new ApiError(msg, r.status, j);
+  }
+  return j as { rules: EmployeeAvailabilityRule[] };
+}
+
 // --------- Shift swap (public from share token + manager queue) ---------
 
 export interface SwapCandidate {
