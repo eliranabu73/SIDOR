@@ -94,6 +94,25 @@ const authPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
 
     try {
       const user = await verifyJwt(token, buildVerifierOptions());
+
+      // DB fallback: when the Custom Access Token Hook hasn't run yet (first login,
+      // hook misconfigured) the JWT won't carry organization_id.  We look up the
+      // user's primary membership from the DB.  The JWT signature has already been
+      // verified above, so this is safe — we trust the `sub` claim.
+      if (!user.orgId) {
+        const membership = await prisma.membership.findFirst({
+          where: { userId: user.id },
+          orderBy: { createdAt: 'asc' },
+          select: { organizationId: true, role: true },
+        });
+        if (!membership) {
+          const err = new UnauthorizedError('User has no organization — complete onboarding first');
+          return reply.code(err.statusCode).send({ code: err.code, message: err.message });
+        }
+        user.orgId = membership.organizationId;
+        user.role = membership.role.toLowerCase();
+      }
+
       req.user = user;
     } catch (err) {
       if (err instanceof UnauthorizedError) {

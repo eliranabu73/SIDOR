@@ -139,14 +139,13 @@ export async function verifyJwt(
 
   // orgId: prefer app_metadata over user_metadata (OWASP A01 — server-controlled
   // app_metadata is harder to tamper with than user_metadata on some flows).
+  // NOTE: orgId may be empty when the Custom Access Token Hook hasn't run yet
+  // (e.g. first login, hook misconfigured). The auth.plugin authenticate handler
+  // performs a DB fallback in that case — see auth.plugin.ts.
   const orgId =
     payload.app_metadata?.organization_id ??
     payload.user_metadata?.organization_id ??
     '';
-
-  if (!orgId) {
-    throw new UnauthorizedError('Token missing organization_id claim');
-  }
 
   const role: string = payload.app_metadata?.role ?? 'employee';
 
