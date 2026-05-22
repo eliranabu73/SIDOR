@@ -80,6 +80,98 @@ export function fetchEmployees(): Promise<Employee[]> {
   return request<Employee[]>(`/v1/employees`);
 }
 
+// --------- Employees CRUD ---------
+
+export type EmploymentType =
+  | "FULL_TIME"
+  | "PART_TIME"
+  | "CONTRACTOR"
+  | "TEMPORARY"
+  | "INTERN";
+
+export interface CreateEmployeeBody {
+  fullName: string;
+  email?: string;
+  phone?: string;
+  employmentType?: EmploymentType;
+  roleIds?: ID[];
+  defaultLocationId?: ID;
+}
+
+export interface UpdateEmployeeBody {
+  fullName?: string;
+  email?: string | null;
+  phone?: string | null;
+  employmentType?: EmploymentType;
+  roleIds?: ID[];
+  defaultLocationId?: ID | null;
+}
+
+export function createEmployee(body: CreateEmployeeBody): Promise<Employee> {
+  return request<Employee>(`/v1/employees`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateEmployee(
+  id: ID,
+  body: UpdateEmployeeBody,
+): Promise<Employee> {
+  return request<Employee>(`/v1/employees/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteEmployee(id: ID): Promise<Employee> {
+  return request<Employee>(`/v1/employees/${id}`, { method: "DELETE" });
+}
+
+// --------- Locations & Roles ---------
+
+export interface LocationItem {
+  id: ID;
+  name: string;
+  timezone: string;
+}
+
+export interface RoleItem {
+  id: ID;
+  name: string;
+}
+
+export interface CreateLocationBody {
+  name: string;
+  timezone?: string;
+}
+
+export interface CreateRoleBody {
+  name: string;
+}
+
+export function fetchLocations(): Promise<LocationItem[]> {
+  return request<LocationItem[]>(`/v1/locations`);
+}
+
+export function fetchRoles(): Promise<RoleItem[]> {
+  return request<RoleItem[]>(`/v1/roles`);
+}
+
+export function createLocation(body: CreateLocationBody): Promise<LocationItem> {
+  return request<LocationItem>(`/v1/locations`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function createRole(body: CreateRoleBody): Promise<RoleItem> {
+  return request<RoleItem>(`/v1/roles`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 // --------- Onboarding / Me ---------
 
 export interface MeMembership {
@@ -110,6 +202,36 @@ export interface CreateOrgResult {
 }
 export function createOrg(body: CreateOrgBody): Promise<CreateOrgResult> {
   return request<CreateOrgResult>(`/v1/orgs`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+// --------- Schedule provisioning + manual shift creation ---------
+
+export interface EnsureScheduleResult {
+  id: ID;
+  weekStart: string;
+  status: string;
+}
+export function ensureSchedule(weekStart: string): Promise<EnsureScheduleResult> {
+  return request<EnsureScheduleResult>(`/v1/schedules/ensure`, {
+    method: "POST",
+    body: JSON.stringify({ weekStart }),
+  });
+}
+
+export interface CreateShiftBody {
+  scheduleId: ID;
+  locationId: ID;
+  roleId: ID;
+  startAtUtc: string;
+  endAtUtc: string;
+  requiredEmployeeCount?: number;
+  timezone?: string;
+}
+export function createShift(body: CreateShiftBody): Promise<Shift> {
+  return request<Shift>(`/v1/shifts`, {
     method: "POST",
     body: JSON.stringify(body),
   });

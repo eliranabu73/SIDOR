@@ -5,10 +5,12 @@ import { Button } from "@/components/ui/button";
 
 type EmptyScheduleStateProps = {
   onCreateFirstShift: () => void;
+  onAutoSchedule: () => void;
 };
 
 export function EmptyScheduleState({
   onCreateFirstShift,
+  onAutoSchedule,
 }: EmptyScheduleStateProps) {
   return (
     <div className="flex w-full items-center justify-center px-6 py-16">
@@ -38,17 +40,18 @@ export function EmptyScheduleState({
               onClick={onCreateFirstShift}
               className="w-full"
             >
-              <Sparkles className="h-4 w-4" />
-              צור שבוע לדוגמה
+              <CalendarPlus className="h-4 w-4" />
+              צור משמרת ראשונה
             </Button>
             <Button
               type="button"
               size="lg"
               variant="outline"
-              onClick={onCreateFirstShift}
+              onClick={onAutoSchedule}
               className="w-full"
             >
-              + צור משמרת ראשונה
+              <Sparkles className="h-4 w-4" />
+              שיבוץ אוטומטי לשבוע שלם
             </Button>
           </div>
         </div>

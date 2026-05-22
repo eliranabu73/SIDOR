@@ -206,6 +206,51 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
       }
     },
   );
+
+  // Ensure a schedule row exists for the given week. Used by the frontend
+  // before creating a shift in an empty week (the EmptyScheduleState flow).
+  // Idempotent — returns the existing schedule if one already covers that day.
+  app.post(
+    '/schedules/ensure',
+    {
+      schema: { body: z.object({ weekStart: z.string() }) },
+      preHandler: authHandlers,
+    },
+    async (req, reply) => {
+      const { weekStart } = req.body as { weekStart: string };
+      const orgId = orgIdFor(req);
+      try {
+        const start = new Date(weekStart);
+        const end = new Date(start.getTime() + 7 * 86400000);
+        let schedule = await prisma.schedule.findFirst({
+          where: {
+            organizationId: orgId,
+            periodStartDate: { gte: start, lt: end },
+          },
+        });
+        if (!schedule) {
+          schedule = await prisma.schedule.create({
+            data: {
+              organizationId: orgId,
+              name: `שבוע ${start.toISOString().slice(0, 10)}`,
+              periodStartDate: start,
+              periodEndDate: new Date(start.getTime() + 6 * 86400000),
+              timezone: 'Asia/Jerusalem',
+              status: 'DRAFT',
+              createdByUserId: req.user?.id ?? null,
+            },
+          });
+        }
+        return reply.send({
+          id: schedule.id,
+          weekStart: schedule.periodStartDate.toISOString(),
+          status: schedule.status.toLowerCase(),
+        });
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
 }
 
 function handleHttpError(reply: FastifyReply, err: unknown) {

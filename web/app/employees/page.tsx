@@ -17,7 +17,17 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { useEmployees } from "@/lib/queries";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  queryKeys,
+  useCreateEmployee,
+  useDeleteEmployee,
+  useEmployees,
+  useRoles,
+  useUpdateEmployee,
+} from "@/lib/queries";
+import { createRole as apiCreateRole } from "@/lib/api";
+import type { CreateEmployeeBody, UpdateEmployeeBody, RoleItem } from "@/lib/api";
 import type { Employee } from "@/lib/types";
 
 export default function EmployeesPage() {
@@ -30,8 +40,49 @@ export default function EmployeesPage() {
   );
 }
 
+function parseRoleNames(raw: string): string[] {
+  return Array.from(
+    new Set(
+      raw
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0),
+    ),
+  );
+}
+
+async function resolveRoleIds(
+  names: string[],
+  existing: RoleItem[],
+): Promise<string[]> {
+  const byName = new Map(existing.map((r) => [r.name.toLowerCase(), r]));
+  const ids: string[] = [];
+  for (const name of names) {
+    const hit = byName.get(name.toLowerCase());
+    if (hit) {
+      ids.push(hit.id);
+    } else {
+      const created = await apiCreateRole({ name });
+      byName.set(created.name.toLowerCase(), created);
+      ids.push(created.id);
+    }
+  }
+  return ids;
+}
+
+function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  return "אירעה שגיאה";
+}
+
 function EmployeesInner() {
   const employeesQuery = useEmployees();
+  const rolesQuery = useRoles();
+  const createMut = useCreateEmployee();
+  const updateMut = useUpdateEmployee();
+  const deleteMut = useDeleteEmployee();
+  const qc = useQueryClient();
+
   const [search, setSearch] = React.useState("");
   const [editing, setEditing] = React.useState<Employee | null>(null);
   const [sheetOpen, setSheetOpen] = React.useState(false);
@@ -53,19 +104,67 @@ function EmployeesInner() {
     setSheetOpen(true);
   };
 
-  const onSubmit = async (_data: EmployeeFormData) => {
-    // TODO(integration): POST /v1/employees or PATCH /v1/employees/:id
-    toast.success(editing ? "העובד/ת עודכן/ה" : "העובד/ת נוסף/ה");
-    setSheetOpen(false);
+  const onSubmit = async (data: EmployeeFormData) => {
+    try {
+      const names = parseRoleNames(data.roles);
+      const existing = rolesQuery.data ?? [];
+      const roleIds = await resolveRoleIds(names, existing);
+      // If we auto-created any new roles, refresh the roles cache.
+      const createdAny = names.some(
+        (n) => !existing.find((r) => r.name.toLowerCase() === n.toLowerCase()),
+      );
+      if (createdAny) {
+        await qc.invalidateQueries({ queryKey: queryKeys.roles() });
+      }
+
+      if (editing) {
+        const body: UpdateEmployeeBody = {
+          fullName: data.fullName,
+          email: data.email ? data.email : null,
+          phone: data.phone ? data.phone : null,
+          roleIds,
+          defaultLocationId: data.primaryLocationId
+            ? data.primaryLocationId
+            : null,
+        };
+        await updateMut.mutateAsync({ id: editing.id, body });
+        toast.success("העובד/ת עודכן/ה");
+      } else {
+        const body: CreateEmployeeBody = {
+          fullName: data.fullName,
+          ...(data.email ? { email: data.email } : {}),
+          ...(data.phone ? { phone: data.phone } : {}),
+          ...(roleIds.length ? { roleIds } : {}),
+          ...(data.primaryLocationId
+            ? { defaultLocationId: data.primaryLocationId }
+            : {}),
+        };
+        await createMut.mutateAsync(body);
+        toast.success("העובד/ת נוסף/ה");
+      }
+      setSheetOpen(false);
+    } catch (err) {
+      console.error("Employee submit failed", err);
+      toast.error(errorMessage(err));
+    }
   };
 
-  const toggleActive = (employee: Employee) => {
-    // TODO(integration): PATCH /v1/employees/:id { active }
-    toast.success(
-      employee.active
-        ? `${employee.fullName} הושבת/ה`
-        : `${employee.fullName} הופעל/ה`,
-    );
+  const toggleActive = async (employee: Employee) => {
+    if (!employee.active) {
+      toast.error("הפעלה מחדש של עובד/ת לא נתמכת כרגע");
+      return;
+    }
+    if (typeof window !== "undefined") {
+      const ok = window.confirm(`להשבית את ${employee.fullName}?`);
+      if (!ok) return;
+    }
+    try {
+      await deleteMut.mutateAsync(employee.id);
+      toast.success(`${employee.fullName} הושבת/ה`);
+    } catch (err) {
+      console.error("Employee deactivate failed", err);
+      toast.error(errorMessage(err));
+    }
   };
 
   return (
@@ -92,6 +191,10 @@ function EmployeesInner() {
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-12" />
           ))}
+        </div>
+      ) : employeesQuery.isError ? (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+          טעינת עובדים נכשלה: {errorMessage(employeesQuery.error)}
         </div>
       ) : (
         <EmployeeTable

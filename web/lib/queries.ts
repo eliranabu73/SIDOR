@@ -8,12 +8,25 @@ import {
 } from "@tanstack/react-query";
 import {
   applyProposals,
+  createEmployee,
+  createLocation,
+  createRole,
+  deleteEmployee,
   fetchEmployees,
+  fetchLocations,
+  fetchRoles,
   fetchSchedule,
   patchAssignment,
   publishSchedule,
   runAutoSchedule,
+  updateEmployee,
   validateAssignment,
+  type CreateEmployeeBody,
+  type CreateLocationBody,
+  type CreateRoleBody,
+  type LocationItem,
+  type RoleItem,
+  type UpdateEmployeeBody,
 } from "./api";
 import { buildMockSchedule, mockEmployees, mockMetrics } from "./mocks";
 import type {
@@ -36,6 +49,8 @@ export const queryKeys = {
     ["schedule", id, weekStart] as const,
   employees: () => ["employees"] as const,
   metrics: () => ["metrics"] as const,
+  locations: () => ["locations"] as const,
+  roles: () => ["roles"] as const,
 };
 
 export function useSchedule(scheduleId: ID, weekStart?: string) {
@@ -52,11 +67,89 @@ export function useSchedule(scheduleId: ID, weekStart?: string) {
 export function useEmployees() {
   return useQuery<Employee[]>({
     queryKey: queryKeys.employees(),
-    queryFn: async () => {
-      if (USE_MOCKS) return mockEmployees;
-      return fetchEmployees();
-    },
+    queryFn: () => fetchEmployees(),
     staleTime: 60_000,
+  });
+}
+
+export function useLocations() {
+  return useQuery<LocationItem[]>({
+    queryKey: queryKeys.locations(),
+    queryFn: () => fetchLocations(),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useRoles() {
+  return useQuery<RoleItem[]>({
+    queryKey: queryKeys.roles(),
+    queryFn: () => fetchRoles(),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useCreateEmployee() {
+  const qc = useQueryClient();
+  return useMutation<Employee, Error, CreateEmployeeBody>({
+    mutationFn: (body) => createEmployee(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.employees() });
+    },
+    onError: (err) => {
+      console.error("useCreateEmployee failed", err);
+    },
+  });
+}
+
+export function useUpdateEmployee() {
+  const qc = useQueryClient();
+  return useMutation<Employee, Error, { id: ID; body: UpdateEmployeeBody }>({
+    mutationFn: ({ id, body }) => updateEmployee(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.employees() });
+    },
+    onError: (err) => {
+      console.error("useUpdateEmployee failed", err);
+    },
+  });
+}
+
+export function useDeleteEmployee() {
+  const qc = useQueryClient();
+  return useMutation<Employee, Error, ID>({
+    mutationFn: (id) => deleteEmployee(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.employees() });
+    },
+    onError: (err) => {
+      console.error("useDeleteEmployee failed", err);
+    },
+  });
+}
+
+export function useCreateLocation() {
+  const qc = useQueryClient();
+  return useMutation<LocationItem, Error, CreateLocationBody>({
+    mutationFn: (body) => createLocation(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.locations() });
+    },
+    onError: (err) => {
+      console.error("useCreateLocation failed", err);
+    },
+  });
+}
+
+export function useCreateRole() {
+  const qc = useQueryClient();
+  return useMutation<RoleItem, Error, CreateRoleBody>({
+    mutationFn: (body) => createRole(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.roles() });
+    },
+    onError: (err) => {
+      console.error("useCreateRole failed", err);
+    },
   });
 }
 

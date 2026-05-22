@@ -3,7 +3,7 @@
 import { Pencil, Power } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { mockLocations } from "@/lib/mocks";
+import { useLocations } from "@/lib/queries";
 import type { Employee } from "@/lib/types";
 
 interface Props {
@@ -13,7 +13,10 @@ interface Props {
 }
 
 export function EmployeeTable({ employees, onEdit, onToggleActive }: Props) {
-  const locations = Object.fromEntries(mockLocations.map((l) => [l.id, l.name]));
+  const locationsQuery = useLocations();
+  const locations = Object.fromEntries(
+    (locationsQuery.data ?? []).map((l) => [l.id, l.name]),
+  );
   return (
     <div className="rounded-lg border bg-card overflow-hidden">
       <table className="w-full text-sm">

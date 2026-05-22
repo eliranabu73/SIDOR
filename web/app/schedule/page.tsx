@@ -15,6 +15,7 @@ import {
 import { AutoScheduleDialog } from "@/components/schedule/AutoScheduleDialog";
 import { ProposalOverlay } from "@/components/schedule/ProposalOverlay";
 import { PublishWhatsAppDialog } from "@/components/schedule/PublishWhatsAppDialog";
+import { CreateShiftDialog } from "@/components/schedule/CreateShiftDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -52,6 +53,7 @@ function ScheduleInner() {
   const [search, setSearch] = React.useState("");
   const [autoOpen, setAutoOpen] = React.useState(false);
   const [publishOpen, setPublishOpen] = React.useState(false);
+  const [createShiftOpen, setCreateShiftOpen] = React.useState(false);
   const [pendingProposals, setPendingProposals] = React.useState<
     AssignmentProposal[] | null
   >(null);
@@ -232,7 +234,8 @@ function ScheduleInner() {
           ) : scheduleQuery.data ? (
             scheduleQuery.data.shifts.length === 0 ? (
               <EmptyScheduleState
-                onCreateFirstShift={() => setAutoOpen(true)}
+                onCreateFirstShift={() => setCreateShiftOpen(true)}
+                onAutoSchedule={() => setAutoOpen(true)}
               />
             ) : (
               <ScheduleBoard
@@ -295,6 +298,12 @@ function ScheduleInner() {
       <PublishWhatsAppDialog
         open={publishOpen}
         onOpenChange={setPublishOpen}
+        scheduleId={scheduleQuery.data?.id ?? null}
+      />
+      <CreateShiftDialog
+        open={createShiftOpen}
+        onOpenChange={setCreateShiftOpen}
+        weekStart={weekStart}
         scheduleId={scheduleQuery.data?.id ?? null}
       />
     </div>
