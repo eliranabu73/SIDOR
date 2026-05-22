@@ -1,7 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "buildCommand": "prisma generate",
+  "installCommand": "npm install --include=dev",
+  "buildCommand": "npx prisma generate",
   "framework": null,
   "outputDirectory": ".vercel-empty",
   "functions": {
