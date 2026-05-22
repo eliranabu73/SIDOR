@@ -295,6 +295,7 @@ export function fetchPublishBundle(scheduleId: ID): Promise<PublishBundle> {
 
 export interface EmployeeShareShift {
   id: ID;
+  assignmentId: ID;
   startsAt: string;
   endsAt: string;
   role: string | null;
@@ -306,6 +307,70 @@ export interface EmployeeShareView {
   organization: { name: string; defaultTimezone: string } | null;
   shifts: EmployeeShareShift[];
 }
+// --------- Shift swap (public from share token + manager queue) ---------
+
+export interface SwapCandidate {
+  employeeId: ID;
+  fullName: string;
+  phone: string | null;
+  conflicting: boolean;
+}
+export interface PendingSwap {
+  id: ID;
+  createdAt: string;
+  requester: { id: ID; fullName: string; phone: string | null };
+  shift: {
+    id: ID;
+    startsAt: string;
+    endsAt: string;
+    role: string | null;
+    location: string | null;
+  };
+  assignmentId: ID;
+}
+
+export async function createSwapRequestFromShare(
+  token: string,
+  assignmentId: ID,
+): Promise<{ id: ID; status: string }> {
+  const res = await fetch(
+    `${API_URL}/v1/share/${encodeURIComponent(token)}/swap-request`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ assignmentId }),
+    },
+  );
+  const body = (await res.json().catch(() => null)) as unknown;
+  if (!res.ok) {
+    const msg =
+      body && typeof body === "object" && "message" in body
+        ? String((body as { message: unknown }).message)
+        : `Request failed: ${res.status}`;
+    throw new ApiError(msg, res.status, body);
+  }
+  return body as { id: ID; status: string };
+}
+
+export function fetchPendingSwaps(): Promise<PendingSwap[]> {
+  return request<PendingSwap[]>(`/v1/swap-requests`);
+}
+export function fetchSwapCandidates(swapId: ID): Promise<SwapCandidate[]> {
+  return request<SwapCandidate[]>(`/v1/swap-requests/${swapId}/candidates`);
+}
+export function approveSwap(
+  swapId: ID,
+  targetEmployeeId: ID,
+): Promise<{ id: ID; status: string }> {
+  return request(`/v1/swap-requests/${swapId}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ targetEmployeeId }),
+  });
+}
+export function rejectSwap(swapId: ID): Promise<{ id: ID; status: string }> {
+  return request(`/v1/swap-requests/${swapId}/reject`, { method: "POST" });
+}
+
 export async function fetchEmployeeShare(
   token: string,
 ): Promise<EmployeeShareView> {

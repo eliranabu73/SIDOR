@@ -2,12 +2,19 @@
 
 import * as React from "react";
 import { use } from "react";
-import { Calendar, Clock, MapPin, ShieldAlert } from "lucide-react";
+import { Calendar, Check, Clock, MapPin, RefreshCw, ShieldAlert } from "lucide-react";
 import { DateTime } from "luxon";
 import { Logo } from "@/components/brand/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError, fetchEmployeeShare, type EmployeeShareView } from "@/lib/api";
+import {
+  ApiError,
+  createSwapRequestFromShare,
+  fetchEmployeeShare,
+  type EmployeeShareView,
+} from "@/lib/api";
+import { toast } from "sonner";
 
 type Params = { token: string };
 
@@ -57,14 +64,14 @@ export default function EmployeeSharePage({
             <Skeleton className="h-32 rounded-2xl" />
           </div>
         ) : (
-          <ShareContent data={data} />
+          <ShareContent data={data} token={token} />
         )}
       </div>
     </main>
   );
 }
 
-function ShareContent({ data }: { data: EmployeeShareView }) {
+function ShareContent({ data, token }: { data: EmployeeShareView; token: string }) {
   const tz = data.organization?.defaultTimezone ?? "Asia/Jerusalem";
   const upcoming = data.shifts.filter(
     (s) => DateTime.fromISO(s.endsAt, { zone: tz }) >= DateTime.now(),
@@ -126,7 +133,7 @@ function ShareContent({ data }: { data: EmployeeShareView }) {
             </div>
             <div className="space-y-2">
               {shifts.map((s) => (
-                <ShiftCard key={s.id} shift={s} tz={tz} />
+                <ShiftCard key={s.id} shift={s} tz={tz} token={token} />
               ))}
             </div>
           </section>
@@ -154,13 +161,33 @@ function StatCard({ label, value }: { label: string; value: number }) {
 function ShiftCard({
   shift,
   tz,
+  token,
 }: {
   shift: EmployeeShareView["shifts"][number];
   tz: string;
+  token: string;
 }) {
   const start = DateTime.fromISO(shift.startsAt, { zone: tz });
   const end = DateTime.fromISO(shift.endsAt, { zone: tz });
   const hours = end.diff(start, "hours").hours;
+  const [requesting, setRequesting] = React.useState(false);
+  const [requested, setRequested] = React.useState(false);
+
+  const requestSwap = async () => {
+    if (requesting || requested) return;
+    if (!window.confirm("לבקש מהמנהל למצוא לך מחליף למשמרת הזו?")) return;
+    setRequesting(true);
+    try {
+      await createSwapRequestFromShare(token, shift.assignmentId);
+      setRequested(true);
+      toast.success("הבקשה נשלחה למנהל");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "שליחת הבקשה נכשלה");
+    } finally {
+      setRequesting(false);
+    }
+  };
+
   return (
     <div className="rounded-2xl border border-border bg-card p-4">
       <div className="flex items-center justify-between gap-2">
@@ -184,6 +211,25 @@ function ShiftCard({
             {shift.location}
           </span>
         ) : null}
+      </div>
+      <div className="mt-3 flex justify-end">
+        {requested ? (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-500">
+            <Check className="h-3.5 w-3.5" />
+            בקשת החלפה נשלחה
+          </span>
+        ) : (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={requestSwap}
+            disabled={requesting}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            {requesting ? "שולח…" : "אני לא יכול/ה להגיע"}
+          </Button>
+        )}
       </div>
     </div>
   );

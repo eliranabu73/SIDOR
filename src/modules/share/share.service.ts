@@ -170,6 +170,7 @@ export async function fetchEmployeeView(employeeId: string, organizationId: stri
     organization: org,
     shifts: assignments.map((a) => ({
       id: a.shift.id,
+      assignmentId: a.id,
       startsAt: a.shift.startAtUtc.toISOString(),
       endsAt: a.shift.endAtUtc.toISOString(),
       role: a.shift.role?.name ?? null,
