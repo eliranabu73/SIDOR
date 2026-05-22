@@ -99,6 +99,7 @@ function emp(id: string) {
     employmentType: 'FULL_TIME' as const,
     defaultLocationId: null,
     defaultTimezone: 'Asia/Jerusalem',
+    hourlyRate: null,
     isActive: true,
     createdAt: new Date(),
     updatedAt: new Date(),

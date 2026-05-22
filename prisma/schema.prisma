@@ -267,6 +267,8 @@ model Employee {
   employmentType    EmploymentType @default(FULL_TIME)
   defaultLocationId String?        @db.Uuid
   defaultTimezone   String?
+  /// Hourly cost in ILS (or org's currency). Used by labor-cost dashboard.
+  hourlyRate        Decimal?       @db.Decimal(10, 2)
   isActive          Boolean        @default(true)
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt

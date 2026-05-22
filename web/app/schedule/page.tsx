@@ -16,6 +16,7 @@ import { AutoScheduleDialog } from "@/components/schedule/AutoScheduleDialog";
 import { ProposalOverlay } from "@/components/schedule/ProposalOverlay";
 import { PublishWhatsAppDialog } from "@/components/schedule/PublishWhatsAppDialog";
 import { CreateShiftDialog } from "@/components/schedule/CreateShiftDialog";
+import { LaborCostBar } from "@/components/schedule/LaborCostBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -166,6 +167,9 @@ function ScheduleInner() {
           {publish.isPending ? "מפרסם…" : "פרסם סידור"}
         </Button>
       </div>
+
+      {/* Labor cost bar — always visible above the board */}
+      <LaborCostBar weekStart={weekStart} />
 
       <div className="flex flex-1 min-h-0">
         {/* Left rail — filters */}

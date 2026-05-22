@@ -237,6 +237,40 @@ export function createShift(body: CreateShiftBody): Promise<Shift> {
   });
 }
 
+// --------- Labor Cost Dashboard ---------
+
+export interface LaborCostResponse {
+  weekStart: string;
+  currency: "ILS";
+  totals: {
+    hours: number;
+    cost: number;
+    shifts: number;
+    uncoveredHours: number;
+    openShifts: number;
+    employees: number;
+    overtimeEmployees: number;
+    employeesWithoutRate: number;
+  };
+  perEmployee: Array<{
+    employeeId: ID;
+    fullName: string;
+    hourlyRate: number | null;
+    hours: number;
+    cost: number;
+    isOvertime: boolean;
+  }>;
+  perDay: Array<{ date: string; hours: number; cost: number; shifts: number }>;
+  perRole: Array<{ name: string; hours: number; cost: number }>;
+  perLocation: Array<{ name: string; hours: number; cost: number }>;
+  defaultHourlyRate: number;
+}
+export function fetchLaborCost(weekStart: string): Promise<LaborCostResponse> {
+  return request<LaborCostResponse>(
+    `/v1/labor-cost?weekStart=${encodeURIComponent(weekStart)}`,
+  );
+}
+
 // --------- Share / Publish to WhatsApp ---------
 
 export interface PublishLink {
