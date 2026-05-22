@@ -1,8 +1,7 @@
 "use client";
 
-import { CalendarPlus } from "lucide-react";
+import { CalendarPlus, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 
 type EmptyScheduleStateProps = {
   onCreateFirstShift: () => void;
@@ -13,30 +12,34 @@ export function EmptyScheduleState({
 }: EmptyScheduleStateProps) {
   return (
     <div className="flex w-full items-center justify-center px-6 py-16">
-      <Card className="w-full max-w-md bg-card text-center">
-        <CardContent className="flex flex-col items-center gap-5 p-8">
+      <div className="mesh-bg relative w-full max-w-md overflow-hidden rounded-3xl border border-border p-1">
+        <div className="relative rounded-[1.4rem] bg-card/80 p-8 text-center backdrop-blur-md">
           <div
             aria-hidden
-            className="flex h-16 w-16 items-center justify-center rounded-full border border-border bg-background"
+            className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-cyan-400 p-[2px]"
           >
-            <CalendarPlus className="h-8 w-8 text-primary" />
+            <div className="flex h-full w-full items-center justify-center rounded-full bg-card">
+              <CalendarPlus className="h-9 w-9 text-indigo-500" />
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <h2 className="text-xl font-semibold text-foreground">
-              הסידור שלך מוכן להתחיל
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              עדיין אין משמרות בשבוע הזה
-            </p>
-          </div>
-          <div className="flex w-full flex-col gap-2 pt-1">
+
+          <h2 className="mt-5 text-xl font-bold text-foreground">
+            הסידור שלך מוכן להתחיל
+          </h2>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            עדיין אין משמרות בשבוע הזה
+          </p>
+
+          <div className="mt-6 flex flex-col gap-2">
             <Button
               type="button"
               size="lg"
+              variant="glow"
               onClick={onCreateFirstShift}
               className="w-full"
             >
-              + צור משמרת ראשונה
+              <Sparkles className="h-4 w-4" />
+              צור שבוע לדוגמה
             </Button>
             <Button
               type="button"
@@ -45,11 +48,11 @@ export function EmptyScheduleState({
               onClick={onCreateFirstShift}
               className="w-full"
             >
-              ✨ צור שבוע לדוגמה
+              + צור משמרת ראשונה
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

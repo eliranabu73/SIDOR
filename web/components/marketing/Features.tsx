@@ -1,38 +1,11 @@
-import { CalendarCheck, Scale, Share2 } from "lucide-react";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-
-type Feature = {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  description: string;
-};
-
-const FEATURES: Feature[] = [
-  {
-    icon: CalendarCheck,
-    title: "שיבוץ אוטומטי",
-    description:
-      "בלחיצה אחת המערכת בונה סידור שבועי שלם — מאזנת עומסים, מעדיפה את העובדים המתאימים ומונעת קונפליקטים מראש.",
-  },
-  {
-    icon: Scale,
-    title: "חוקי עבודה ישראליים",
-    description:
-      "אכיפה אוטומטית של מנוחה שבועית, שעות נוספות, ערבי חג ומילואים. המנהל מקבל התרעה לפני שהוא חותם על משמרת אסורה.",
-  },
-  {
-    icon: Share2,
-    title: "ייצוא ל-WhatsApp",
-    description:
-      "מייצרים PDF או PNG של הסידור בלחיצה ושולחים לקבוצת העובדים בוואטסאפ. בלי אפליקציה ובלי התקנות לעובדים.",
-  },
-];
+  CalendarCheck,
+  Scale,
+  Share2,
+  Sparkles,
+  Zap,
+  ShieldCheck,
+} from "lucide-react";
 
 export function Features() {
   return (
@@ -46,23 +19,111 @@ export function Features() {
             בנינו את הכלי שחסר לשוק המקומי — לא עוד תרגום של מערכת אמריקאית.
           </p>
         </div>
-        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map(({ icon: Icon, title, description }) => (
-            <Card key={title} className="bg-card">
-              <CardHeader>
-                <div className="flex h-11 w-11 items-center justify-center rounded-md border border-border bg-background">
-                  <Icon className="h-5 w-5 text-foreground" />
-                </div>
-                <CardTitle className="mt-3 text-lg">{title}</CardTitle>
-                <CardDescription className="leading-relaxed">
-                  {description}
-                </CardDescription>
-              </CardHeader>
-              <CardContent />
-            </Card>
-          ))}
+
+        <div className="bento-grid mt-12">
+          {/* Hero card — span 2 cols, brand gradient */}
+          <article className="bento-card bento-card-brand bento-wide">
+            <div className="flex items-center gap-2 text-sm font-medium opacity-90">
+              <Sparkles className="h-4 w-4" />
+              שיבוץ אוטומטי
+            </div>
+            <div>
+              <h3 className="mt-4 text-2xl font-bold leading-tight">
+                סידור שבועי שלם
+                <br />
+                בלחיצה אחת
+              </h3>
+              <p className="mt-3 max-w-md text-sm opacity-90">
+                המערכת מאזנת עומסים, מעדיפה את העובדים המתאימים ומונעת
+                קונפליקטים מראש. אתה רק מאשר.
+              </p>
+            </div>
+          </article>
+
+          {/* Israeli labor compliance */}
+          <article className="bento-card bento-corner-glow">
+            <FeatureIcon icon={Scale} />
+            <div>
+              <h3 className="mt-4 text-lg font-semibold text-foreground">
+                חוקי עבודה ישראליים
+              </h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                אכיפה אוטומטית של מנוחה שבועית, שעות נוספות, ערבי חג
+                ומילואים.
+              </p>
+            </div>
+          </article>
+
+          {/* WhatsApp export */}
+          <article className="bento-card bento-corner-glow">
+            <FeatureIcon icon={Share2} />
+            <div>
+              <h3 className="mt-4 text-lg font-semibold text-foreground">
+                ייצוא לוואטסאפ
+              </h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                PDF/PNG בלחיצה — שולחים לקבוצת העובדים. בלי אפליקציה לעובדים.
+              </p>
+            </div>
+          </article>
+
+          {/* Real-time collaboration — span 2 */}
+          <article className="bento-card bento-wide bento-card-dark">
+            <div className="flex items-center gap-2 text-sm font-medium text-cyan-300">
+              <Zap className="h-4 w-4" />
+              שיתוף בזמן אמת
+            </div>
+            <div>
+              <h3 className="mt-4 text-xl font-bold">
+                כמה מנהלים, אותו סידור
+              </h3>
+              <p className="mt-2 text-sm text-slate-400">
+                שינויים מסתנכרנים אוטומטית. אין יותר WhatsApp עם 12 גרסאות
+                Excel.
+              </p>
+            </div>
+          </article>
+
+          {/* Smart calendar */}
+          <article className="bento-card bento-corner-glow">
+            <FeatureIcon icon={CalendarCheck} />
+            <div>
+              <h3 className="mt-4 text-lg font-semibold text-foreground">
+                העדפות עובדים
+              </h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                כל עובד מסמן זמינות. המערכת מכבדת בקשות ומאזנת בין הצוות.
+              </p>
+            </div>
+          </article>
+
+          {/* Security */}
+          <article className="bento-card bento-corner-glow">
+            <FeatureIcon icon={ShieldCheck} />
+            <div>
+              <h3 className="mt-4 text-lg font-semibold text-foreground">
+                בידוד מלא בין עסקים
+              </h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Multi-tenant מאובטח עם RLS. הנתונים שלך לא יוצאים מהארגון
+                שלך.
+              </p>
+            </div>
+          </article>
         </div>
       </div>
     </section>
+  );
+}
+
+function FeatureIcon({
+  icon: Icon,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+}) {
+  return (
+    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/15 to-cyan-400/15 ring-1 ring-indigo-500/30">
+      <Icon className="h-5 w-5 text-indigo-500" />
+    </div>
   );
 }

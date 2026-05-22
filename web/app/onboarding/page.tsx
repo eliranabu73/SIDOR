@@ -17,6 +17,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { AuthGuard } from "@/components/auth/AuthGuard";
+import { Logo } from "@/components/brand/Logo";
 import { getSupabase } from "@/lib/supabase";
 import { createOrg } from "@/lib/api";
 
@@ -68,11 +69,20 @@ function OnboardingForm() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-md">
+    <div className="mesh-bg flex min-h-screen items-center justify-center p-4">
+      <Card className="glass-card w-full max-w-md">
         <CardHeader>
-          <CardTitle>בוא נכין את העסק שלך</CardTitle>
-          <CardDescription>
+          <div className="mb-3 flex justify-center">
+            <Logo size={36} />
+          </div>
+          {/* 3-dot progress (single step today; visual cue we're in a flow) */}
+          <div className="mx-auto mb-4 flex items-center gap-1.5" aria-hidden>
+            <span className="h-1.5 w-8 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400" />
+            <span className="h-1.5 w-3 rounded-full bg-border" />
+            <span className="h-1.5 w-3 rounded-full bg-border" />
+          </div>
+          <CardTitle className="text-center">בוא נכין את העסק שלך</CardTitle>
+          <CardDescription className="text-center">
             ניצור לך ארגון חדש, סניף ראשי וסידור ריק לשבוע הקרוב — דקה אחת.
           </CardDescription>
         </CardHeader>
@@ -121,7 +131,12 @@ function OnboardingForm() {
               </select>
             </div>
 
-            <Button type="submit" className="w-full" disabled={submitting}>
+            <Button
+              type="submit"
+              variant="glow"
+              className="w-full"
+              disabled={submitting}
+            >
               {submitting ? "יוצר ארגון…" : "צור ארגון והיכנס ללוח"}
             </Button>
           </form>

@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 import { CalendarDays, Users, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/brand/Logo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { getSupabase } from "@/lib/supabase";
 import { toast } from "sonner";
 
@@ -28,10 +30,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="border-b bg-card">
+      <header className="sticky top-0 z-30 border-b border-border bg-card/70 backdrop-blur-xl">
         <div className="flex h-14 items-center gap-6 px-4 sm:px-6">
-          <Link href="/schedule" className="font-bold text-lg">
-            סידור<span className="text-primary">4S</span>
+          <Link href="/schedule" aria-label="סידור4S">
+            <Logo size={26} />
           </Link>
           <nav className="flex items-center gap-1" aria-label="ניווט ראשי">
             {nav.map((item) => {
@@ -55,6 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             })}
           </nav>
           <div className="me-auto" />
+          <ThemeToggle />
           <Button variant="ghost" size="sm" onClick={signOut} aria-label="יציאה">
             <LogOut className="h-4 w-4" />
             יציאה

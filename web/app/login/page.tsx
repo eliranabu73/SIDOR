@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Logo } from "@/components/brand/Logo";
 import { getSupabase } from "@/lib/supabase";
 
 const schema = z.object({
@@ -45,13 +46,14 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-sm">
+    <div className="mesh-bg flex min-h-screen items-center justify-center p-4">
+      <Card className="glass-card w-full max-w-sm">
         <CardHeader>
-          <CardTitle>
-            ברוכים הבאים ל-סידור<span className="text-primary">4S</span>
-          </CardTitle>
-          <CardDescription>
+          <div className="mb-3 flex justify-center">
+            <Logo size={36} />
+          </div>
+          <CardTitle className="text-center">ברוכים הבאים</CardTitle>
+          <CardDescription className="text-center">
             התחבר/י עם כתובת הדוא״ל וקבל/י קישור התחברות.
           </CardDescription>
         </CardHeader>
@@ -90,6 +92,7 @@ export default function LoginPage() {
               </div>
               <Button
                 type="submit"
+                variant="glow"
                 className="w-full"
                 disabled={form.formState.isSubmitting}
               >
