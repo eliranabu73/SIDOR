@@ -20,6 +20,8 @@ function orgIdFor(req: { user?: { orgId: string } }): string {
 const ScheduleIdParam = z.object({ scheduleId: z.string() });
 const ScheduleQuery = z.object({ weekStart: z.string().optional() });
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function devAllowed(): boolean {
   // Reads are public for the demo deployment. AUTH_DISABLED=true skips JWT
   // checks regardless of NODE_ENV so the Vercel demo can fetch data without
@@ -143,34 +145,57 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req, reply) => {
       const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
+      const { weekStart } = req.query as z.infer<typeof ScheduleQuery>;
 
       try {
         let schedule;
+        const orgId = orgIdFor(req);
+        const includeShifts = {
+          shifts: {
+            include: { role: true, assignments: true },
+            orderBy: { startAtUtc: 'asc' as const },
+          },
+        };
 
-        if (scheduleId === 'current') {
-          // Look up most recent schedule for the demo org whose period has started.
+        if (UUID_RE.test(scheduleId)) {
+          // Real UUID — direct lookup, org-scoped.
+          schedule = await prisma.schedule.findFirst({
+            where: { id: scheduleId, organizationId: orgId },
+            include: includeShifts,
+          });
+        } else if (weekStart) {
+          // Pseudo id like "sched_2026-05-17" or "current" with explicit weekStart.
+          const start = new Date(weekStart);
+          const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
           schedule = await prisma.schedule.findFirst({
             where: {
-              organizationId: orgIdFor(req),
+              organizationId: orgId,
+              periodStartDate: { gte: start, lt: end },
+            },
+            orderBy: { periodStartDate: 'desc' },
+            include: includeShifts,
+          });
+        } else {
+          // Fallback — most recent schedule whose period started.
+          schedule = await prisma.schedule.findFirst({
+            where: {
+              organizationId: orgId,
               periodStartDate: { lte: new Date() },
             },
             orderBy: { periodStartDate: 'desc' },
-            include: {
-              shifts: {
-                include: { role: true, assignments: true },
-                orderBy: { startAtUtc: 'asc' },
-              },
-            },
+            include: includeShifts,
           });
-        } else {
-          schedule = await prisma.schedule.findFirst({
-            where: { id: scheduleId, organizationId: orgIdFor(req) },
-            include: {
-              shifts: {
-                include: { role: true, assignments: true },
-                orderBy: { startAtUtc: 'asc' },
-              },
-            },
+        }
+
+        // No matching schedule but valid week — return empty shell so the
+        // UI renders the EmptyScheduleState instead of an error banner.
+        if (!schedule && weekStart) {
+          return reply.send({
+            id: scheduleId,
+            orgId,
+            weekStart: new Date(weekStart).toISOString(),
+            status: 'draft',
+            shifts: [],
           });
         }
 
