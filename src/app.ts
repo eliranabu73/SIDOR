@@ -25,9 +25,9 @@ import { laborCostRoutes } from './modules/labor-cost/labor-cost.routes';
 import { swapsMarketplaceRoutes } from './modules/swaps/swaps-marketplace.routes';
 import { fairnessRoutes } from './modules/fairness/fairness.routes';
 import { billingRoutes } from './modules/billing/billing.routes';
-import { whatsappRoutes } from './modules/whatsapp/whatsapp.routes';
 import { importRoutes } from './modules/import/import.routes';
 import { settingsRoutes } from './modules/settings/settings.routes';
+import { templatesRoutes } from './modules/templates/templates.routes';
 
 export async function buildApp(): Promise<FastifyInstance> {
   // Initialise Sentry first so errors during boot get captured.
@@ -119,8 +119,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(fairnessRoutes, { prefix: '/v1' });
   await app.register(importRoutes, { prefix: '/v1' });
   await app.register(settingsRoutes, { prefix: '/v1' });
+  await app.register(templatesRoutes, { prefix: '/v1' });
   await app.register(billingRoutes, { prefix: '/v1' });
-  await app.register(whatsappRoutes);
   await app.register(realtimeRoutes);
 
   return app;

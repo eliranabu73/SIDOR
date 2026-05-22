@@ -650,6 +650,39 @@ export function shiftHasEmployee(shift: Shift, employeeId: ID): boolean {
   );
 }
 
+// --------- Schedule Templates ---------
+
+export interface ScheduleTemplateItem {
+  id: string;
+  name: string;
+  description: string;
+  emoji: string;
+  industry: string;
+  roles: string[];
+  weeklyHours: number;
+  color: string;
+  shiftCount: number;
+}
+
+export interface ApplyTemplateResult {
+  scheduleId: ID;
+  weekStart: string;
+  createdRoles: number;
+  createdShifts: number;
+  template: string;
+}
+
+export function fetchTemplates(): Promise<ScheduleTemplateItem[]> {
+  return request<ScheduleTemplateItem[]>(`/v1/templates`);
+}
+
+export function applyTemplate(id: string, weekStart?: string): Promise<ApplyTemplateResult> {
+  return request<ApplyTemplateResult>(`/v1/templates/${id}/apply`, {
+    method: "POST",
+    body: JSON.stringify(weekStart ? { weekStart } : {}),
+  });
+}
+
 // --------- Settings ---------
 
 export interface LaborRules {

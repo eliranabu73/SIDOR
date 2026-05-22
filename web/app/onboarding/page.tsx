@@ -143,10 +143,10 @@ function OnboardingForm() {
 
           <div className="mt-4 border-t border-border pt-4 text-center">
             <a
-              href="/onboarding/import"
+              href="/onboarding/templates"
               className="text-sm text-indigo-600 underline-offset-4 hover:underline dark:text-indigo-400"
             >
-              יש לך כבר סידור בExcel או בוואטסאפ? יבא בלחיצה ↗
+              בחר מתוך טמפלייטים מוכנים לפי סוג העסק ↗
             </a>
           </div>
         </CardContent>
