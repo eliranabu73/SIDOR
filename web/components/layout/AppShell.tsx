@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeftRight, CalendarDays, Scale, Users, LogOut } from "lucide-react";
+import { ArrowLeftRight, CalendarDays, Scale, Settings, Users, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/Logo";
@@ -18,6 +18,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { href: "/employees", label: "עובדים", icon: <Users className="h-4 w-4" /> },
     { href: "/swaps", label: "החלפות", icon: <ArrowLeftRight className="h-4 w-4" /> },
     { href: "/fairness", label: "הוגנות", icon: <Scale className="h-4 w-4" /> },
+    { href: "/settings", label: "הגדרות", icon: <Settings className="h-4 w-4" /> },
   ];
 
   const signOut = async () => {

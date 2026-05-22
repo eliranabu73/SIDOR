@@ -133,6 +133,12 @@ enum AuditActionType {
   IMPORT
 }
 
+enum BillingPlan {
+  FREE
+  BASIC
+  PRO
+}
+
 enum DomainEventType {
   SHIFT_ASSIGNED
   SHIFT_UNASSIGNED
@@ -160,6 +166,13 @@ model Organization {
   laborRulesJsonb Json     @default("{}")
   ownerUserId     String?  @db.Uuid // = auth.users.id of founding manager
   industry        String?  // restaurant | retail | other (free-form for now)
+
+  // Billing — Stripe Subscriptions in ILS. FREE tier has no Stripe customer.
+  stripeCustomerId     String?     @unique
+  stripeSubscriptionId String?     @unique
+  plan                 BillingPlan @default(FREE)
+  planRenewsAt         DateTime?
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -178,6 +191,7 @@ model Organization {
   metrics        EmployeeScheduleMetrics[]
   candidates     SchedulingCandidate[]
   memberships    Membership[]
+  messageDeliveries MessageDelivery[]
 
   @@map("organizations")
 }
@@ -288,6 +302,7 @@ model Employee {
   violations        RuleViolation[]
   metrics           EmployeeScheduleMetrics[]
   candidates        SchedulingCandidate[]
+  messageDeliveries MessageDelivery[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -722,4 +737,37 @@ model SchedulingCandidate {
   @@index([organizationId, generatedAt])
   @@index([shiftId, eligibilityScore])
   @@map("scheduling_candidates")
+}
+
+// =========================================================
+// Outbound messaging (WhatsApp Cloud API + manual fallback)
+// =========================================================
+
+/// One row per outbound message attempt. Created at queue time, updated on
+/// API response and again from webhook delivery/read receipts.
+model MessageDelivery {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  employeeId     String   @db.Uuid
+  /// "whatsapp_cloud" for Meta Cloud API; "manual" for paste-send fallback.
+  channel        String
+  /// Approved Meta template name (when using template send).
+  templateName   String?
+  /// Full request payload sent to the provider (for audit / replay).
+  payload        Json     @default("{}")
+  /// queued | sent | delivered | read | failed
+  status         String   @default("queued")
+  /// Provider message id (Meta wamid.XXX) — used to correlate webhook events.
+  wabaMessageId  String?
+  error          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([employeeId, createdAt])
+  @@index([wabaMessageId])
+  @@map("message_deliveries")
 }

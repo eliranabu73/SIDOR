@@ -140,6 +140,15 @@ function OnboardingForm() {
               {submitting ? "יוצר ארגון…" : "צור ארגון והיכנס ללוח"}
             </Button>
           </form>
+
+          <div className="mt-4 border-t border-border pt-4 text-center">
+            <a
+              href="/onboarding/import"
+              className="text-sm text-indigo-600 underline-offset-4 hover:underline dark:text-indigo-400"
+            >
+              יש לך כבר סידור בExcel או בוואטסאפ? יבא בלחיצה ↗
+            </a>
+          </div>
         </CardContent>
       </Card>
     </div>

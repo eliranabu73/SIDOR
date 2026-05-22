@@ -207,6 +207,82 @@ export function createOrg(body: CreateOrgBody): Promise<CreateOrgResult> {
   });
 }
 
+// --------- Vision AI schedule import ---------
+
+export interface ParsedEmployee {
+  fullName: string;
+  phone?: string;
+  role?: string;
+}
+
+export interface ParsedShift {
+  dayOfWeek: number | string;
+  startTime: string;
+  endTime: string;
+  role?: string;
+  employees?: string[];
+}
+
+export interface ParsedSchedule {
+  employees: ParsedEmployee[];
+  shifts: ParsedShift[];
+  weekStart?: string;
+  confidence: number;
+  notes?: string;
+}
+
+export interface ParseImportPayload {
+  imageBase64: string;
+  mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+  hints?: string;
+}
+
+export function parseImportImage(
+  payload: ParseImportPayload,
+): Promise<ParsedSchedule> {
+  return request<ParsedSchedule>(`/v1/import/parse`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface ApplyImportPayload {
+  weekStart?: string;
+  scheduleId?: ID;
+  defaultLocationId?: ID;
+  employees: Array<{
+    fullName: string;
+    phone?: string;
+    role?: string;
+    skip?: boolean;
+  }>;
+  shifts: Array<{
+    dayOfWeek: number | string;
+    startTime: string;
+    endTime: string;
+    role?: string;
+    employees?: string[];
+    skip?: boolean;
+  }>;
+}
+
+export interface ApplyImportResult {
+  scheduleId: ID;
+  createdEmployees: number;
+  createdShifts: number;
+  createdRoles: number;
+  skippedShifts: number;
+}
+
+export function applyImport(
+  payload: ApplyImportPayload,
+): Promise<ApplyImportResult> {
+  return request<ApplyImportResult>(`/v1/import/apply`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 // --------- Schedule provisioning + manual shift creation ---------
 
 export interface EnsureScheduleResult {
@@ -572,4 +648,74 @@ export function shiftHasEmployee(shift: Shift, employeeId: ID): boolean {
   return shift.assignments.some(
     (a) => a.employeeId === employeeId && a.status === "assigned",
   );
+}
+
+// --------- Settings ---------
+
+export interface LaborRules {
+  maxHoursDay?: number;
+  maxHoursWeek?: number;
+  minRestHours?: number;
+  shiftTypes?: string[];
+  businessHoursStart?: string;
+  businessHoursEnd?: string;
+  roleRates?: Record<string, number>;
+}
+
+export interface OrgRole {
+  id: ID;
+  name: string;
+  description: string | null;
+}
+
+export interface OrgLocation {
+  id: ID;
+  name: string;
+  timezone: string | null;
+  address: string | null;
+}
+
+export interface OrgSettings {
+  id: ID;
+  name: string;
+  industry: string | null;
+  defaultTimezone: string;
+  weekStartDay: number;
+  plan: string;
+  laborRules: LaborRules;
+  roles: OrgRole[];
+  locations: OrgLocation[];
+}
+
+export function fetchSettings(): Promise<OrgSettings> {
+  return request<OrgSettings>(`/v1/settings`);
+}
+
+export function patchSettings(body: Partial<Omit<OrgSettings, "id" | "plan" | "roles" | "locations"> & { laborRules: LaborRules }>): Promise<OrgSettings> {
+  return request<OrgSettings>(`/v1/settings`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateOrgRole(id: ID, name: string, description?: string | null): Promise<OrgRole> {
+  return request<OrgRole>(`/v1/roles/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name, description }),
+  });
+}
+
+export function deleteOrgRole(id: ID): Promise<void> {
+  return request<void>(`/v1/roles/${id}`, { method: "DELETE" });
+}
+
+export function updateOrgLocation(id: ID, name: string, timezone?: string | null): Promise<OrgLocation> {
+  return request<OrgLocation>(`/v1/locations/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name, timezone }),
+  });
+}
+
+export function deleteOrgLocation(id: ID): Promise<void> {
+  return request<void>(`/v1/locations/${id}`, { method: "DELETE" });
 }
