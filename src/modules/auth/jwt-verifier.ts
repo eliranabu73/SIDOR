@@ -39,7 +39,8 @@ interface SupabaseJwtPayload extends JWTPayload {
 
 /** Pinned algorithm sets — reject any other algorithm (OWASP A08). */
 const HS256_ALGORITHMS = ['HS256'] as const;
-const RS256_ALGORITHMS = ['RS256'] as const;
+/** Supabase supports RS256 (legacy) and ES256 (new JWT stack, sb_publishable_ keys). */
+const JWKS_ALGORITHMS = ['RS256', 'ES256'] as const;
 
 /** Clock skew tolerance — capped at 30 s (OWASP A07). */
 const CLOCK_SKEW_SECONDS = 30;
@@ -98,17 +99,27 @@ export async function verifyJwt(
     let key: Uint8Array | JWTVerifyGetKey;
     let algorithms: readonly string[];
 
-    if (options.jwtSecret && options.jwtSecret.length > 0) {
-      // HS256 path — shared secret
+    // Peek at the token header to determine which path to use.
+    // Supabase's new JWT stack (sb_publishable_* keys) signs with ES256 via JWKS;
+    // legacy deployments use HS256 with a shared secret.
+    const rawHeader = token.split('.')[0] ?? '';
+    const tokenAlg = (() => {
+      try {
+        return (JSON.parse(Buffer.from(rawHeader, 'base64url').toString()) as { alg?: string }).alg ?? '';
+      } catch { return ''; }
+    })();
+
+    if (options.jwtSecret && options.jwtSecret.length > 0 && tokenAlg === 'HS256') {
+      // Legacy HS256 path — shared secret
       key = new TextEncoder().encode(options.jwtSecret);
       algorithms = HS256_ALGORITHMS;
     } else {
-      // RS256 path — JWKS
+      // JWKS path — RS256 or ES256 (Supabase new JWT stack)
       if (!options.jwksUri) {
         throw new UnauthorizedError('JWT verifier misconfigured: no secret or JWKS URI');
       }
       key = getJwksFetcher(options.jwksUri);
-      algorithms = RS256_ALGORITHMS;
+      algorithms = JWKS_ALGORITHMS;
     }
 
     const result = await jwtVerify<SupabaseJwtPayload>(token, key as Parameters<typeof jwtVerify>[1], {
