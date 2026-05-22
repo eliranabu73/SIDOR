@@ -184,5 +184,6 @@ function handleHttpError(reply: FastifyReply, err: unknown) {
       .send({ code: err.code, message: err.message, details: err.details ?? null });
   }
   reply.log.error(err);
-  return reply.code(500).send({ code: 'INTERNAL_ERROR', message: 'Internal error' });
+  const message = err instanceof Error ? err.message : String(err);
+  return reply.code(500).send({ code: 'INTERNAL_ERROR', message });
 }
