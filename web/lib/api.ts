@@ -307,6 +307,35 @@ export interface EmployeeShareView {
   organization: { name: string; defaultTimezone: string } | null;
   shifts: EmployeeShareShift[];
 }
+// --------- Fairness Engine ---------
+
+export interface FairnessEmployee {
+  employeeId: ID;
+  fullName: string;
+  score: number;
+  hours: number;
+  weekendShifts: number;
+  nightShifts: number;
+  closingShifts: number;
+  longestClosingStreak: number;
+  flags: string[];
+}
+export interface FairnessResponse {
+  windowDays: number;
+  windowStart: string;
+  team: {
+    medianHours: number;
+    medianWeekend: number;
+    medianNight: number;
+    medianClosing: number;
+    employeeCount: number;
+  };
+  employees: FairnessEmployee[];
+}
+export function fetchFairness(weeks = 4): Promise<FairnessResponse> {
+  return request<FairnessResponse>(`/v1/fairness?weeks=${weeks}`);
+}
+
 // --------- Employee actions via share token (time-off + availability) ---------
 
 export interface EmployeeTimeOffItem {
