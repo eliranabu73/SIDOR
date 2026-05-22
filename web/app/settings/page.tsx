@@ -85,10 +85,14 @@ function SettingsContent() {
   const [editingRole, setEditingRole] = React.useState<string | null>(null);
   const [editingRoleName, setEditingRoleName] = React.useState("");
   const [newRoleName, setNewRoleName] = React.useState("");
+  const [roleBusy, setRoleBusy] = React.useState<string | null>(null);
+  const [addingRole, setAddingRole] = React.useState(false);
 
   const [editingLocation, setEditingLocation] = React.useState<string | null>(null);
   const [editingLocationName, setEditingLocationName] = React.useState("");
   const [newLocationName, setNewLocationName] = React.useState("");
+  const [locationBusy, setLocationBusy] = React.useState<string | null>(null);
+  const [addingLocation, setAddingLocation] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -173,8 +177,13 @@ function SettingsContent() {
   };
 
   const saveRole = async (id: string) => {
+    if (!editingRoleName.trim()) {
+      toast.error("שם תפקיד לא יכול להיות ריק");
+      return;
+    }
+    setRoleBusy(id);
     try {
-      const updated = await updateOrgRole(id, editingRoleName);
+      const updated = await updateOrgRole(id, editingRoleName.trim());
       setSettings((s) =>
         s
           ? { ...s, roles: s.roles.map((r) => (r.id === id ? { ...r, name: updated.name } : r)) }
@@ -184,10 +193,14 @@ function SettingsContent() {
       toast.success("תפקיד עודכן");
     } catch {
       toast.error("שגיאה בעדכון");
+    } finally {
+      setRoleBusy(null);
     }
   };
 
   const doDeleteRole = async (role: OrgRole) => {
+    if (!window.confirm(`האם למחוק תפקיד ${role.name}?`)) return;
+    setRoleBusy(role.id);
     try {
       await deleteOrgRole(role.id);
       setSettings((s) => (s ? { ...s, roles: s.roles.filter((r) => r.id !== role.id) } : s));
@@ -195,11 +208,14 @@ function SettingsContent() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "שגיאה במחיקה";
       toast.error(msg);
+    } finally {
+      setRoleBusy(null);
     }
   };
 
   const addRole = async () => {
     if (!newRoleName.trim()) return;
+    setAddingRole(true);
     try {
       const r = await createRole({ name: newRoleName.trim() });
       const newRole: OrgRole = { id: r.id, name: r.name, description: null };
@@ -208,12 +224,19 @@ function SettingsContent() {
       toast.success("תפקיד נוצר");
     } catch {
       toast.error("שגיאה ביצירה");
+    } finally {
+      setAddingRole(false);
     }
   };
 
   const saveLocation = async (id: string) => {
+    if (!editingLocationName.trim()) {
+      toast.error("שם סניף לא יכול להיות ריק");
+      return;
+    }
+    setLocationBusy(id);
     try {
-      const updated = await updateOrgLocation(id, editingLocationName);
+      const updated = await updateOrgLocation(id, editingLocationName.trim());
       setSettings((s) =>
         s
           ? {
@@ -228,10 +251,14 @@ function SettingsContent() {
       toast.success("סניף עודכן");
     } catch {
       toast.error("שגיאה בעדכון");
+    } finally {
+      setLocationBusy(null);
     }
   };
 
   const doDeleteLocation = async (loc: OrgLocation) => {
+    if (!window.confirm(`האם למחוק סניף ${loc.name}?`)) return;
+    setLocationBusy(loc.id);
     try {
       await deleteOrgLocation(loc.id);
       setSettings((s) =>
@@ -241,11 +268,14 @@ function SettingsContent() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "שגיאה במחיקה";
       toast.error(msg);
+    } finally {
+      setLocationBusy(null);
     }
   };
 
   const addLocation = async () => {
     if (!newLocationName.trim()) return;
+    setAddingLocation(true);
     try {
       const l = await createLocation({ name: newLocationName.trim() });
       const newLoc: OrgLocation = { id: l.id, name: l.name, timezone: l.timezone ?? null, address: null };
@@ -254,6 +284,8 @@ function SettingsContent() {
       toast.success("סניף נוצר");
     } catch {
       toast.error("שגיאה ביצירה");
+    } finally {
+      setAddingLocation(false);
     }
   };
 
@@ -405,14 +437,16 @@ function SettingsContent() {
                       size="sm"
                       variant="glow"
                       onClick={() => void saveRole(role.id)}
+                      disabled={roleBusy === role.id}
                       className="h-8"
                     >
-                      שמור
+                      {roleBusy === role.id ? "שומר…" : "שמור"}
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
                       onClick={() => setEditingRole(null)}
+                      disabled={roleBusy === role.id}
                       className="h-8"
                     >
                       ביטול
@@ -437,6 +471,7 @@ function SettingsContent() {
                       size="sm"
                       variant="ghost"
                       onClick={() => void doDeleteRole(role)}
+                      disabled={roleBusy === role.id}
                       className="h-8 text-destructive hover:text-destructive"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -456,9 +491,13 @@ function SettingsContent() {
                   if (e.key === "Enter") void addRole();
                 }}
               />
-              <Button variant="outline" onClick={addRole} disabled={!newRoleName.trim()}>
+              <Button
+                variant="outline"
+                onClick={addRole}
+                disabled={!newRoleName.trim() || addingRole}
+              >
                 <PlusCircle className="me-1 h-4 w-4" />
-                הוסף
+                {addingRole ? "מוסיף…" : "הוסף"}
               </Button>
             </div>
           </CardContent>
@@ -497,14 +536,16 @@ function SettingsContent() {
                       size="sm"
                       variant="glow"
                       onClick={() => void saveLocation(loc.id)}
+                      disabled={locationBusy === loc.id}
                       className="h-8"
                     >
-                      שמור
+                      {locationBusy === loc.id ? "שומר…" : "שמור"}
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
                       onClick={() => setEditingLocation(null)}
+                      disabled={locationBusy === loc.id}
                       className="h-8"
                     >
                       ביטול
@@ -532,6 +573,7 @@ function SettingsContent() {
                       size="sm"
                       variant="ghost"
                       onClick={() => void doDeleteLocation(loc)}
+                      disabled={locationBusy === loc.id}
                       className="h-8 text-destructive hover:text-destructive"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -551,9 +593,13 @@ function SettingsContent() {
                   if (e.key === "Enter") void addLocation();
                 }}
               />
-              <Button variant="outline" onClick={addLocation} disabled={!newLocationName.trim()}>
+              <Button
+                variant="outline"
+                onClick={addLocation}
+                disabled={!newLocationName.trim() || addingLocation}
+              >
                 <PlusCircle className="me-1 h-4 w-4" />
-                הוסף
+                {addingLocation ? "מוסיף…" : "הוסף"}
               </Button>
             </div>
           </CardContent>

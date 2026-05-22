@@ -13,7 +13,17 @@ interface Props {
   score?: number;
   onRemove?: () => void;
   variant?: "default" | "muted";
+  /**
+   * When true, the chip is rendered as a drag-over "ghost preview" inside a
+   * shift card. Adds a smooth scale-in animation so the preview feels alive.
+   */
+  ghost?: boolean;
 }
+
+const GHOST_KEYFRAMES = `@keyframes chipIn {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}`;
 
 /**
  * EmployeeChip — three density variants per design system:
@@ -29,7 +39,9 @@ export function EmployeeChip({
   score,
   onRemove,
   variant = "default",
+  ghost = false,
 }: Props) {
+  const ghostClass = ghost ? "animate-[chipIn_150ms_ease]" : "";
   const initials = employee.fullName
     .split(/\s+/)
     .map((p) => p[0])
@@ -44,22 +56,26 @@ export function EmployeeChip({
 
   if (density === "compact") {
     return (
-      <div
-        title={employee.fullName}
-        className={cn(
-          "group inline-flex items-center justify-center rounded-full text-[10px] font-medium border",
-          variant === "default"
-            ? "bg-[var(--employee-chip-bg)] text-[var(--employee-chip-fg)] border-[var(--employee-chip-border)]"
-            : "bg-muted text-muted-foreground",
-        )}
-        style={{
-          width: "var(--employee-chip-compact-size)",
-          height: "var(--employee-chip-compact-size)",
-        }}
-        aria-label={employee.fullName}
-      >
-        {initials}
-      </div>
+      <>
+        {ghost ? <style>{GHOST_KEYFRAMES}</style> : null}
+        <div
+          title={employee.fullName}
+          className={cn(
+            "group inline-flex items-center justify-center rounded-full text-[10px] font-medium border",
+            variant === "default"
+              ? "bg-[var(--employee-chip-bg)] text-[var(--employee-chip-fg)] border-[var(--employee-chip-border)]"
+              : "bg-muted text-muted-foreground",
+            ghostClass,
+          )}
+          style={{
+            width: "var(--employee-chip-compact-size)",
+            height: "var(--employee-chip-compact-size)",
+          }}
+          aria-label={employee.fullName}
+        >
+          {initials}
+        </div>
+      </>
     );
   }
 
@@ -69,12 +85,15 @@ export function EmployeeChip({
     : "var(--employee-chip-standard-h)";
 
   return (
+    <>
+      {ghost ? <style>{GHOST_KEYFRAMES}</style> : null}
     <div
       className={cn(
         "group inline-flex items-center gap-1.5 rounded-full px-2 text-xs font-medium border",
         variant === "default"
           ? "bg-[var(--employee-chip-bg)] text-[var(--employee-chip-fg)] border-[var(--employee-chip-border)]"
           : "bg-muted text-muted-foreground",
+        ghostClass,
       )}
       style={{ height: heightVar }}
     >
@@ -104,5 +123,6 @@ export function EmployeeChip({
         </button>
       ) : null}
     </div>
+    </>
   );
 }

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Clock, ShieldAlert, Users, Wallet } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, Clock, ShieldAlert, Users, Wallet } from "lucide-react";
 import { DateTime } from "luxon";
 import { fetchLaborCost, type LaborCostResponse } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,6 +12,8 @@ type Props = {
   onOpenDetail?: () => void;
 };
 
+const COLLAPSE_KEY = "labor-bar-collapsed";
+
 export function LaborCostBar({ weekStart, onOpenDetail }: Props) {
   const wsISO = weekStart.toISO() ?? "";
   const q = useQuery({
@@ -20,6 +22,27 @@ export function LaborCostBar({ weekStart, onOpenDetail }: Props) {
     enabled: !!wsISO,
     staleTime: 30_000,
   });
+
+  const [collapsed, setCollapsed] = React.useState<boolean>(false);
+  React.useEffect(() => {
+    try {
+      const v = window.localStorage.getItem(COLLAPSE_KEY);
+      if (v === "1") setCollapsed(true);
+    } catch {
+      // ignore — SSR or storage disabled
+    }
+  }, []);
+  const toggleCollapsed = React.useCallback(() => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
 
   if (q.isLoading) {
     return (
@@ -42,49 +65,73 @@ export function LaborCostBar({ weekStart, onOpenDetail }: Props) {
 
   return (
     <div className="border-b border-border bg-card/50 backdrop-blur">
-      <div className="grid grid-cols-2 gap-3 px-3 py-3 md:grid-cols-4">
-        <Stat
-          icon={Wallet}
-          label="עלות שכר השבוע"
-          primary={fmt.format(data.totals.cost)}
-          secondary={`${data.totals.hours.toFixed(0)} שעות · ${data.totals.shifts} משמרות`}
-          tone="brand"
-          onClick={onOpenDetail}
-        />
-        <Stat
-          icon={Users}
-          label="עובדים בסידור"
-          primary={String(data.totals.employees)}
-          secondary={
-            data.totals.overtimeEmployees > 0
-              ? `${data.totals.overtimeEmployees} בדרך לשעות נוספות`
-              : "ללא חריגות שעתיות"
-          }
-          tone={data.totals.overtimeEmployees > 0 ? "warning" : "default"}
-        />
-        <Stat
-          icon={Clock}
-          label="שעות לא מכוסות"
-          primary={data.totals.uncoveredHours.toFixed(0)}
-          secondary={
-            data.totals.openShifts > 0
-              ? `${data.totals.openShifts} משמרות פתוחות`
-              : "השבוע מכוסה במלואו"
-          }
-          tone={data.totals.uncoveredHours > 0 ? "danger" : "ok"}
-        />
-        <Stat
-          icon={ShieldAlert}
-          label="עובדים בלי תעריף"
-          primary={String(data.totals.employeesWithoutRate)}
-          secondary={
-            data.totals.employeesWithoutRate > 0
-              ? `מחושב לפי ${data.defaultHourlyRate}₪/ש'`
-              : "כל העובדים מתומחרים"
-          }
-          tone={data.totals.employeesWithoutRate > 0 ? "warning" : "ok"}
-        />
+      <div className="flex items-center justify-between px-3 pt-2">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Wallet className="h-3.5 w-3.5" />
+          <span className="font-medium">עלות שכר שבועית</span>
+          {collapsed ? (
+            <span className="tabular-nums">{fmt.format(data.totals.cost)}</span>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "הצג פירוט עלויות" : "הסתר פירוט עלויות"}
+          className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          {collapsed ? (
+            <ChevronDown className="h-4 w-4" />
+          ) : (
+            <ChevronUp className="h-4 w-4" />
+          )}
+        </button>
       </div>
+      {!collapsed && (
+        <div className="grid grid-cols-2 gap-3 px-3 pb-3 pt-2 md:grid-cols-4">
+          <Stat
+            icon={Wallet}
+            label="עלות שכר השבוע"
+            primary={fmt.format(data.totals.cost)}
+            secondary={`${data.totals.hours.toFixed(0)} שעות · ${data.totals.shifts} משמרות`}
+            tone="brand"
+            onClick={onOpenDetail}
+          />
+          <Stat
+            icon={Users}
+            label="עובדים בסידור"
+            primary={String(data.totals.employees)}
+            secondary={
+              data.totals.overtimeEmployees > 0
+                ? `${data.totals.overtimeEmployees} בדרך לשעות נוספות`
+                : "ללא חריגות שעתיות"
+            }
+            tone={data.totals.overtimeEmployees > 0 ? "warning" : "default"}
+          />
+          <Stat
+            icon={Clock}
+            label="שעות לא מכוסות"
+            primary={data.totals.uncoveredHours.toFixed(0)}
+            secondary={
+              data.totals.openShifts > 0
+                ? `${data.totals.openShifts} משמרות פתוחות`
+                : "השבוע מכוסה במלואו"
+            }
+            tone={data.totals.uncoveredHours > 0 ? "danger" : "ok"}
+          />
+          <Stat
+            icon={ShieldAlert}
+            label="עובדים בלי תעריף"
+            primary={String(data.totals.employeesWithoutRate)}
+            secondary={
+              data.totals.employeesWithoutRate > 0
+                ? `מחושב לפי ${data.defaultHourlyRate}₪/ש'`
+                : "כל העובדים מתומחרים"
+            }
+            tone={data.totals.employeesWithoutRate > 0 ? "warning" : "ok"}
+          />
+        </div>
+      )}
     </div>
   );
 }

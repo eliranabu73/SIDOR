@@ -278,44 +278,71 @@ export function ScheduleBoard({
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
     >
-      <div className="grid grid-cols-7 gap-2 min-w-[1100px]" role="grid">
-        {Array.from({ length: 7 }, (_, day) => {
-          const date = weekStart.plus({ days: day });
-          return (
-            <div key={day} className="flex flex-col gap-2" role="row">
-              <div className="text-center text-xs font-semibold sticky top-0 bg-background pb-1 border-b">
-                <div>{DAYS_HE[day]}</div>
-                <div className="text-muted-foreground tabular-nums">
-                  {date.toFormat("d.M")}
+      {employees.length === 0 ? (
+        <div
+          className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed bg-card/40 px-4 py-3 text-sm"
+          role="status"
+        >
+          <span className="text-muted-foreground">
+            עדיין אין עובדים. הוסיפו עובדים כדי להתחיל לשבץ משמרות.
+          </span>
+          <a
+            href="/employees"
+            className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/15"
+          >
+            הוספת עובדים
+          </a>
+        </div>
+      ) : null}
+
+      <div className="overflow-x-auto">
+        <div className="grid grid-cols-7 gap-2 min-w-[640px] md:min-w-[1100px]" role="grid">
+          {Array.from({ length: 7 }, (_, day) => {
+            const date = weekStart.plus({ days: day });
+            const isFirstCol = day === 0;
+            return (
+              <div
+                key={day}
+                className={cn(
+                  "flex flex-col gap-2",
+                  isFirstCol && "sticky right-0 z-10 bg-card",
+                )}
+                role="row"
+              >
+                <div className="text-center text-xs font-semibold sticky top-0 z-20 bg-background pb-1 border-b">
+                  <div>{DAYS_HE[day]}</div>
+                  <div className="text-muted-foreground tabular-nums">
+                    {date.toFormat("d.M")}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 min-h-32">
+                  {(shiftsByDay[day] ?? []).map((shift) => {
+                    const lockedByOther =
+                      !!shift.lockedByUserId &&
+                      shift.lockedByUserId !== currentUserId;
+                    return (
+                      <ShiftCard
+                        key={shift.id}
+                        shift={shift}
+                        employees={employeesById}
+                        validationTone={validationByShift[shift.id] ?? "neutral"}
+                        isLocked={lockedByOther}
+                        lockedByName={lockedByOther ? shift.lockedByName ?? undefined : undefined}
+                        ghostEmployee={activeEmployee}
+                        onUnassign={(empId) => unassign(shift, empId)}
+                      />
+                    );
+                  })}
+                  {(shiftsByDay[day] ?? []).length === 0 ? (
+                    <div className={cn("rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground")}>
+                      אין משמרות
+                    </div>
+                  ) : null}
                 </div>
               </div>
-              <div className="flex flex-col gap-2 min-h-32">
-                {(shiftsByDay[day] ?? []).map((shift) => {
-                  const lockedByOther =
-                    !!shift.lockedByUserId &&
-                    shift.lockedByUserId !== currentUserId;
-                  return (
-                    <ShiftCard
-                      key={shift.id}
-                      shift={shift}
-                      employees={employeesById}
-                      validationTone={validationByShift[shift.id] ?? "neutral"}
-                      isLocked={lockedByOther}
-                      lockedByName={lockedByOther ? shift.lockedByName ?? undefined : undefined}
-                      ghostEmployee={activeEmployee}
-                      onUnassign={(empId) => unassign(shift, empId)}
-                    />
-                  );
-                })}
-                {(shiftsByDay[day] ?? []).length === 0 ? (
-                  <div className={cn("rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground")}>
-                    אין משמרות
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       <DragOverlay dropAnimation={null}>

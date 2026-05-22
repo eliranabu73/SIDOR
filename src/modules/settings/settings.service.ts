@@ -107,12 +107,21 @@ export async function deleteRole(orgId: string, roleId: string): Promise<void> {
   if (!role) throw new HttpError(404, 'NOT_FOUND', 'Role not found');
 
   // Check if any employee is assigned this role before deleting.
-  const usage = await prisma.employeeRole.count({ where: { roleId } });
-  if (usage > 0)
+  const employeeUsage = await prisma.employeeRole.count({ where: { roleId } });
+  if (employeeUsage > 0)
     throw new HttpError(
       409,
       'ROLE_IN_USE',
-      `לא ניתן למחוק תפקיד שמוגדר ל-${usage} עובד/ים`,
+      `לא ניתן למחוק תפקיד שמוגדר ל-${employeeUsage} עובד/ים`,
+    );
+
+  // Check if any active shift is using this role.
+  const shiftUsage = await prisma.shift.count({ where: { roleId } });
+  if (shiftUsage > 0)
+    throw new HttpError(
+      409,
+      'ROLE_IN_USE',
+      `לא ניתן למחוק תפקיד המשובץ ב-${shiftUsage} משמרת/ות`,
     );
 
   await prisma.role.delete({ where: { id: roleId } });

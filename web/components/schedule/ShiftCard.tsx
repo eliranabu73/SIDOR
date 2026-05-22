@@ -108,7 +108,7 @@ export function ShiftCard({
       style={{ ...shiftCardStyle(restingState, dragOverlay), ...densitySizing(density) }}
       aria-label={`משמרת ${shift.role}, ${start} עד ${end}, ${assigned.length} מתוך ${shift.requiredCount} עובדים${isLocked ? " — נעולה לעריכה" : ""}`}
     >
-      {/* Accent strip — pinned to inline-start (RTL = right side) */}
+      {/* Accent strip — pinned to inline-start (RTL = right side). Gradient fade for premium feel. */}
       {(restingState === "ok" ||
         restingState === "warning" ||
         restingState === "conflict" ||
@@ -116,7 +116,7 @@ export function ShiftCard({
         <span
           aria-hidden
           className="absolute inset-y-1 start-0 w-[3px] rounded-full"
-          style={{ background: stateAccent(restingState) }}
+          style={{ background: stateAccentGradient(restingState) }}
         />
       )}
 
@@ -131,16 +131,26 @@ export function ShiftCard({
             {start}–{end}
           </span>
         </div>
-        <span
-          className={cn(
-            "text-[10px] font-medium rounded-full px-1.5 py-0.5",
-            understaffed
-              ? "bg-destructive/15 text-destructive"
-              : "bg-success/15 text-success",
+        <div className="flex items-center gap-1 shrink-0">
+          {shift.requiredCount > 1 && (
+            <span
+              aria-label={`דורש ${shift.requiredCount} עובדים`}
+              className="text-[10px] font-semibold rounded-full px-1.5 py-0.5 bg-primary/10 text-primary tabular-nums"
+            >
+              ×{shift.requiredCount}
+            </span>
           )}
-        >
-          {assigned.length}/{shift.requiredCount}
-        </span>
+          <span
+            className={cn(
+              "text-[10px] font-medium rounded-full px-1.5 py-0.5",
+              understaffed
+                ? "bg-destructive/15 text-destructive"
+                : "bg-success/15 text-success",
+            )}
+          >
+            {assigned.length}/{shift.requiredCount}
+          </span>
+        </div>
       </div>
 
       {isLocked && lockedByName && (
@@ -151,7 +161,7 @@ export function ShiftCard({
         {/* Ghost chip preview — "Future State Preview" per design review */}
         {ghostEmployee && isOver && !isLocked && validationTone === "ok" && (
           <div className="ghost-chip">
-            <EmployeeChip employee={ghostEmployee} density={density} />
+            <EmployeeChip employee={ghostEmployee} density={density} ghost />
           </div>
         )}
         {empty ? (
@@ -301,4 +311,16 @@ function stateAccent(
     case "open":
       return "var(--color-open-shift-accent)";
   }
+}
+
+/**
+ * Subtle vertical gradient — fades from the state-accent token to a softer
+ * transparent variant. Gives the left-border a more premium feel without
+ * introducing any new color tokens.
+ */
+function stateAccentGradient(
+  state: "ok" | "warning" | "conflict" | "open",
+): string {
+  const c = stateAccent(state);
+  return `linear-gradient(to bottom, ${c} 0%, ${c} 60%, color-mix(in oklab, ${c} 35%, transparent) 100%)`;
 }
