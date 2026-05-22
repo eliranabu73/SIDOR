@@ -15,10 +15,10 @@ const ScheduleIdParam = z.object({ scheduleId: z.string() });
 const ScheduleQuery = z.object({ weekStart: z.string().optional() });
 
 function devAllowed(): boolean {
-  return (
-    process.env['NODE_ENV'] === 'development' &&
-    process.env['AUTH_DISABLED'] === 'true'
-  );
+  // Reads are public for the demo deployment. AUTH_DISABLED=true skips JWT
+  // checks regardless of NODE_ENV so the Vercel demo can fetch data without
+  // a Supabase session. Tighten before adding multi-tenant data.
+  return process.env['AUTH_DISABLED'] === 'true';
 }
 
 type AssignmentRow = {

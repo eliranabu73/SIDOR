@@ -39,10 +39,7 @@ const AutoScheduleBody = z.object({
 });
 
 function devAllowed(): boolean {
-  return (
-    process.env['NODE_ENV'] === 'development' &&
-    process.env['AUTH_DISABLED'] === 'true'
-  );
+  return process.env['AUTH_DISABLED'] === 'true';
 }
 
 export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
