@@ -48,6 +48,7 @@ export async function assignmentsRoutes(app: FastifyInstance): Promise<void> {
       // req.user is guaranteed to be set by app.authenticate.
       // The fallback is only reached when AUTH_DISABLED (dev only).
       const actingUserId = AUTH_DISABLED ? devActingUserId(req) : req.user!.id;
+      const organizationId = req.user?.orgId;
 
       try {
         const result = await validateOnly({
@@ -56,6 +57,7 @@ export async function assignmentsRoutes(app: FastifyInstance): Promise<void> {
           expectedShiftVersion: body.expectedShiftVersion,
           action: body.action,
           actingUserId,
+          organizationId,
         });
         return reply.send(result);
       } catch (err) {
@@ -78,6 +80,7 @@ export async function assignmentsRoutes(app: FastifyInstance): Promise<void> {
       const body = req.body as z.infer<typeof AssignmentBodySchema>;
 
       const actingUserId = AUTH_DISABLED ? devActingUserId(req) : req.user!.id;
+      const organizationId = req.user?.orgId;
 
       try {
         const result = await applyAssignment({
@@ -88,6 +91,7 @@ export async function assignmentsRoutes(app: FastifyInstance): Promise<void> {
           action: body.action,
           acknowledgeWarnings: body.acknowledgeWarnings,
           actingUserId,
+          organizationId,
         });
         return reply.send(result);
       } catch (err) {

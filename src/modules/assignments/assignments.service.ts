@@ -29,6 +29,8 @@ export interface AssignInput {
   action: AssignAction;
   acknowledgeWarnings: boolean;
   actingUserId: string;
+  /** Cross-tenant guard — must match the shift's org. Set from req.user.orgId. */
+  organizationId?: string;
 }
 
 export interface AssignResult {
@@ -44,18 +46,26 @@ async function loadContext(
   shiftId: string,
   employeeId: string,
   actingUserId: string,
+  organizationId?: string,
 ): Promise<ValidationContext> {
   const shift = await tx.shift.findUnique({
     where: { id: shiftId },
     include: { location: true, organization: true },
   });
   if (!shift) throw new NotFoundError('Shift not found');
+  // Cross-tenant guard — when org id provided, enforce match.
+  if (organizationId && shift.organizationId !== organizationId) {
+    throw new NotFoundError('Shift not found');
+  }
 
   const employee = await tx.employee.findUnique({
     where: { id: employeeId },
     include: { roles: true },
   });
   if (!employee) throw new NotFoundError('Employee not found');
+  if (organizationId && employee.organizationId !== organizationId) {
+    throw new NotFoundError('Employee not found');
+  }
 
   const availabilityRules = await tx.employeeAvailabilityRule.findMany({
     where: { employeeId },
@@ -174,7 +184,7 @@ export async function validateOnly(
   prisma: PrismaClient = defaultPrisma,
 ): Promise<ValidationResult> {
   return prisma.$transaction(async (tx) => {
-    const ctx = await loadContext(tx, input.shiftId, input.employeeId, input.actingUserId);
+    const ctx = await loadContext(tx, input.shiftId, input.employeeId, input.actingUserId, input.organizationId);
     return validateAssignment(ctx);
   });
 }
@@ -184,7 +194,7 @@ export async function applyAssignment(
   prisma: PrismaClient = defaultPrisma,
 ): Promise<AssignResult> {
   const eventToPublish = await prisma.$transaction(async (tx) => {
-    const ctx = await loadContext(tx, input.shiftId, input.employeeId, input.actingUserId);
+    const ctx = await loadContext(tx, input.shiftId, input.employeeId, input.actingUserId, input.organizationId);
 
     if (ctx.shift.version !== input.expectedShiftVersion) {
       throw new ConflictError(

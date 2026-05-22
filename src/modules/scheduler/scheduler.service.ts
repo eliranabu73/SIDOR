@@ -21,7 +21,7 @@ export interface ApplyProposalInput {
 export interface ApplyProposalsResult {
   applied: number;
   failed: Array<{ shiftId: string; employeeId: string; code: string; message: string }>;
-  schedule: ReturnType<typeof mapSchedule>;
+  schedule: ReturnType<typeof mapSchedule> | null;
 }
 
 export type ProviderName = 'greedy' | 'or-tools';
@@ -60,7 +60,18 @@ export class SchedulerService {
     scheduleId: string,
     proposals: ApplyProposalInput[],
     actingUserId: string,
+    organizationId?: string,
   ): Promise<ApplyProposalsResult> {
+    // Cross-tenant guard: ensure the schedule belongs to the caller's org.
+    if (organizationId) {
+      const sched = await this.prisma.schedule.findFirst({
+        where: { id: scheduleId, organizationId },
+        select: { id: true },
+      });
+      if (!sched) {
+        return { applied: 0, failed: [], schedule: null };
+      }
+    }
     let applied = 0;
     const failed: ApplyProposalsResult['failed'] = [];
 
@@ -69,8 +80,10 @@ export class SchedulerService {
       // proposal failure does not abort the entire batch. Need current shift
       // version for the optimistic concurrency check.
       try {
-        const shift = await this.prisma.shift.findUnique({
-          where: { id: p.shiftId },
+        const shift = await this.prisma.shift.findFirst({
+          where: organizationId
+            ? { id: p.shiftId, organizationId }
+            : { id: p.shiftId },
           select: { version: true },
         });
         if (!shift) {
@@ -90,6 +103,7 @@ export class SchedulerService {
             action: 'assign',
             acknowledgeWarnings: true,
             actingUserId,
+            organizationId,
           },
           this.prisma,
         );

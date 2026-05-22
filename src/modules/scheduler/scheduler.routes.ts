@@ -58,7 +58,7 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
       const actingUserId = devAllowed() ? devActingUserId(req) : req.user!.id;
 
       try {
-        const result = await svc.applyProposals(scheduleId, body.proposals, actingUserId);
+        const result = await svc.applyProposals(scheduleId, body.proposals, actingUserId, req.user?.orgId);
         return reply.send(result);
       } catch (err) {
         return handleHttpError(reply, err);
