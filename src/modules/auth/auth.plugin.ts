@@ -28,6 +28,7 @@ import type {
 import fp from 'fastify-plugin';
 import { verifyJwt } from './jwt-verifier.js';
 import { UnauthorizedError } from './errors.js';
+import { prisma } from '../../db/prisma.js';
 // Side-effect import: registers the `user` field on FastifyRequest via
 // module augmentation.
 import './types.js';
@@ -44,6 +45,12 @@ declare module 'fastify' {
      *     app.get('/protected', { preHandler: [app.authenticate] }, handler)
      */
     authenticate: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    /**
+     * preHandler that asserts the JWT-bearing user has a Membership row
+     * matching `req.user.orgId`. Run AFTER `authenticate`. Returns 403 if
+     * the user is not a member of the claimed org.
+     */
+    requireMembership: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
 }
 
@@ -97,7 +104,27 @@ const authPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     }
   }
 
+  async function requireMembership(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+    if (!req.user) {
+      const err = new UnauthorizedError('requireMembership called without authenticate');
+      return reply.code(err.statusCode).send({ code: err.code, message: err.message });
+    }
+    const m = await prisma.membership.findUnique({
+      where: {
+        userId_organizationId: { userId: req.user.id, organizationId: req.user.orgId },
+      },
+      select: { id: true },
+    });
+    if (!m) {
+      return reply.code(403).send({
+        code: 'FORBIDDEN_NOT_A_MEMBER',
+        message: 'User is not a member of the claimed organization',
+      });
+    }
+  }
+
   app.decorate('authenticate', authenticate);
+  app.decorate('requireMembership', requireMembership);
 };
 
 export default fp(authPlugin, {

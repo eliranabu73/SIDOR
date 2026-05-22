@@ -20,6 +20,11 @@ datasource db {
 // Enums
 // =========================================================
 
+enum MembershipRole {
+  OWNER
+  MANAGER
+}
+
 enum EmploymentType {
   FULL_TIME
   PART_TIME
@@ -153,6 +158,8 @@ model Organization {
   defaultTimezone String   @default("Asia/Jerusalem")
   weekStartDay    Int      @default(0) // 0 = Sunday
   laborRulesJsonb Json     @default("{}")
+  ownerUserId     String?  @db.Uuid // = auth.users.id of founding manager
+  industry        String?  // restaurant | retail | other (free-form for now)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -170,8 +177,24 @@ model Organization {
   auditLogs      ScheduleAuditLog[]
   metrics        EmployeeScheduleMetrics[]
   candidates     SchedulingCandidate[]
+  memberships    Membership[]
 
   @@map("organizations")
+}
+
+model Membership {
+  id             String         @id @default(uuid()) @db.Uuid
+  userId         String         @db.Uuid // = auth.users.id (Supabase)
+  organizationId String         @db.Uuid
+  role           MembershipRole @default(MANAGER)
+  createdAt      DateTime       @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("memberships")
 }
 
 model Location {

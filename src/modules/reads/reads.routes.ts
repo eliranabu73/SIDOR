@@ -9,7 +9,13 @@ import { HttpError, NotFoundError } from '../../shared/errors';
  * MVP scope: hard-coded to the demo org. Future work will resolve
  * org from `req.user.orgId` once Supabase JWTs are wired through.
  */
+// Demo org UUID — used ONLY as a fallback when AUTH_DISABLED=true (dev/demo).
+// Production reads always scope by req.user.orgId.
 const DEMO_ORG_ID = '10000000-0000-0000-0000-000000000001';
+
+function orgIdFor(req: { user?: { orgId: string } }): string {
+  return req.user?.orgId ?? DEMO_ORG_ID;
+}
 
 const ScheduleIdParam = z.object({ scheduleId: z.string() });
 const ScheduleQuery = z.object({ weekStart: z.string().optional() });
@@ -103,10 +109,10 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     '/employees',
     { preHandler: authHandlers },
-    async (_req, reply) => {
+    async (req, reply) => {
       try {
         const employees = await prisma.employee.findMany({
-          where: { organizationId: DEMO_ORG_ID, isActive: true },
+          where: { organizationId: orgIdFor(req), isActive: true },
           include: { roles: { include: { role: true } } },
           orderBy: { fullName: 'asc' },
         });
@@ -145,7 +151,7 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
           // Look up most recent schedule for the demo org whose period has started.
           schedule = await prisma.schedule.findFirst({
             where: {
-              organizationId: DEMO_ORG_ID,
+              organizationId: orgIdFor(req),
               periodStartDate: { lte: new Date() },
             },
             orderBy: { periodStartDate: 'desc' },
@@ -157,8 +163,8 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
             },
           });
         } else {
-          schedule = await prisma.schedule.findUnique({
-            where: { id: scheduleId },
+          schedule = await prisma.schedule.findFirst({
+            where: { id: scheduleId, organizationId: orgIdFor(req) },
             include: {
               shifts: {
                 include: { role: true, assignments: true },

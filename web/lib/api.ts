@@ -80,6 +80,41 @@ export function fetchEmployees(): Promise<Employee[]> {
   return request<Employee[]>(`/v1/employees`);
 }
 
+// --------- Onboarding / Me ---------
+
+export interface MeMembership {
+  orgId: ID;
+  orgName: string;
+  role: "OWNER" | "MANAGER";
+}
+export interface MeResponse {
+  user: { id: string; role: string };
+  memberships: MeMembership[];
+  activeOrgId: ID | null;
+}
+
+export function fetchMe(): Promise<MeResponse> {
+  return request<MeResponse>(`/v1/me`);
+}
+
+export interface CreateOrgBody {
+  name: string;
+  defaultTimezone?: string;
+  industry?: string;
+  defaultLocationName?: string;
+}
+export interface CreateOrgResult {
+  orgId: ID;
+  scheduleId: ID;
+  membershipId: ID;
+}
+export function createOrg(body: CreateOrgBody): Promise<CreateOrgResult> {
+  return request<CreateOrgResult>(`/v1/orgs`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export function validateAssignment(
   shiftId: ID,
   body: { employeeId: ID; action: "assign" | "unassign" | "replace" },

@@ -14,6 +14,7 @@ import { swapsRoutes } from './modules/swaps/swaps.routes';
 import { realtimeRoutes } from './modules/realtime/realtime.routes';
 import { schedulerRoutes } from './modules/scheduler/scheduler.routes';
 import { readsRoutes } from './modules/reads/reads.routes';
+import { onboardingRoutes } from './modules/onboarding/onboarding.routes';
 
 export async function buildApp(): Promise<FastifyInstance> {
   // pino-pretty is a devDependency — only enable transport when explicitly
@@ -48,6 +49,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(swapsRoutes, { prefix: '/v1' });
   await app.register(schedulerRoutes, { prefix: '/v1' });
   await app.register(readsRoutes, { prefix: '/v1' });
+  await app.register(onboardingRoutes, { prefix: '/v1' });
   await app.register(realtimeRoutes);
 
   return app;
