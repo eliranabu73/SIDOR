@@ -99,18 +99,22 @@ const authPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
       // hook misconfigured) the JWT won't carry organization_id.  We look up the
       // user's primary membership from the DB.  The JWT signature has already been
       // verified above, so this is safe — we trust the `sub` claim.
+      //
+      // NOTE: if no membership exists yet (new user, not onboarded) we still let
+      // the request through with orgId=''. Routes that require an org context must
+      // add `requireMembership` as an additional preHandler — onboarding routes
+      // intentionally only use `authenticate` so new users can create their org.
       if (!user.orgId) {
         const membership = await prisma.membership.findFirst({
           where: { userId: user.id },
           orderBy: { createdAt: 'asc' },
           select: { organizationId: true, role: true },
         });
-        if (!membership) {
-          const err = new UnauthorizedError('User has no organization — complete onboarding first');
-          return reply.code(err.statusCode).send({ code: err.code, message: err.message });
+        if (membership) {
+          user.orgId = membership.organizationId;
+          user.role = membership.role.toLowerCase();
         }
-        user.orgId = membership.organizationId;
-        user.role = membership.role.toLowerCase();
+        // No membership → orgId stays ''; onboarding routes handle this case.
       }
 
       req.user = user;
