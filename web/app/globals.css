@@ -222,3 +222,32 @@
   0%   { transform: translateX(-100%); }
   100% { transform: translateX(400%); }
 }
+
+/* ============================================================
+   Print stylesheet — manager → employee schedule export
+   "ייצוא לעובדים" prints the board only; hide chrome + side rails.
+   The exported PDF/PNG is shared in WhatsApp manually.
+============================================================ */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+    font-family: Heebo, system-ui, sans-serif;
+  }
+  /* Hide app chrome */
+  nav, header, aside, .no-print, button { display: none !important; }
+  /* Force the schedule board to fill the page */
+  main, section { padding: 0 !important; margin: 0 !important; }
+  /* Make shift cards readable in B/W */
+  [data-print-card], .shift-card {
+    border: 1px solid #333 !important;
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    page-break-inside: avoid;
+  }
+}

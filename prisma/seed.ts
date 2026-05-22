@@ -586,6 +586,37 @@ async function main(): Promise<void> {
   }
   console.log(`✓ ${EMPLOYEES.length} metrics rows`);
 
+  // ─── Membership for the developer account (idempotent) ──────────────────
+  // Resolves auth.users.id by email and links it to the demo org as OWNER.
+  // Safe to skip when the user hasn't logged in once yet (auth row missing).
+  const DEV_EMAIL = process.env.DEV_OWNER_EMAIL ?? 'eliranabu320@gmail.com';
+  try {
+    const found = await prisma.$queryRawUnsafe<{ id: string }[]>(
+      `SELECT id FROM auth.users WHERE email = $1 LIMIT 1`,
+      DEV_EMAIL,
+    );
+    if (found?.[0]?.id) {
+      await prisma.membership.upsert({
+        where: {
+          userId_organizationId: { userId: found[0].id, organizationId: ORG_ID },
+        },
+        update: { role: 'OWNER' },
+        create: { userId: found[0].id, organizationId: ORG_ID, role: 'OWNER' },
+      });
+      await prisma.organization.update({
+        where: { id: ORG_ID },
+        data: { ownerUserId: found[0].id },
+      });
+      console.log(`✓ Membership bootstrapped for ${DEV_EMAIL}`);
+    } else {
+      console.log(
+        `· No auth.users row for ${DEV_EMAIL} yet — log in once then re-run seed`,
+      );
+    }
+  } catch (e) {
+    console.log('· Membership bootstrap skipped:', (e as Error).message);
+  }
+
   console.log('');
   console.log('═══════════════════════════════════════════════════════════');
   console.log('  Demo org seeded successfully');

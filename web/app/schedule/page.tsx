@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { DateTime } from "luxon";
-import { Search, Sparkles, Upload } from "lucide-react";
+import { Printer, Search, Sparkles, Upload } from "lucide-react";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppShell } from "@/components/layout/AppShell";
 import { ScheduleBoard } from "@/components/schedule/ScheduleBoard";
@@ -137,6 +137,15 @@ function ScheduleInner() {
         >
           <Sparkles className="h-4 w-4" />
           שיבוץ אוטומטי
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => window.print()}
+          disabled={!scheduleQuery.data}
+          title="ייצא ל-PDF / הדפסה לשליחה ב-WhatsApp"
+        >
+          <Printer className="h-4 w-4" />
+          ייצוא לעובדים
         </Button>
         <Button onClick={publishNow} disabled={publish.isPending || !scheduleQuery.data}>
           <Upload className="h-4 w-4" />
