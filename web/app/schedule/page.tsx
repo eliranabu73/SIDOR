@@ -6,6 +6,7 @@ import { Printer, Search, Sparkles, Upload } from "lucide-react";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppShell } from "@/components/layout/AppShell";
 import { ScheduleBoard } from "@/components/schedule/ScheduleBoard";
+import { EmptyScheduleState } from "@/components/schedule/EmptyScheduleState";
 import { EmployeeCard } from "@/components/schedule/EmployeeCard";
 import {
   WeekSelector,
@@ -218,13 +219,19 @@ function ScheduleInner() {
               שגיאה בטעינת הסידור
             </div>
           ) : scheduleQuery.data ? (
-            <ScheduleBoard
-              schedule={scheduleQuery.data}
-              employees={employees}
-              weekStart={weekStart}
-              locationFilter={locationFilter}
-              roleFilter={roleFilter}
-            />
+            scheduleQuery.data.shifts.length === 0 ? (
+              <EmptyScheduleState
+                onCreateFirstShift={() => setAutoOpen(true)}
+              />
+            ) : (
+              <ScheduleBoard
+                schedule={scheduleQuery.data}
+                employees={employees}
+                weekStart={weekStart}
+                locationFilter={locationFilter}
+                roleFilter={roleFilter}
+              />
+            )
           ) : null}
         </section>
 
