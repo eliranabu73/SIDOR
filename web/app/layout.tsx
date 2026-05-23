@@ -3,6 +3,7 @@ import { Heebo } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { RegisterSW } from "@/components/pwa/register-sw";
+import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
 
 const heebo = Heebo({
   variable: "--font-heebo",
@@ -78,6 +79,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: noFlashScript }} />
       </head>
       <body className="min-h-full bg-background text-foreground">
+        <ImpersonationBanner />
         <Providers>{children}</Providers>
         <RegisterSW />
       </body>

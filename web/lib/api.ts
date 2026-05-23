@@ -27,10 +27,24 @@ export class ApiError extends Error {
 }
 
 async function authHeaders(): Promise<HeadersInit> {
-  const token = await getAccessToken();
   const headers: Record<string, string> = {
     "content-type": "application/json",
   };
+  // Impersonation token overrides the user's Supabase JWT when present.
+  let impersonationToken: string | null = null;
+  if (typeof window !== "undefined") {
+    try {
+      impersonationToken = window.localStorage.getItem("impersonation_token");
+    } catch {
+      impersonationToken = null;
+    }
+  }
+  if (impersonationToken) {
+    headers["authorization"] = `Bearer ${impersonationToken}`;
+    headers["x-impersonation"] = "1";
+    return headers;
+  }
+  const token = await getAccessToken();
   if (token) headers["authorization"] = `Bearer ${token}`;
   return headers;
 }
@@ -800,6 +814,9 @@ export interface AdminUserListItem {
   userId: string;
   orgCount: number;
   firstJoined: string;
+  email?: string | null;
+  lastSignInAt?: string | null;
+  deactivated?: boolean;
   memberships: Array<{
     role: string;
     joinedAt: string;
@@ -817,6 +834,44 @@ export interface AdminAuditItem {
   entityId: string;
   createdAt: string;
   organization: { name: string } | null;
+}
+
+export type AdminPlan = "FREE" | "BASIC" | "PRO" | "ENTERPRISE";
+
+export interface AdminSystemHealth {
+  ok: boolean;
+  checks: {
+    db: { ok: boolean; latencyMs?: number; error?: string };
+    redis: { ok: boolean; latencyMs?: number; error?: string };
+    env: { ok: boolean; missing?: string[] };
+  };
+  uptimeSec: number;
+  version?: string;
+  env?: string;
+}
+
+export interface AdminChartPoint {
+  date: string; // YYYY-MM-DD
+  count: number;
+}
+export interface AdminChartResponse {
+  points: AdminChartPoint[];
+}
+
+export interface AdminFeatureFlags {
+  enableAutoSchedule?: boolean;
+  enableSwaps?: boolean;
+  enableWhatsAppExport?: boolean;
+  enableOrTools?: boolean;
+  enableImport?: boolean;
+  [key: string]: boolean | undefined;
+}
+
+export interface AdminImpersonateResponse {
+  token: string;
+  expiresAt: string;
+  targetUserId: string;
+  targetName: string;
 }
 
 export const adminApi = {
@@ -847,13 +902,62 @@ export const adminApi = {
       items: AdminUserListItem[];
     }>(`/v1/admin/users${qs ? `?${qs}` : ""}`);
   },
-  audit: (params: { orgId?: ID; limit?: number } = {}) => {
+  audit: (
+    params: {
+      orgId?: ID;
+      action?: string;
+      from?: string;
+      to?: string;
+      limit?: number;
+    } = {},
+  ) => {
     const sp = new URLSearchParams();
     if (params.orgId) sp.set("orgId", params.orgId);
+    if (params.action) sp.set("action", params.action);
+    if (params.from) sp.set("from", params.from);
+    if (params.to) sp.set("to", params.to);
     if (params.limit != null) sp.set("limit", String(params.limit));
     const qs = sp.toString();
     return request<{ items: AdminAuditItem[] }>(
       `/v1/admin/audit${qs ? `?${qs}` : ""}`,
     );
   },
+  updatePlan: (id: ID, plan: AdminPlan) =>
+    request<{ id: ID; plan: AdminPlan }>(`/v1/admin/orgs/${id}/plan`, {
+      method: "PATCH",
+      body: JSON.stringify({ plan }),
+    }),
+  softDelete: (id: ID) =>
+    request<{ id: ID; deletedAt: string }>(`/v1/admin/orgs/${id}`, {
+      method: "DELETE",
+    }),
+  deactivateUser: (userId: string, deactivated: boolean) =>
+    request<{ userId: string; deactivated: boolean }>(
+      `/v1/admin/users/${userId}/deactivate`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ deactivated }),
+      },
+    ),
+  systemHealth: () => request<AdminSystemHealth>(`/v1/admin/system-health`),
+  signupsChart: (days = 30) =>
+    request<AdminChartResponse>(`/v1/admin/charts/signups?days=${days}`),
+  shiftsChart: (days = 30) =>
+    request<AdminChartResponse>(`/v1/admin/charts/shifts?days=${days}`),
+  exportCsv: (type: "orgs" | "users" | "audit"): string => {
+    return `${API_URL}/v1/admin/export?type=${encodeURIComponent(type)}`;
+  },
+  updateFeatureFlags: (id: ID, flags: AdminFeatureFlags) =>
+    request<{ id: ID; flags: AdminFeatureFlags }>(
+      `/v1/admin/orgs/${id}/feature-flags`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ flags }),
+      },
+    ),
+  impersonate: (userId: string) =>
+    request<AdminImpersonateResponse>(`/v1/admin/impersonate`, {
+      method: "POST",
+      body: JSON.stringify({ userId }),
+    }),
 };

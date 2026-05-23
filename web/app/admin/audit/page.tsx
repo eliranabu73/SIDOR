@@ -6,7 +6,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { adminApi } from "@/lib/api";
+import { ExportCsvButton } from "@/components/admin/ExportCsvButton";
 
 function formatDateTime(iso: string): string {
   try {
@@ -32,20 +41,46 @@ const actionColors: Record<string, string> = {
   LOCK: "bg-zinc-500/10 text-zinc-700 dark:text-zinc-300 border-zinc-500/30",
 };
 
+const ACTION_OPTIONS = [
+  "ALL",
+  "CREATE",
+  "UPDATE",
+  "DELETE",
+  "ASSIGN",
+  "UNASSIGN",
+  "PUBLISH",
+  "LOCK",
+];
+
+const UUID_RE = /^[0-9a-f-]{36}$/i;
+
 export default function AdminAuditPage() {
   const [orgId, setOrgId] = React.useState("");
-  const [debounced, setDebounced] = React.useState("");
+  const [orgIdDebounced, setOrgIdDebounced] = React.useState("");
+  const [action, setAction] = React.useState<string>("ALL");
+  const [from, setFrom] = React.useState<string>("");
+  const [to, setTo] = React.useState<string>("");
+
+  // Load org list for the picker (small list, just for convenience)
+  const orgs = useQuery({
+    queryKey: ["admin", "orgs", "audit-picker"],
+    queryFn: () => adminApi.orgs({ limit: 100, offset: 0 }),
+    staleTime: 60_000,
+  });
 
   React.useEffect(() => {
-    const t = setTimeout(() => setDebounced(orgId.trim()), 300);
+    const t = setTimeout(() => setOrgIdDebounced(orgId.trim()), 300);
     return () => clearTimeout(t);
   }, [orgId]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin", "audit", debounced],
+    queryKey: ["admin", "audit", orgIdDebounced, action, from, to],
     queryFn: () =>
       adminApi.audit({
-        orgId: /^[0-9a-f-]{36}$/i.test(debounced) ? debounced : undefined,
+        orgId: UUID_RE.test(orgIdDebounced) ? orgIdDebounced : undefined,
+        action: action !== "ALL" ? action : undefined,
+        from: from || undefined,
+        to: to || undefined,
         limit: 200,
       }),
     staleTime: 10_000,
@@ -53,24 +88,96 @@ export default function AdminAuditPage() {
 
   const items = data?.items ?? [];
 
+  const resetFilters = () => {
+    setOrgId("");
+    setAction("ALL");
+    setFrom("");
+    setTo("");
+  };
+
   return (
     <div className="container max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold">יומן ביקורת</h1>
-        <p className="text-sm text-muted-foreground">
-          לוג פעולות אחרון על פני כל הארגונים — עד 200 רשומות אחרונות.
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold">יומן ביקורת</h1>
+          <p className="text-sm text-muted-foreground">
+            לוג פעולות אחרון על פני כל הארגונים — עד 200 רשומות אחרונות.
+          </p>
+        </div>
+        <ExportCsvButton type="audit" />
       </header>
 
-      <div className="max-w-md">
-        <Input
-          value={orgId}
-          onChange={(e) => setOrgId(e.target.value)}
-          placeholder="סינון לפי מזהה ארגון (UUID)"
-          className="font-mono text-xs"
-          dir="ltr"
-        />
-      </div>
+      <Card>
+        <CardContent className="p-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="space-y-1">
+            <label className="text-[11px] text-muted-foreground">ארגון</label>
+            <Select
+              value={UUID_RE.test(orgId) ? orgId : "ALL"}
+              onValueChange={(v) => setOrgId(v === "ALL" ? "" : v)}
+              dir="rtl"
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="כל הארגונים" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">כל הארגונים</SelectItem>
+                {(orgs.data?.items ?? []).map((o) => (
+                  <SelectItem key={o.id} value={o.id}>
+                    {o.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[11px] text-muted-foreground">סוג פעולה</label>
+            <Select value={action} onValueChange={setAction} dir="rtl">
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ACTION_OPTIONS.map((a) => (
+                  <SelectItem key={a} value={a}>
+                    {a === "ALL" ? "הכל" : a}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[11px] text-muted-foreground">מתאריך</label>
+            <Input
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              dir="ltr"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[11px] text-muted-foreground">עד תאריך</label>
+            <Input
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              dir="ltr"
+            />
+          </div>
+
+          <div className="flex items-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={resetFilters}
+              className="w-full"
+            >
+              נקה
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-0">
@@ -97,7 +204,10 @@ export default function AdminAuditPage() {
                   ))
                 ) : items.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                    <td
+                      colSpan={6}
+                      className="px-4 py-8 text-center text-muted-foreground"
+                    >
                       אין רשומות
                     </td>
                   </tr>
@@ -108,7 +218,9 @@ export default function AdminAuditPage() {
                         {formatDateTime(a.createdAt)}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium">{a.organization?.name ?? "—"}</div>
+                        <div className="font-medium">
+                          {a.organization?.name ?? "—"}
+                        </div>
                         <div className="text-[10px] font-mono text-muted-foreground">
                           {a.organizationId.slice(0, 8)}…
                         </div>
@@ -121,7 +233,9 @@ export default function AdminAuditPage() {
                           {a.actionType}
                         </Badge>
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">{a.entityType}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {a.entityType}
+                      </td>
                       <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
                         {a.entityId.slice(0, 8)}…
                       </td>

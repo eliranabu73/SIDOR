@@ -137,6 +137,7 @@ enum BillingPlan {
   FREE
   BASIC
   PRO
+  ENTERPRISE
 }
 
 enum DomainEventType {
@@ -173,6 +174,11 @@ model Organization {
   plan                 BillingPlan @default(FREE)
   planRenewsAt         DateTime?
 
+  /// Soft-delete marker. Application routes should filter `WHERE deletedAt IS NULL`.
+  deletedAt       DateTime?
+  /// Per-tenant feature flags (admin-controlled). Shape: `{ [flag: string]: boolean }`.
+  featureFlags    Json     @default("{}")
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -201,6 +207,8 @@ model Membership {
   userId         String         @db.Uuid // = auth.users.id (Supabase)
   organizationId String         @db.Uuid
   role           MembershipRole @default(MANAGER)
+  /// Admin deactivation marker — when set, app routes should treat the user as disabled for this org.
+  deactivatedAt  DateTime?
   createdAt      DateTime       @default(now())
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)

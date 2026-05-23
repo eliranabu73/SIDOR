@@ -1,16 +1,19 @@
 "use client";
 
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { adminApi } from "@/lib/api";
+import { ExportCsvButton } from "@/components/admin/ExportCsvButton";
 
 const PAGE_SIZE = 25;
 
-function formatDate(iso: string): string {
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
   try {
     return new Date(iso).toLocaleDateString("he-IL", {
       year: "numeric",
@@ -24,10 +27,21 @@ function formatDate(iso: string): string {
 
 export default function AdminUsersPage() {
   const [offset, setOffset] = React.useState(0);
+  const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "users", offset],
     queryFn: () => adminApi.users({ limit: PAGE_SIZE, offset }),
     staleTime: 15_000,
+  });
+
+  const deactivate = useMutation({
+    mutationFn: (vars: { userId: string; deactivated: boolean }) =>
+      adminApi.deactivateUser(vars.userId, vars.deactivated),
+    onSuccess: (_res, vars) => {
+      toast.success(vars.deactivated ? "המשתמש הושהה" : "המשתמש הופעל מחדש");
+      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+    onError: () => toast.error("הפעולה נכשלה"),
   });
 
   const total = data?.total ?? 0;
@@ -35,13 +49,16 @@ export default function AdminUsersPage() {
 
   return (
     <div className="container max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold">משתמשים</h1>
-        <p className="text-sm text-muted-foreground">
-          {total > 0
-            ? `${total.toLocaleString("he-IL")} משתמשים שונים עם חברות בארגון`
-            : "טוען..."}
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold">משתמשים</h1>
+          <p className="text-sm text-muted-foreground">
+            {total > 0
+              ? `${total.toLocaleString("he-IL")} משתמשים שונים עם חברות בארגון`
+              : "טוען..."}
+          </p>
+        </div>
+        <ExportCsvButton type="users" />
       </header>
 
       <Card>
@@ -50,54 +67,99 @@ export default function AdminUsersPage() {
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                 <tr className="text-right">
-                  <th className="px-4 py-3 font-medium">מזהה משתמש</th>
+                  <th className="px-4 py-3 font-medium">משתמש</th>
+                  <th className="px-4 py-3 font-medium">דוא״ל</th>
                   <th className="px-4 py-3 font-medium">ארגונים</th>
                   <th className="px-4 py-3 font-medium tabular-nums">סך</th>
+                  <th className="px-4 py-3 font-medium">כניסה אחרונה</th>
                   <th className="px-4 py-3 font-medium">הצטרף לראשונה</th>
+                  <th className="px-4 py-3 font-medium">פעולות</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i} className="border-t border-border">
-                      <td colSpan={4} className="px-4 py-3">
+                      <td colSpan={7} className="px-4 py-3">
                         <Skeleton className="h-5 w-full" />
                       </td>
                     </tr>
                   ))
                 ) : items.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
+                    <td
+                      colSpan={7}
+                      className="px-4 py-8 text-center text-muted-foreground"
+                    >
                       אין משתמשים
                     </td>
                   </tr>
                 ) : (
-                  items.map((u) => (
-                    <tr key={u.userId} className="border-t border-border">
-                      <td className="px-4 py-3 font-mono text-xs">
-                        {u.userId.slice(0, 8)}…
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1.5">
-                          {u.memberships.map((m, i) => (
-                            <span
-                              key={i}
-                              className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-[11px]"
-                            >
-                              <span className="font-medium">{m.org.name}</span>
-                              <Badge variant="outline" className="text-[9px] px-1 py-0">
-                                {m.role}
+                  items.map((u) => {
+                    const isDeactivated = !!u.deactivated;
+                    return (
+                      <tr key={u.userId} className="border-t border-border">
+                        <td className="px-4 py-3 font-mono text-xs">
+                          <div className="flex items-center gap-2">
+                            <span>{u.userId.slice(0, 8)}…</span>
+                            {isDeactivated && (
+                              <Badge
+                                variant="outline"
+                                className="bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/30 text-[10px]"
+                              >
+                                מושהה
                               </Badge>
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 tabular-nums">{u.orgCount}</td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {formatDate(u.firstJoined)}
-                      </td>
-                    </tr>
-                  ))
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-xs">
+                          {u.email ?? (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1.5">
+                            {u.memberships.map((m, i) => (
+                              <span
+                                key={i}
+                                className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-0.5 text-[11px]"
+                              >
+                                <span className="font-medium">{m.org.name}</span>
+                                <Badge
+                                  variant="outline"
+                                  className="text-[9px] px-1 py-0"
+                                >
+                                  {m.role}
+                                </Badge>
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 tabular-nums">{u.orgCount}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
+                          {formatDate(u.lastSignInAt)}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
+                          {formatDate(u.firstJoined)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Button
+                            variant={isDeactivated ? "outline" : "ghost"}
+                            size="sm"
+                            disabled={deactivate.isPending}
+                            onClick={() =>
+                              deactivate.mutate({
+                                userId: u.userId,
+                                deactivated: !isDeactivated,
+                              })
+                            }
+                          >
+                            {isDeactivated ? "הפעל מחדש" : "השהה משתמש"}
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -107,7 +169,8 @@ export default function AdminUsersPage() {
 
       <div className="flex items-center justify-between">
         <div className="text-xs text-muted-foreground">
-          מציג {items.length === 0 ? 0 : offset + 1}–{offset + items.length} מתוך {total}
+          מציג {items.length === 0 ? 0 : offset + 1}–{offset + items.length} מתוך{" "}
+          {total}
         </div>
         <div className="flex gap-2">
           <Button

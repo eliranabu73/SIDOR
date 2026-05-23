@@ -14,6 +14,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { adminApi } from "@/lib/api";
+import { SystemHealthCard } from "@/components/admin/SystemHealthCard";
+import { ActivityCharts } from "@/components/admin/ActivityCharts";
 
 interface MetricCardProps {
   label: string;
@@ -126,6 +128,15 @@ export default function AdminDashboardPage() {
           />
         </div>
       ) : null}
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-1">
+          <SystemHealthCard />
+        </div>
+        <div className="lg:col-span-2">
+          <ActivityCharts />
+        </div>
+      </div>
 
       <Card>
         <CardHeader>

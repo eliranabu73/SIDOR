@@ -169,6 +169,7 @@ Backend (`src/`):
 - `SUPABASE_JWT_JWKS_URL` — `https://<project>.supabase.co/auth/v1/.well-known/jwks.json`
 - `SHARE_HMAC_SECRET` — random 32+ char secret for share tokens
 - `REDIS_URL` — Upstash Redis (optional, falls back to in-memory)
+- `SUPABASE_SERVICE_ROLE_KEY` — server-only Supabase service-role key. Required for `/v1/admin/impersonate` and email enrichment in `/v1/admin/users`. Leave empty to disable those features (impersonate returns 501, emails return null).
 - `NODE_ENV=production`
 
 Frontend (`web/`):

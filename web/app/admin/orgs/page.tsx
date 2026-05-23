@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Search } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Search, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,9 +16,40 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { adminApi, type AdminOrgListItem } from "@/lib/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import {
+  adminApi,
+  type AdminOrgListItem,
+  type AdminPlan,
+  type AdminFeatureFlags,
+} from "@/lib/api";
+import { ExportCsvButton } from "@/components/admin/ExportCsvButton";
 
 const PAGE_SIZE = 25;
+const PLANS: AdminPlan[] = ["FREE", "BASIC", "PRO", "ENTERPRISE"];
+const FEATURE_FLAG_KEYS: Array<{ key: keyof AdminFeatureFlags; label: string }> = [
+  { key: "enableAutoSchedule", label: "שיבוץ אוטומטי" },
+  { key: "enableSwaps", label: "החלפות משמרת" },
+  { key: "enableWhatsAppExport", label: "ייצוא ל-WhatsApp" },
+  { key: "enableOrTools", label: "OR-Tools" },
+  { key: "enableImport", label: "ייבוא מתמונה" },
+];
 
 function formatDate(iso: string): string {
   try {
@@ -33,7 +65,11 @@ function formatDate(iso: string): string {
 
 function PlanBadge({ plan }: { plan: string }) {
   const variant: "default" | "secondary" | "outline" =
-    plan === "PRO" ? "default" : plan === "BASIC" ? "secondary" : "outline";
+    plan === "PRO" || plan === "ENTERPRISE"
+      ? "default"
+      : plan === "BASIC"
+        ? "secondary"
+        : "outline";
   return <Badge variant={variant}>{plan}</Badge>;
 }
 
@@ -72,13 +108,16 @@ export default function AdminOrgsPage() {
 
   return (
     <div className="container max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold">ארגונים</h1>
-        <p className="text-sm text-muted-foreground">
-          {total > 0
-            ? `${total.toLocaleString("he-IL")} ארגונים סך הכל`
-            : "טוען..."}
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold">ארגונים</h1>
+          <p className="text-sm text-muted-foreground">
+            {total > 0
+              ? `${total.toLocaleString("he-IL")} ארגונים סך הכל`
+              : "טוען..."}
+          </p>
+        </div>
+        <ExportCsvButton type="orgs" />
       </header>
 
       <div className="relative max-w-md">
@@ -191,8 +230,12 @@ export default function AdminOrgsPage() {
               <Skeleton className="h-24 w-full" />
               <Skeleton className="h-40 w-full" />
             </div>
-          ) : detail.data ? (
-            <OrgDetail data={detail.data} />
+          ) : detail.data && selected ? (
+            <OrgDetail
+              data={detail.data}
+              org={selected}
+              onClose={() => setSelected(null)}
+            />
           ) : null}
         </SheetContent>
       </Sheet>
@@ -202,74 +245,259 @@ export default function AdminOrgsPage() {
 
 function OrgDetail({
   data,
+  org: orgListItem,
+  onClose,
 }: {
-  data: { org: Record<string, unknown>; recentSchedules: Array<Record<string, unknown>> };
+  data: {
+    org: Record<string, unknown>;
+    recentSchedules: Array<Record<string, unknown>>;
+  };
+  org: AdminOrgListItem;
+  onClose: () => void;
 }) {
+  const qc = useQueryClient();
   const org = data.org as {
+    id: string;
     plan: string;
     industry: string | null;
     defaultTimezone: string;
     createdAt: string;
     stripeCustomerId: string | null;
-    _count: { memberships: number; employees: number; schedules: number; shifts: number; locations: number };
+    featureFlags?: AdminFeatureFlags | null;
+    _count: {
+      memberships: number;
+      employees: number;
+      schedules: number;
+      shifts: number;
+      locations: number;
+    };
     memberships: Array<{ id: string; userId: string; role: string; createdAt: string }>;
   };
 
+  const orgId = orgListItem.id;
+
+  // Plan picker
+  const [plan, setPlan] = React.useState<AdminPlan>(org.plan as AdminPlan);
+  React.useEffect(() => {
+    setPlan(org.plan as AdminPlan);
+  }, [org.plan]);
+
+  const planMutation = useMutation({
+    mutationFn: (next: AdminPlan) => adminApi.updatePlan(orgId, next),
+    onSuccess: (_res, next) => {
+      toast.success(`המסלול שונה ל-${next}`);
+      qc.invalidateQueries({ queryKey: ["admin", "orgs"] });
+    },
+    onError: () => toast.error("שינוי המסלול נכשל"),
+  });
+
+  const onPlanChange = (next: string) => {
+    const p = next as AdminPlan;
+    setPlan(p);
+    planMutation.mutate(p);
+  };
+
+  // Soft-delete
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const deleteMutation = useMutation({
+    mutationFn: () => adminApi.softDelete(orgId),
+    onSuccess: () => {
+      toast.success("הארגון סומן כמחוק");
+      qc.invalidateQueries({ queryKey: ["admin", "orgs"] });
+      setConfirmOpen(false);
+      onClose();
+    },
+    onError: () => toast.error("מחיקת הארגון נכשלה"),
+  });
+
+  // Feature flags
+  const initialFlags = React.useMemo<AdminFeatureFlags>(
+    () => ({ ...(org.featureFlags ?? {}) }),
+    [org.featureFlags],
+  );
+  const [flags, setFlags] = React.useState<AdminFeatureFlags>(initialFlags);
+  React.useEffect(() => {
+    setFlags(initialFlags);
+  }, [initialFlags]);
+
+  const flagsMutation = useMutation({
+    mutationFn: (next: AdminFeatureFlags) =>
+      adminApi.updateFeatureFlags(orgId, next),
+    onSuccess: () => {
+      toast.success("פיצ'רים עודכנו");
+      qc.invalidateQueries({ queryKey: ["admin", "orgs", "detail", orgId] });
+    },
+    onError: () => toast.error("עדכון פיצ'רים נכשל"),
+  });
+
+  const toggleFlag = (key: keyof AdminFeatureFlags, value: boolean) => {
+    const next = { ...flags, [key]: value };
+    setFlags(next);
+    flagsMutation.mutate(next);
+  };
+
   return (
-    <div className="mt-6 space-y-6 text-sm">
-      <div className="grid grid-cols-2 gap-3">
-        <Stat label="מסלול" value={<PlanBadge plan={org.plan} />} />
-        <Stat label="תעשייה" value={org.industry ?? "—"} />
-        <Stat label="אזור זמן" value={org.defaultTimezone} />
-        <Stat label="נוצר" value={formatDate(org.createdAt)} />
-        <Stat label="חברים" value={org._count.memberships} />
-        <Stat label="עובדים" value={org._count.employees} />
-        <Stat label="סידורים" value={org._count.schedules} />
-        <Stat label="משמרות" value={org._count.shifts} />
-        <Stat label="סניפים" value={org._count.locations} />
-        <Stat label="Stripe customer" value={org.stripeCustomerId ?? "—"} />
-      </div>
+    <div className="mt-6 space-y-4 text-sm">
+      <Tabs defaultValue="overview">
+        <TabsList>
+          <TabsTrigger value="overview" className="flex-1">
+            סקירה
+          </TabsTrigger>
+          <TabsTrigger value="features" className="flex-1">
+            פיצ׳רים
+          </TabsTrigger>
+        </TabsList>
 
-      <div>
-        <h3 className="font-medium mb-2">חברים ({org.memberships.length})</h3>
-        <div className="border border-border rounded-md divide-y divide-border">
-          {org.memberships.map((m) => (
-            <div key={m.id} className="flex items-center justify-between px-3 py-2 text-xs">
-              <span className="font-mono">{m.userId.slice(0, 8)}…</span>
-              <Badge variant="outline">{m.role}</Badge>
-              <span className="text-muted-foreground">{formatDate(m.createdAt)}</span>
+        <TabsContent value="overview" className="space-y-6">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-md border border-border p-3 col-span-2">
+              <div className="text-[11px] text-muted-foreground mb-2">מסלול</div>
+              <Select
+                value={plan}
+                onValueChange={onPlanChange}
+                disabled={planMutation.isPending}
+                dir="rtl"
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PLANS.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {p}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          ))}
-        </div>
-      </div>
+            <Stat label="תעשייה" value={org.industry ?? "—"} />
+            <Stat label="אזור זמן" value={org.defaultTimezone} />
+            <Stat label="נוצר" value={formatDate(org.createdAt)} />
+            <Stat label="חברים" value={org._count.memberships} />
+            <Stat label="עובדים" value={org._count.employees} />
+            <Stat label="סידורים" value={org._count.schedules} />
+            <Stat label="משמרות" value={org._count.shifts} />
+            <Stat label="סניפים" value={org._count.locations} />
+            <Stat
+              label="Stripe customer"
+              value={org.stripeCustomerId ?? "—"}
+            />
+          </div>
 
-      <div>
-        <h3 className="font-medium mb-2">סידורים אחרונים</h3>
-        {data.recentSchedules.length === 0 ? (
-          <p className="text-xs text-muted-foreground">אין סידורים עדיין</p>
-        ) : (
-          <div className="border border-border rounded-md divide-y divide-border">
-            {data.recentSchedules.map((s) => {
-              const sch = s as {
-                id: string;
-                name: string;
-                status: string;
-                periodStartDate: string;
-                periodEndDate: string;
-              };
-              return (
-                <div key={sch.id} className="flex items-center justify-between px-3 py-2 text-xs">
-                  <span className="font-medium">{sch.name}</span>
-                  <Badge variant="outline">{sch.status}</Badge>
+          <div>
+            <h3 className="font-medium mb-2">חברים ({org.memberships.length})</h3>
+            <div className="border border-border rounded-md divide-y divide-border">
+              {org.memberships.map((m) => (
+                <div
+                  key={m.id}
+                  className="flex items-center justify-between px-3 py-2 text-xs"
+                >
+                  <span className="font-mono">{m.userId.slice(0, 8)}…</span>
+                  <Badge variant="outline">{m.role}</Badge>
                   <span className="text-muted-foreground">
-                    {formatDate(sch.periodStartDate)} → {formatDate(sch.periodEndDate)}
+                    {formatDate(m.createdAt)}
                   </span>
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        )}
-      </div>
+
+          <div>
+            <h3 className="font-medium mb-2">סידורים אחרונים</h3>
+            {data.recentSchedules.length === 0 ? (
+              <p className="text-xs text-muted-foreground">אין סידורים עדיין</p>
+            ) : (
+              <div className="border border-border rounded-md divide-y divide-border">
+                {data.recentSchedules.map((s) => {
+                  const sch = s as {
+                    id: string;
+                    name: string;
+                    status: string;
+                    periodStartDate: string;
+                    periodEndDate: string;
+                  };
+                  return (
+                    <div
+                      key={sch.id}
+                      className="flex items-center justify-between px-3 py-2 text-xs"
+                    >
+                      <span className="font-medium">{sch.name}</span>
+                      <Badge variant="outline">{sch.status}</Badge>
+                      <span className="text-muted-foreground">
+                        {formatDate(sch.periodStartDate)} →{" "}
+                        {formatDate(sch.periodEndDate)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-border pt-4">
+            <Button
+              variant="destructive"
+              onClick={() => setConfirmOpen(true)}
+              className="gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              מחק ארגון
+            </Button>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="features" className="space-y-2">
+          {FEATURE_FLAG_KEYS.map(({ key, label }) => {
+            const value = !!flags[key];
+            return (
+              <div
+                key={String(key)}
+                className="flex items-center justify-between rounded-md border border-border bg-card/50 px-3 py-2"
+              >
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium">{label}</span>
+                  <span className="text-[11px] text-muted-foreground font-mono">
+                    {String(key)}
+                  </span>
+                </div>
+                <Switch
+                  checked={value}
+                  onCheckedChange={(next) => toggleFlag(key, next)}
+                  aria-label={label}
+                  disabled={flagsMutation.isPending}
+                />
+              </div>
+            );
+          })}
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>מחיקת ארגון</DialogTitle>
+            <DialogDescription>
+              ארגון <strong>{orgListItem.name}</strong> יסומן כמחוק. הפעולה הפיכה.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmOpen(false)}
+              disabled={deleteMutation.isPending}
+            >
+              ביטול
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteMutation.mutate()}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "מוחק…" : "מחק"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

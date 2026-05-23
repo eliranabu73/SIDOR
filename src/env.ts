@@ -18,6 +18,11 @@ export const env = cleanEnv(process.env, {
   /** HS256 shared secret for Supabase JWT verification. When set, tokens are
    *  verified with HS256 using this value. When absent, RS256/JWKS is used. */
   SUPABASE_JWT_SECRET: str({ default: '' }),
+  /** Supabase service-role key — required for platform-admin impersonation
+   *  and for enriching the admin user list with auth.users emails. When
+   *  empty, those features degrade gracefully (impersonate → 501, user list
+   *  → emails are null). NEVER expose to clients. */
+  SUPABASE_SERVICE_ROLE_KEY: str({ default: '' }),
 
   REDIS_URL: str({ default: '' }),
   JWT_SECRET: str({ default: 'dev-secret' }),
