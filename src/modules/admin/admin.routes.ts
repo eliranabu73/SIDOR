@@ -1154,6 +1154,11 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       `ALTER TABLE "shifts" ENABLE ROW LEVEL SECURITY`,
       `DROP POLICY IF EXISTS tenant_isolation ON "shifts"`,
       `CREATE POLICY tenant_isolation ON "shifts" USING ("organizationId"::text = current_setting('app.current_org_id', true))`,
+      // v2.0 Sprint 2 — Employee compliance + cost fields
+      `DO $$ BEGIN CREATE TYPE "WeeklyRestDay" AS ENUM ('FRIDAY','SATURDAY','SUNDAY'); EXCEPTION WHEN duplicate_object THEN null; END $$`,
+      `ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS "weeklyBudgetHours" INTEGER NULL`,
+      `ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS "dateOfBirth" DATE NULL`,
+      `ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS "weeklyRestDay" "WeeklyRestDay" NOT NULL DEFAULT 'SATURDAY'`,
     ];
     for (const stmt of statements) {
       try {
