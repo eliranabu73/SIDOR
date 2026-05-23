@@ -6,9 +6,11 @@ import {
   verifyEmployeeToken,
 } from './share.service';
 import {
+  confirmShiftAssignment,
   createTimeOffRequest,
   fetchEmployeeActivity,
   replaceAvailability,
+  requestSwapWithReason,
 } from './share-actions.service';
 import { loadScheduleExportData } from './export/data';
 import { renderPng } from './export/png-renderer';
@@ -168,6 +170,78 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
         return reply
           .code(status)
           .send({ code: 'AVAIL_FAILED', message: (err as Error).message });
+      }
+    },
+  );
+
+  // PUBLIC — employee confirms (acks) a published shift via WhatsApp link.
+  const ConfirmShiftBody = z.object({ shiftId: z.string().uuid() });
+  app.post(
+    '/v1/share/:token/confirm-shift',
+    { schema: { params: TokenParam, body: ConfirmShiftBody } },
+    async (req, reply) => {
+      const { token } = req.params as z.infer<typeof TokenParam>;
+      const body = req.body as z.infer<typeof ConfirmShiftBody>;
+      const decoded = verifyEmployeeToken(token);
+      if (!decoded) return reply.code(401).send({ code: 'INVALID_TOKEN' });
+      try {
+        const r = await withOrgContext(decoded.organizationId).query((tx) =>
+          confirmShiftAssignment(
+            {
+              employeeId: decoded.employeeId,
+              organizationId: decoded.organizationId,
+              shiftId: body.shiftId,
+            },
+            tx,
+          ),
+        );
+        return reply.code(r.alreadyConfirmed ? 200 : 201).send(r);
+      } catch (err) {
+        const status = (err as { statusCode?: number }).statusCode ?? 500;
+        return reply
+          .code(status)
+          .send({ code: 'CONFIRM_FAILED', message: (err as Error).message });
+      }
+    },
+  );
+
+  // PUBLIC — employee requests a swap (optionally targeting another shift +
+  // free-text reason). Returns a ShiftSwapRequest in PENDING status.
+  const RequestSwapBody = z.object({
+    fromShiftId: z.string().uuid(),
+    toShiftId: z.string().uuid().optional(),
+    reason: z.string().max(280).optional(),
+  });
+  app.post(
+    '/v1/share/:token/request-swap',
+    { schema: { params: TokenParam, body: RequestSwapBody } },
+    async (req, reply) => {
+      const { token } = req.params as z.infer<typeof TokenParam>;
+      const body = req.body as z.infer<typeof RequestSwapBody>;
+      const decoded = verifyEmployeeToken(token);
+      if (!decoded) return reply.code(401).send({ code: 'INVALID_TOKEN' });
+      try {
+        const input: Parameters<typeof requestSwapWithReason>[0] = {
+          employeeId: decoded.employeeId,
+          organizationId: decoded.organizationId,
+          fromShiftId: body.fromShiftId,
+        };
+        if (body.toShiftId) input.toShiftId = body.toShiftId;
+        if (body.reason) input.reason = body.reason;
+        const r = await withOrgContext(decoded.organizationId).query((tx) =>
+          requestSwapWithReason(input, tx),
+        );
+        return reply.code(201).send({
+          id: r.id,
+          status: r.status.toLowerCase(),
+          sourceAssignmentId: r.sourceAssignmentId,
+          targetEmployeeId: r.targetEmployeeId,
+        });
+      } catch (err) {
+        const status = (err as { statusCode?: number }).statusCode ?? 500;
+        return reply
+          .code(status)
+          .send({ code: 'SWAP_FAILED', message: (err as Error).message });
       }
     },
   );

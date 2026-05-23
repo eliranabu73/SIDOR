@@ -33,6 +33,12 @@ enum EmploymentType {
   INTERN
 }
 
+enum WeeklyRestDay {
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
 enum AvailabilityType {
   AVAILABLE
   PREFERRED
@@ -291,6 +297,12 @@ model Employee {
   defaultTimezone   String?
   /// Hourly cost in ILS (or org's currency). Used by labor-cost dashboard.
   hourlyRate        Decimal?       @db.Decimal(10, 2)
+  /// Soft cap for weekly hours when building schedule. Used by labor-cost meter + scheduler.
+  weeklyBudgetHours Int?
+  /// Birthdate for youth-labor compliance (under 18 → night-curfew + max-hours rules).
+  dateOfBirth       DateTime?      @db.Date
+  /// Religious weekly rest day. Drives 36h-weekly-rest rule and Shabbat premium.
+  weeklyRestDay     WeeklyRestDay  @default(SATURDAY)
   isActive          Boolean        @default(true)
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt

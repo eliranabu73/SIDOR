@@ -21,11 +21,69 @@ import { TimeOffDialog } from "@/components/share/TimeOffDialog";
 import { AvailabilityDialog } from "@/components/share/AvailabilityDialog";
 import {
   ApiError,
-  createSwapRequestFromShare,
   fetchEmployeeShare,
   type EmployeeShareView,
 } from "@/lib/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
+
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
+
+async function confirmShiftFromShare(
+  token: string,
+  shiftId: string,
+): Promise<{ alreadyConfirmed: boolean; confirmedAt: string }> {
+  const res = await fetch(
+    `${API_URL}/v1/share/${encodeURIComponent(token)}/confirm-shift`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ shiftId }),
+    },
+  );
+  const body = (await res.json().catch(() => null)) as
+    | { alreadyConfirmed?: boolean; confirmedAt?: string; message?: string }
+    | null;
+  if (!res.ok) {
+    throw new Error(body?.message ?? `שגיאה ${res.status}`);
+  }
+  return {
+    alreadyConfirmed: Boolean(body?.alreadyConfirmed),
+    confirmedAt: body?.confirmedAt ?? new Date().toISOString(),
+  };
+}
+
+async function requestSwapFromShare(
+  token: string,
+  fromShiftId: string,
+  reason?: string,
+): Promise<{ id: string; status: string }> {
+  const res = await fetch(
+    `${API_URL}/v1/share/${encodeURIComponent(token)}/request-swap`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fromShiftId,
+        ...(reason ? { reason } : {}),
+      }),
+    },
+  );
+  const body = (await res.json().catch(() => null)) as
+    | { id?: string; status?: string; message?: string }
+    | null;
+  if (!res.ok) {
+    throw new Error(body?.message ?? `שגיאה ${res.status}`);
+  }
+  return { id: body?.id ?? "", status: body?.status ?? "pending" };
+}
 
 type Params = { token: string };
 
@@ -215,14 +273,38 @@ function ShiftCard({
   const hours = end.diff(start, "hours").hours;
   const [requesting, setRequesting] = React.useState(false);
   const [requested, setRequested] = React.useState(false);
+  const [confirming, setConfirming] = React.useState(false);
+  const [confirmed, setConfirmed] = React.useState(false);
+  const [swapOpen, setSwapOpen] = React.useState(false);
+  const [swapReason, setSwapReason] = React.useState("");
 
-  const requestSwap = async () => {
+  const confirmShift = async () => {
+    if (confirming || confirmed) return;
+    setConfirming(true);
+    try {
+      const r = await confirmShiftFromShare(token, shift.id);
+      setConfirmed(true);
+      toast.success(
+        r.alreadyConfirmed ? "המשמרת כבר אושרה" : "אישרת את המשמרת",
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "שליחת האישור נכשלה");
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const submitSwap = async () => {
     if (requesting || requested) return;
-    if (!window.confirm("לבקש מהמנהל למצוא לך מחליף למשמרת הזו?")) return;
     setRequesting(true);
     try {
-      await createSwapRequestFromShare(token, shift.assignmentId);
+      await requestSwapFromShare(
+        token,
+        shift.id,
+        swapReason.trim() ? swapReason.trim() : undefined,
+      );
       setRequested(true);
+      setSwapOpen(false);
       toast.success("הבקשה נשלחה למנהל");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "שליחת הבקשה נכשלה");
@@ -232,7 +314,7 @@ function ShiftCard({
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-4">
+    <div className="rounded-2xl border border-border bg-card p-4" dir="rtl">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-base font-semibold">
           <Clock className="h-4 w-4 text-indigo-500" />
@@ -255,25 +337,90 @@ function ShiftCard({
           </span>
         ) : null}
       </div>
-      <div className="mt-3 flex justify-end">
-        {requested ? (
+      <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+        {confirmed ? (
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-500">
             <Check className="h-3.5 w-3.5" />
+            אושר
+          </span>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={confirmShift}
+            disabled={confirming}
+            className="text-xs"
+          >
+            <Check className="h-3.5 w-3.5" />
+            {confirming ? "שולח…" : "אשר משמרת"}
+          </Button>
+        )}
+        {requested ? (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-500">
+            <RefreshCw className="h-3.5 w-3.5" />
             בקשת החלפה נשלחה
           </span>
         ) : (
           <Button
             size="sm"
             variant="ghost"
-            onClick={requestSwap}
+            onClick={() => setSwapOpen(true)}
             disabled={requesting}
             className="text-xs text-muted-foreground hover:text-foreground"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            {requesting ? "שולח…" : "אני לא יכול/ה להגיע"}
+            בקש החלפה
           </Button>
         )}
       </div>
+
+      <Dialog open={swapOpen} onOpenChange={setSwapOpen}>
+        <DialogContent dir="rtl" className="text-right sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>בקשת החלפה</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-xl bg-muted/40 p-3 text-sm">
+              <div className="font-medium">
+                {start.setLocale("he").toFormat("EEEE · d בMMMM")}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {start.toFormat("HH:mm")} – {end.toFormat("HH:mm")}
+                {shift.role ? ` · ${shift.role}` : ""}
+                {shift.location ? ` · ${shift.location}` : ""}
+              </div>
+            </div>
+            <label className="block text-xs font-medium text-muted-foreground">
+              סיבה (אופציונלי)
+            </label>
+            <textarea
+              value={swapReason}
+              onChange={(e) => setSwapReason(e.target.value)}
+              maxLength={280}
+              dir="rtl"
+              className="min-h-20 w-full resize-y rounded-xl border border-border bg-background p-3 text-right text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              placeholder="ספר/י למנהל למה את/ה צריך/ה החלפה…"
+            />
+          </div>
+          <DialogFooter className="flex-row-reverse gap-2 sm:justify-start">
+            <Button
+              size="sm"
+              onClick={submitSwap}
+              disabled={requesting}
+            >
+              {requesting ? "שולח…" : "שלח בקשה"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setSwapOpen(false)}
+              disabled={requesting}
+            >
+              ביטול
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

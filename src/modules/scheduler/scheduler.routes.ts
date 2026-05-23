@@ -1,9 +1,15 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { SchedulerService, type ProviderName } from './scheduler.service';
+import { computeWeeklyCost } from './labor-cost.service';
 import { HttpError } from '../../shared/errors';
 import { prisma } from '../../db/prisma';
 import type { PrismaClient } from '@prisma/client';
+
+const DEMO_ORG_ID = '10000000-0000-0000-0000-000000000001';
+function orgIdFor(req: { user?: { orgId?: string } }): string {
+  return req.user?.orgId ?? DEMO_ORG_ID;
+}
 
 /** RLS-aware DB handle (falls back to direct prisma in AUTH_DISABLED mode). */
 function dbFor(req: { orgPrisma?: { query: <T>(fn: (tx: PrismaClient) => Promise<T>) => Promise<T> } }) {
@@ -91,6 +97,63 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  app.get(
+    '/schedules/:scheduleId/labor-cost',
+    {
+      schema: { params: ScheduleIdParam },
+      preHandler: authHandlers,
+    },
+    async (req, reply) => {
+      const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
+      try {
+        const report = await dbFor(req).query((tx) =>
+          computeWeeklyCost(
+            { organizationId: orgIdFor(req), scheduleId },
+            tx,
+          ),
+        );
+        if (!report) {
+          return reply.send(null);
+        }
+        return reply.send(report);
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
+
+  app.get(
+    '/schedules/:scheduleId/compliance',
+    {
+      schema: { params: ScheduleIdParam },
+      preHandler: authHandlers,
+    },
+    async (req, reply) => {
+      const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
+      try {
+        const orgId = orgIdFor(req);
+        const violations = await dbFor(req).query((tx) =>
+          tx.ruleViolation.findMany({
+            where: { organizationId: orgId, scheduleId, isResolved: false },
+            select: {
+              id: true,
+              ruleCode: true,
+              severity: true,
+              message: true,
+              shiftId: true,
+              employeeId: true,
+              detectedAt: true,
+            },
+            orderBy: { detectedAt: 'desc' },
+          }),
+        );
+        return reply.send({ scheduleId, violations, count: violations.length });
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
+
   app.post(
     '/schedules/:scheduleId/auto-schedule',
     {
@@ -111,6 +174,7 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
               weights: body.weights,
             },
             body.provider as ProviderName,
+            orgIdFor(req),
           );
         });
         return reply.send(result);

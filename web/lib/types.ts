@@ -129,6 +129,9 @@ export interface AutoScheduleResponse {
   proposals: AssignmentProposal[];
   unfilled: { shiftId: ID; reason: string }[];
   metrics?: Record<string, number>;
+  /** Live labor-cost estimate computed alongside the proposal pass.
+   * `null` when the org has no hourly rates set on any employee. */
+  costEstimate?: { totalAgorot: number; deltaAgorot: number } | null;
 }
 
 export interface AutoScheduleWeights {

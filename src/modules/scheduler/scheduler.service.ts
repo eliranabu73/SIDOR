@@ -7,6 +7,7 @@ import { applyAssignment } from '../assignments/assignments.service';
 import { writeAudit } from '../audit/audit.service';
 import { NotFoundError } from '../../shared/errors';
 import { mapSchedule } from '../reads/reads.routes';
+import { computeWeeklyCost } from './labor-cost.service';
 import type {
   SchedulerInput,
   SchedulerOutput,
@@ -56,21 +57,54 @@ export class SchedulerService {
   async run(
     input: SchedulerInput,
     providerName: ProviderName = 'greedy',
-  ): Promise<SchedulerOutput & { warning?: string }> {
+    organizationId?: string,
+  ): Promise<
+    SchedulerOutput & {
+      warning?: string;
+      costEstimate?: { totalAgorot: number; deltaAgorot: number } | null;
+    }
+  > {
     const provider = this.pickProvider(providerName);
+    let result: SchedulerOutput & { warning?: string };
     try {
-      return await provider.run(input);
+      result = await provider.run(input);
     } catch (err) {
       if (providerName === 'or-tools') {
         // Fail-soft: optimizer crashed (e.g., no feasible solution). Fall back
         // to greedy so the API still returns proposals, but surface the issue.
         const fallback = new GreedySchedulerProvider(this.prisma as PrismaClient);
-        const result = await fallback.run(input);
+        const fallbackResult = await fallback.run(input);
         const message = err instanceof Error ? err.message : String(err);
-        return { ...result, warning: `or-tools optimizer failed (${message}); fell back to greedy` };
+        result = {
+          ...fallbackResult,
+          warning: `or-tools optimizer failed (${message}); fell back to greedy`,
+        };
+      } else {
+        throw err;
       }
-      throw err;
     }
+
+    // Best-effort: attach a cost estimate so the UI can show a live meter
+    // right after the auto-schedule. Returns null if no rates set at all.
+    let costEstimate: { totalAgorot: number; deltaAgorot: number } | null = null;
+    if (organizationId) {
+      try {
+        const report = await computeWeeklyCost(
+          { organizationId, scheduleId: input.scheduleId },
+          this.prisma,
+        );
+        if (report) {
+          costEstimate = {
+            totalAgorot: report.totalAgorot,
+            deltaAgorot: report.deltaAgorot,
+          };
+        }
+      } catch {
+        // Cost is non-critical to the auto-schedule contract; swallow.
+        costEstimate = null;
+      }
+    }
+    return { ...result, costEstimate };
   }
 
   async applyProposals(

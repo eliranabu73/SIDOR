@@ -41,6 +41,8 @@ import { PublishWhatsAppDialog } from "@/components/schedule/PublishWhatsAppDial
 import { ExportDialog } from "@/components/schedule/ExportDialog";
 import { CreateShiftDialog } from "@/components/schedule/CreateShiftDialog";
 import { LaborCostBar } from "@/components/schedule/LaborCostBar";
+import { CostMeter } from "@/components/schedule/CostMeter";
+import { ComplianceBanner } from "@/components/schedule/ComplianceBanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -158,6 +160,16 @@ function ScheduleInner() {
       dryRun: true,
       weights,
     });
+    // Savings nudge — only when a previous week exists and we actually saved.
+    if (res.costEstimate && res.costEstimate.deltaAgorot < 0) {
+      const saved = Math.abs(res.costEstimate.deltaAgorot) / 100;
+      toast.success(
+        `חסכת ₪${saved.toLocaleString("he-IL", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`,
+      );
+    }
     return res.proposals;
   };
 
@@ -269,6 +281,9 @@ function ScheduleInner() {
       {/* Labor cost bar — always visible above the board */}
       <LaborCostBar weekStart={weekStart} />
 
+      {/* WS-E: IL labor-compliance status above the grid */}
+      <ComplianceBanner scheduleId={scheduleQuery.data?.id ?? null} />
+
       <div className="flex flex-col sm:flex-row flex-1 min-h-0">
         {/* Left rail — filters (desktop only) */}
         <aside aria-label="סינון וחיפוש" className="hidden sm:block w-60 shrink-0 border-e bg-muted/30 p-3 overflow-y-auto">
@@ -322,7 +337,8 @@ function ScheduleInner() {
         </aside>
 
         {/* Center — board */}
-        <section className="flex-1 min-w-0 overflow-auto p-2 sm:p-3">
+        <section className="relative flex-1 min-w-0 overflow-auto p-2 sm:p-3">
+          <CostMeter scheduleId={scheduleQuery.data?.id ?? null} />
           {scheduleQuery.isLoading ? (
             <div className="flex flex-col gap-2 sm:grid sm:grid-cols-7">
               {Array.from({ length: 7 }).map((_, i) => (

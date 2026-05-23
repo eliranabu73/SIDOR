@@ -20,7 +20,7 @@
 import { env } from '../../env';
 import { prisma as defaultPrisma } from '../../db/prisma';
 import type { Db } from '../../db/prisma';
-import { buildPublishBundle } from '../share/share.service';
+import { buildPublishBundle, whatsappLinkForPhone } from '../share/share.service';
 
 // ---------------------------------------------------------------------------
 // HttpError — Fastify error handler reads statusCode + code off the error.
@@ -286,6 +286,83 @@ export async function sendBulkSchedulePublish(
     failed,
     skipped,
     deliveries,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Hebrew message templates for the WhatsApp-native loop (WS-C).
+//
+// Each builder returns { phone, text, waLink } so callers can either render
+// the link in the manager UI ("paste-send") or feed `phone`+`text` into the
+// Cloud API in a follow-up. We deliberately do not gate these on
+// WHATSAPP_TOKEN — the wa.me deep link works without API credentials.
+// ---------------------------------------------------------------------------
+
+export type WaMessage = {
+  phone: string | null;
+  text: string;
+  waLink: string;
+};
+
+/**
+ * Initial "your schedule is ready" message that drives the employee back to
+ * their personal /e/[token] page to confirm or request a swap.
+ */
+export function buildScheduleReadyMessage(input: {
+  employeeName: string;
+  weekStart: string;
+  weekEnd: string;
+  portalLink: string;
+  phone?: string | null;
+}): WaMessage {
+  const text =
+    `שלום ${input.employeeName} 👋\n` +
+    `השיבוץ שלך לשבוע ${input.weekStart}–${input.weekEnd} מוכן.\n` +
+    `צפה ואשר: ${input.portalLink}`;
+  return {
+    phone: input.phone ?? null,
+    text,
+    waLink: whatsappLinkForPhone(input.phone, text),
+  };
+}
+
+/**
+ * Sent to the target employee when someone asks to swap their shift.
+ */
+export function buildSwapRequestMessage(input: {
+  fromEmployeeName: string;
+  shiftDate: string;
+  shiftTime: string;
+  portalLink: string;
+  phone?: string | null;
+}): WaMessage {
+  const text =
+    `${input.fromEmployeeName} מבקש להחליף איתך משמרת ` +
+    `${input.shiftDate} ${input.shiftTime}.\n` +
+    `אשר/דחה: ${input.portalLink}`;
+  return {
+    phone: input.phone ?? null,
+    text,
+    waLink: whatsappLinkForPhone(input.phone, text),
+  };
+}
+
+/**
+ * Sent to the requester once the manager (or target) resolves the swap.
+ */
+export function buildSwapResolvedMessage(input: {
+  approved: boolean;
+  shiftDate: string;
+  shiftTime: string;
+  phone?: string | null;
+}): WaMessage {
+  const verdict = input.approved ? 'אושרה' : 'נדחתה';
+  const text =
+    `בקשת ההחלפה למשמרת ${input.shiftDate} ${input.shiftTime} ${verdict}.`;
+  return {
+    phone: input.phone ?? null,
+    text,
+    waLink: whatsappLinkForPhone(input.phone, text),
   };
 }
 

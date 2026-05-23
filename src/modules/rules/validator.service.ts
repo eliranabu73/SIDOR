@@ -12,6 +12,11 @@ import { minRestRule } from './rules/min-rest.rule';
 import { maxHoursDayRule } from './rules/max-hours-day.rule';
 import { maxHoursWeekRule } from './rules/max-hours-week.rule';
 import { shiftNotLockedRule } from './rules/shift-not-locked.rule';
+import { youthNightCurfewRule } from './rules/youth-night-curfew.rule';
+import { youthMaxHoursRule } from './rules/youth-max-hours.rule';
+import { weeklyRest36hRule } from './rules/weekly-rest-36h.rule';
+import { break45MinRule } from './rules/break-45min.rule';
+import { overtimeTiersRule } from './rules/overtime-tiers.rule';
 
 export const FAST_RULES: ReadonlyArray<{ name: string; fn: RuleFn }> = [
   { name: 'employeeActive', fn: employeeActiveRule },
@@ -22,6 +27,12 @@ export const FAST_RULES: ReadonlyArray<{ name: string; fn: RuleFn }> = [
   { name: 'maxHoursDay', fn: maxHoursDayRule },
   { name: 'maxHoursWeek', fn: maxHoursWeekRule },
   { name: 'shiftNotLocked', fn: shiftNotLockedRule },
+  // WS-E: IL compliance engine
+  { name: 'youthNightCurfew', fn: youthNightCurfewRule },
+  { name: 'youthMaxHours', fn: youthMaxHoursRule },
+  { name: 'weeklyRest36h', fn: weeklyRest36hRule },
+  { name: 'break45Min', fn: break45MinRule },
+  { name: 'overtimeTiers', fn: overtimeTiersRule },
 ];
 
 export async function validateAssignment(

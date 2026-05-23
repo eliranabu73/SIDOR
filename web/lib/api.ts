@@ -361,6 +361,36 @@ export function fetchLaborCost(weekStart: string): Promise<LaborCostResponse> {
   );
 }
 
+// --------- Labor Cost (per-schedule, agorot-based) ---------
+
+export interface ScheduleLaborCostReport {
+  scheduleId: ID;
+  weekStart: string;
+  currency: "ILS";
+  totalAgorot: number;
+  avgPerShiftAgorot: number;
+  deltaAgorot: number;
+  previousTotalAgorot: number | null;
+  perEmployee: Array<{
+    employeeId: ID;
+    name: string;
+    hours: number;
+    agorot: number;
+  }>;
+  perShift: Array<{ shiftId: ID; agorot: number }>;
+  byDay: Array<{ dayIso: string; agorot: number }>;
+}
+
+/** Per-schedule cost meter. Resolves to null when the org has no hourly
+ * rates yet — caller should hide the meter UI in that case. */
+export function getLaborCost(
+  scheduleId: ID,
+): Promise<ScheduleLaborCostReport | null> {
+  return request<ScheduleLaborCostReport | null>(
+    `/v1/schedules/${scheduleId}/labor-cost`,
+  );
+}
+
 // --------- Share / Publish to WhatsApp ---------
 
 export interface PublishLink {
@@ -961,3 +991,43 @@ export const adminApi = {
       body: JSON.stringify({ userId }),
     }),
 };
+
+// --------- WS-E: IL Compliance Engine ---------
+
+export type ComplianceSeverity = "info" | "warning" | "blocking";
+
+export interface ComplianceViolation {
+  ruleCode: string;
+  severity: ComplianceSeverity;
+  message: string;
+  shiftId?: ID | null;
+  employeeId?: ID | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ComplianceReport {
+  scheduleId: ID;
+  generatedAt: string;
+  violations: ComplianceViolation[];
+}
+
+/**
+ * Fetch the IL labor-compliance report for a schedule.
+ *
+ * Falls back to an empty report if the backend endpoint is not yet deployed
+ * (so the UI degrades gracefully during rollout).
+ */
+export async function getComplianceReport(
+  scheduleId: ID,
+): Promise<ComplianceReport> {
+  try {
+    return await request<ComplianceReport>(
+      `/v1/schedules/${encodeURIComponent(scheduleId)}/compliance`,
+    );
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return { scheduleId, generatedAt: new Date().toISOString(), violations: [] };
+    }
+    throw err;
+  }
+}
