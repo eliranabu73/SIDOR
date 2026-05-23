@@ -10,6 +10,10 @@ import {
   fetchEmployeeActivity,
   replaceAvailability,
 } from './share-actions.service';
+import { loadScheduleExportData } from './export/data';
+import { renderPng } from './export/png-renderer';
+import { renderPdf } from './export/pdf-renderer';
+import { isExportStyle, type ExportStyle } from './export/types';
 
 const DEMO_ORG_ID = '10000000-0000-0000-0000-000000000001';
 function orgIdFor(req: { user?: { orgId: string } }): string {
@@ -138,6 +142,69 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
         return reply
           .code(status)
           .send({ code: 'AVAIL_FAILED', message: (err as Error).message });
+      }
+    },
+  );
+
+  // MANAGER: download a styled PNG/PDF of a schedule for WhatsApp/email share.
+  // Auth-optional: falls back to DEMO_ORG_ID (and demo fixture if not found).
+  const ExportParams = z.object({ scheduleId: z.string() });
+  const ExportQuery = z.object({ style: z.string().optional() });
+
+  function parseStyle(v: unknown): ExportStyle {
+    return isExportStyle(v) ? v : 'branded';
+  }
+
+  app.get(
+    '/v1/schedules/:scheduleId/export.png',
+    { schema: { params: ExportParams, querystring: ExportQuery } },
+    async (req, reply) => {
+      const { scheduleId } = req.params as z.infer<typeof ExportParams>;
+      const { style } = req.query as z.infer<typeof ExportQuery>;
+      const chosen = parseStyle(style);
+      try {
+        const data = await loadScheduleExportData(scheduleId, orgIdFor(req));
+        const buf = await renderPng(data, chosen);
+        return reply
+          .header('content-type', 'image/png')
+          .header(
+            'content-disposition',
+            `attachment; filename="schedule-${data.weekStart}-${chosen}.png"`,
+          )
+          .header('cache-control', 'private, max-age=60')
+          .send(buf);
+      } catch (err) {
+        const status = (err as { statusCode?: number }).statusCode ?? 500;
+        return reply
+          .code(status)
+          .send({ code: 'EXPORT_FAILED', message: (err as Error).message });
+      }
+    },
+  );
+
+  app.get(
+    '/v1/schedules/:scheduleId/export.pdf',
+    { schema: { params: ExportParams, querystring: ExportQuery } },
+    async (req, reply) => {
+      const { scheduleId } = req.params as z.infer<typeof ExportParams>;
+      const { style } = req.query as z.infer<typeof ExportQuery>;
+      const chosen = parseStyle(style);
+      try {
+        const data = await loadScheduleExportData(scheduleId, orgIdFor(req));
+        const buf = await renderPdf(data, chosen);
+        return reply
+          .header('content-type', 'application/pdf')
+          .header(
+            'content-disposition',
+            `attachment; filename="schedule-${data.weekStart}-${chosen}.pdf"`,
+          )
+          .header('cache-control', 'private, max-age=60')
+          .send(buf);
+      } catch (err) {
+        const status = (err as { statusCode?: number }).statusCode ?? 500;
+        return reply
+          .code(status)
+          .send({ code: 'EXPORT_FAILED', message: (err as Error).message });
       }
     },
   );

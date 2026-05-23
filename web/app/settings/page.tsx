@@ -38,6 +38,7 @@ import {
   type OrgLocation,
   type LaborRules,
 } from "@/lib/api";
+import { INDUSTRY_OPTIONS } from "@/lib/industries";
 
 type Tab = "general" | "roles" | "locations" | "compliance";
 
@@ -58,22 +59,6 @@ const TIMEZONES = [
   "Asia/Dubai",
   "Asia/Kolkata",
   "Australia/Sydney",
-];
-
-const INDUSTRY_OPTIONS = [
-  { value: "restaurant",   label: "מסעדה / קפה" },
-  { value: "retail",       label: "קמעונאות / חנות" },
-  { value: "pharmacy",     label: "פארם / בית מרקחת" },
-  { value: "kindergarten", label: "גן ילדים / צהרון" },
-  { value: "school",       label: "בית ספר / אקדמיה" },
-  { value: "homecare",     label: "שירותי בית / סיעוד" },
-  { value: "events",       label: "אירועים / קייטרינג" },
-  { value: "garage",       label: "מוסך / שירות רכב" },
-  { value: "clinic",       label: "מרפאה / קליניקה" },
-  { value: "hotel",        label: "מלון / אירוח" },
-  { value: "security",     label: "אבטחה / שמירה" },
-  { value: "warehouse",    label: "מחסן / לוגיסטיקה" },
-  { value: "other",        label: "אחר (הזן ידנית)" },
 ];
 
 function SettingsContent() {
@@ -322,8 +307,8 @@ function SettingsContent() {
         </p>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex gap-1 rounded-lg bg-muted p-1">
+      {/* Tab bar (desktop) */}
+      <div className="hidden sm:flex gap-1 rounded-lg bg-muted p-1">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -335,9 +320,29 @@ function SettingsContent() {
             }`}
           >
             {t.icon}
-            <span className="hidden sm:inline">{t.label}</span>
+            <span>{t.label}</span>
           </button>
         ))}
+      </div>
+
+      {/* Mobile tab pills (horizontal scroll) */}
+      <div className="sm:hidden -mx-4 px-4 overflow-x-auto">
+        <div className="flex gap-2 pb-1 min-w-min">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium whitespace-nowrap touch-target ${
+                tab === t.id
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-card text-muted-foreground"
+              }`}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* General tab */}
@@ -367,7 +372,7 @@ function SettingsContent() {
                   const v = e.target.value;
                   if (v !== "other") setIndustry(v);
                 }}
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs"
+                className="flex h-11 sm:h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs"
               >
                 {INDUSTRY_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -394,7 +399,7 @@ function SettingsContent() {
                 id="timezone"
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs"
+                className="flex h-11 sm:h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs"
               >
                 {TIMEZONES.map((tz) => (
                   <option key={tz} value={tz}>
@@ -413,7 +418,7 @@ function SettingsContent() {
                 id="week-start"
                 value={weekStartDay}
                 onChange={(e) => setWeekStartDay(Number(e.target.value))}
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs"
+                className="flex h-11 sm:h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs"
               >
                 <option value={0}>ראשון</option>
                 <option value={1}>שני</option>

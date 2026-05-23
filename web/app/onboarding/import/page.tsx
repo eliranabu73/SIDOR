@@ -171,7 +171,8 @@ function ImportFlow() {
   }, [shifts]);
 
   return (
-    <div className="mesh-bg min-h-screen p-4">
+    <main className="mesh-bg min-h-screen p-4">
+      <h1 className="sr-only">יבוא סידור מתמונה — סידור4S</h1>
       <div className="mx-auto max-w-5xl space-y-6">
         <div className="flex items-center justify-between">
           <Logo size={36} />
@@ -410,7 +411,7 @@ function ImportFlow() {
           </Card>
         )}
       </div>
-    </div>
+    </main>
   );
 }
 

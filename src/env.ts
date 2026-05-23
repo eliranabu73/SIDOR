@@ -3,6 +3,9 @@ import { cleanEnv, str, port, url } from 'envalid';
 
 export const env = cleanEnv(process.env, {
   NODE_ENV: str({ choices: ['development', 'test', 'production'], default: 'development' }),
+  // AUTH_DISABLED is validated before other vars so the guard below can reference it.
+  /** Dev/test only: bypass JWT verification. Rejected at boot when NODE_ENV=production. */
+  AUTH_DISABLED: str({ default: '' }),
   PORT: port({ default: 3000 }),
   LOG_LEVEL: str({ default: 'info' }),
 
@@ -50,5 +53,20 @@ export const env = cleanEnv(process.env, {
    *  /v1/import/parse route returns 503 (configured-but-not-ready). */
   ANTHROPIC_API_KEY: str({ default: '' }),
 });
+
+// ---------------------------------------------------------------------------
+// Security gate: AUTH_DISABLED must not be 'true' in production (WS-5d Task 4)
+// ---------------------------------------------------------------------------
+// envalid does not have a cross-field refine like Zod, so we validate after
+// cleanEnv() returns. If the guard fires the process exits immediately with a
+// clear error message — identical behaviour to envalid's own validation errors.
+if (env.AUTH_DISABLED === 'true' && env.NODE_ENV === 'production') {
+  // eslint-disable-next-line no-console
+  console.error(
+    '[env] FATAL: AUTH_DISABLED=true is not allowed in production.\n' +
+    '      Remove AUTH_DISABLED or set NODE_ENV != production.',
+  );
+  process.exit(1);
+}
 
 export type Env = typeof env;

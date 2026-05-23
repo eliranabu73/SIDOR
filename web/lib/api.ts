@@ -369,6 +369,19 @@ export function fetchPublishBundle(scheduleId: ID): Promise<PublishBundle> {
   );
 }
 
+export type ScheduleExportStyle = "minimal" | "branded" | "dark";
+export type ScheduleExportFormat = "png" | "pdf";
+
+/** Returns the absolute URL the browser can hit (or anchor-download) for an
+ * image/PDF export of a schedule in a given style. */
+export function getScheduleExportUrl(
+  scheduleId: ID,
+  format: ScheduleExportFormat,
+  style: ScheduleExportStyle,
+): string {
+  return `${API_URL}/v1/schedules/${scheduleId}/export.${format}?style=${style}`;
+}
+
 export interface EmployeeShareShift {
   id: ID;
   assignmentId: ID;

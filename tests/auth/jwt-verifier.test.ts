@@ -163,13 +163,31 @@ describe('verifyJwt — error cases', () => {
     await expectUnauthorized(() => verifyJwt(token, VERIFIER_OPTIONS));
   });
 
-  it('rejects a token missing organization_id in both metadata fields', async () => {
+  it('allows token missing organization_id — DB fallback handles it', async () => {
     const token = await mintToken({
       user_metadata: {},
       app_metadata: {},
     });
 
-    await expectUnauthorized(() => verifyJwt(token, VERIFIER_OPTIONS));
+    const user = await verifyJwt(token, VERIFIER_OPTIONS);
+
+    expect(user.id).toBe(VALID_USER_ID);
+    expect(user.orgId).toBe('');
+    expect(user.role).toBe('employee');
+  });
+
+  it('DB fallback fills orgId when JWT has none', async () => {
+    // Verifier itself returns orgId === '' so the auth plugin can run its DB
+    // fallback (see auth.plugin.ts). This test guards that contract so future
+    // refactors don't accidentally re-introduce a throw on missing org claims.
+    const token = await mintToken({
+      user_metadata: { foo: 'bar' },
+      app_metadata: { role: 'manager' },
+    });
+
+    const user = await verifyJwt(token, VERIFIER_OPTIONS);
+
+    expect(user).toEqual({ id: VALID_USER_ID, orgId: '', role: 'manager' });
   });
 
   it('throws UnauthorizedError when no jwtSecret and no jwksUri provided', async () => {

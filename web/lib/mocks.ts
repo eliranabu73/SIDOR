@@ -27,6 +27,7 @@ export const mockEmployees: Employee[] = [
     orgId: ORG_ID,
     fullName: "דנה כהן",
     email: "dana@example.com",
+    phone: "+972501234561",
     roles: ["מלצרית", "ברמנית"],
     primaryLocationId: "loc_1",
     active: true,
@@ -38,6 +39,7 @@ export const mockEmployees: Employee[] = [
     orgId: ORG_ID,
     fullName: "יוסי לוי",
     email: "yossi@example.com",
+    phone: "+972501234562",
     roles: ["מנהל משמרת"],
     primaryLocationId: "loc_1",
     active: true,
@@ -49,6 +51,7 @@ export const mockEmployees: Employee[] = [
     orgId: ORG_ID,
     fullName: "מאיה בן-דוד",
     email: "maya@example.com",
+    phone: "+972501234563",
     roles: ["מלצרית"],
     primaryLocationId: "loc_2",
     active: true,
@@ -60,6 +63,7 @@ export const mockEmployees: Employee[] = [
     orgId: ORG_ID,
     fullName: "אורי שמש",
     email: "uri@example.com",
+    phone: "+972501234564",
     roles: ["טבח"],
     primaryLocationId: "loc_1",
     active: true,
@@ -71,11 +75,24 @@ export const mockEmployees: Employee[] = [
     orgId: ORG_ID,
     fullName: "תמר רוזן",
     email: "tamar@example.com",
+    phone: "+972501234565",
     roles: ["ברמנית", "מלצרית"],
     primaryLocationId: "loc_2",
     active: true,
     maxHoursPerWeek: 25,
     minHoursPerWeek: 10,
+  },
+  {
+    id: "emp_6",
+    orgId: ORG_ID,
+    fullName: "נועם כהן",
+    email: "noam@example.com",
+    phone: "+972501234566",
+    roles: ["טבח", "מנהל משמרת"],
+    primaryLocationId: "loc_1",
+    active: true,
+    maxHoursPerWeek: 42,
+    minHoursPerWeek: 25,
   },
 ];
 
@@ -183,3 +200,9 @@ export function buildMockSchedule(weekStart?: DateTime): Schedule {
     shifts,
   };
 }
+
+/** Seeded snapshot for public-demo consumers that need a stable reference
+ *  (live components use {@link buildMockSchedule} to anchor on "today"). */
+export const mockSchedule: Schedule = buildMockSchedule();
+export const mockShifts: Shift[] = mockSchedule.shifts;
+export const mockAssignments = mockShifts.flatMap((s) => s.assignments);

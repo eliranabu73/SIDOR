@@ -61,7 +61,7 @@ export default function EmployeeSharePage({
           <div className="glass-card flex items-start gap-3 rounded-2xl p-5">
             <ShieldAlert className="h-5 w-5 shrink-0 text-amber-500" />
             <div>
-              <h2 className="font-semibold">קישור לא תקף</h2>
+              <h1 className="font-semibold text-base">קישור לא תקף</h1>
               <p className="mt-1 text-sm text-muted-foreground">{error}</p>
               <p className="mt-3 text-xs text-muted-foreground">
                 פנו למנהל/ת ובקשו קישור חדש.

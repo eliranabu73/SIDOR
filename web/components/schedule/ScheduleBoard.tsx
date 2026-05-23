@@ -295,8 +295,11 @@ export function ScheduleBoard({
         </div>
       ) : null}
 
-      <div className="overflow-x-auto">
-        <div className="grid grid-cols-7 gap-2 min-w-[640px] md:min-w-[1100px]" role="grid">
+      <div className="sm:overflow-x-auto">
+        <div
+          className="flex flex-col gap-3 sm:grid sm:grid-cols-7 sm:gap-2 sm:min-w-[640px] md:min-w-[1100px]"
+          role="grid"
+        >
           {Array.from({ length: 7 }, (_, day) => {
             const date = weekStart.plus({ days: day });
             const isFirstCol = day === 0;
@@ -304,18 +307,21 @@ export function ScheduleBoard({
               <div
                 key={day}
                 className={cn(
-                  "flex flex-col gap-2",
-                  isFirstCol && "sticky right-0 z-10 bg-card",
+                  "flex flex-col gap-2 rounded-lg border bg-card/40 p-2 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0",
+                  isFirstCol && "sm:sticky sm:right-0 sm:z-10 sm:bg-card",
                 )}
                 role="row"
               >
-                <div className="text-center text-xs font-semibold sticky top-0 z-20 bg-background pb-1 border-b">
-                  <div>{DAYS_HE[day]}</div>
+                <div
+                  role="rowheader"
+                  className="flex items-center justify-between sm:justify-center sm:flex-col text-sm sm:text-xs font-semibold sm:sticky sm:top-0 sm:z-20 sm:bg-background pb-1 sm:border-b"
+                >
+                  <div className="text-base sm:text-xs">{DAYS_HE[day]}</div>
                   <div className="text-muted-foreground tabular-nums">
                     {date.toFormat("d.M")}
                   </div>
                 </div>
-                <div className="flex flex-col gap-2 min-h-32">
+                <div role="gridcell" className="flex flex-col gap-2 min-h-32">
                   {(shiftsByDay[day] ?? []).map((shift) => {
                     const lockedByOther =
                       !!shift.lockedByUserId &&

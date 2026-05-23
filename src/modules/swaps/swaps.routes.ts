@@ -9,12 +9,6 @@ import {
 import { approveSwap, createSwap, rejectSwap } from './swaps.service';
 import { HttpError } from '../../shared/errors';
 
-function actingUserId(req: { headers: Record<string, unknown> }): string {
-  const v = req.headers['x-user-id'];
-  if (typeof v === 'string' && v.length > 0) return v;
-  return '00000000-0000-0000-0000-0000000000aa';
-}
-
 function handleHttpError(reply: FastifyReply, err: unknown) {
   if (err instanceof HttpError) {
     return reply.code(err.statusCode).send({
@@ -31,9 +25,12 @@ function handleHttpError(reply: FastifyReply, err: unknown) {
  * Register with: `app.register(swapsRoutes, { prefix: '/v1' })`
  */
 export async function swapsRoutes(app: FastifyInstance): Promise<void> {
+  const authHandlers =
+    process.env['AUTH_DISABLED'] === 'true' ? [] : [app.authenticate];
+
   app.post(
     '/swaps',
-    { schema: { body: SwapCreateBody } },
+    { schema: { body: SwapCreateBody }, preHandler: authHandlers },
     async (req, reply) => {
       const body = req.body as z.infer<typeof SwapCreateBody>;
       try {
@@ -41,7 +38,7 @@ export async function swapsRoutes(app: FastifyInstance): Promise<void> {
           sourceAssignmentId: body.sourceAssignmentId,
           requestingEmployeeId: body.requestingEmployeeId,
           targetEmployeeId: body.targetEmployeeId ?? null,
-          actingUserId: actingUserId(req),
+          actingUserId: req.user?.id ?? '00000000-0000-0000-0000-0000000000aa',
         });
         return reply.code(201).send(result);
       } catch (err) {
@@ -52,14 +49,14 @@ export async function swapsRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     '/swaps/:swapId/approve',
-    { schema: { params: SwapIdParam, body: SwapApproveBody } },
+    { schema: { params: SwapIdParam, body: SwapApproveBody }, preHandler: authHandlers },
     async (req, reply) => {
       const { swapId } = req.params as z.infer<typeof SwapIdParam>;
       const body = req.body as z.infer<typeof SwapApproveBody>;
       try {
         const result = await approveSwap({
           swapId,
-          actingUserId: actingUserId(req),
+          actingUserId: req.user?.id ?? '00000000-0000-0000-0000-0000000000aa',
           approvingEmployeeId: body.approvingEmployeeId,
           asManager: body.asManager ?? false,
         });
@@ -72,14 +69,14 @@ export async function swapsRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     '/swaps/:swapId/reject',
-    { schema: { params: SwapIdParam, body: SwapRejectBody } },
+    { schema: { params: SwapIdParam, body: SwapRejectBody }, preHandler: authHandlers },
     async (req, reply) => {
       const { swapId } = req.params as z.infer<typeof SwapIdParam>;
       const body = req.body as z.infer<typeof SwapRejectBody>;
       try {
         const result = await rejectSwap({
           swapId,
-          actingUserId: actingUserId(req),
+          actingUserId: req.user?.id ?? '00000000-0000-0000-0000-0000000000aa',
           reason: body.reason,
         });
         return reply.send(result);

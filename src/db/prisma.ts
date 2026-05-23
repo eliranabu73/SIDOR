@@ -27,3 +27,55 @@ export const prisma: PrismaClient = globalThis.__prisma ?? makePrisma();
 if (process.env.NODE_ENV !== 'production') {
   globalThis.__prisma = prisma;
 }
+
+// ---------------------------------------------------------------------------
+// RLS context helper — TASK 2 (WS-5d)
+// ---------------------------------------------------------------------------
+/**
+ * Returns a thin wrapper around `prisma.$transaction` that prepends a
+ * `SET LOCAL app.current_org_id = '<orgId>'` statement before executing the
+ * caller-supplied queries inside a single Postgres transaction.
+ *
+ * This satisfies the Row Level Security policy:
+ *
+ *   CREATE POLICY tenant_isolation ON "employees"
+ *     USING (organization_id::text = current_setting('app.current_org_id', true));
+ *
+ * Chosen approach: explicit `$transaction` wrapper rather than a Prisma
+ * `$extends` middleware.  The `$extends` middleware API does not expose a
+ * per-query hook that runs inside the *same* transaction as the query being
+ * intercepted, so we cannot safely use `SET LOCAL` there (LOCAL is
+ * transaction-scoped in Postgres; outside a transaction it behaves like SET
+ * SESSION which would leak across connection-pool reuse).
+ *
+ * Migration path for other routes: replace direct `prisma.foo.findMany(…)`
+ * calls with:
+ *
+ *   const db = withOrgContext(req.user!.orgId);
+ *   const employees = await db.query((tx) => tx.employee.findMany(…));
+ *
+ * POC wired up in: GET /v1/employees (reads.routes.ts).
+ *
+ * @example
+ *   const db = withOrgContext(orgId);
+ *   const result = await db.query((tx) => tx.employee.findMany({ ... }));
+ */
+export function withOrgContext(orgId: string) {
+  return {
+    /**
+     * Run `queryFn` inside a transaction that first sets the RLS context.
+     * `queryFn` receives a `PrismaClient` scoped to the transaction.
+     */
+    query<T>(queryFn: (tx: PrismaClient) => Promise<T>): Promise<T> {
+      return prisma.$transaction(async (tx) => {
+        // SET LOCAL only affects the current transaction (connection-pool safe).
+        // We sanitise orgId to a UUID pattern to prevent SQL injection.
+        const safeOrgId = orgId.replace(/[^a-f0-9-]/gi, '');
+        await tx.$executeRawUnsafe(
+          `SET LOCAL app.current_org_id = '${safeOrgId}'`,
+        );
+        return queryFn(tx as unknown as PrismaClient);
+      });
+    },
+  };
+}

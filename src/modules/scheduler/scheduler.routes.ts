@@ -16,12 +16,6 @@ const ApplyProposalsBody = z.object({
   ),
 });
 
-function devActingUserId(req: { headers: Record<string, unknown> }): string {
-  const v = req.headers['x-user-id'];
-  if (typeof v === 'string' && v.length > 0) return v;
-  return '00000000-0000-0000-0000-0000000000aa';
-}
-
 const AutoScheduleBody = z.object({
   provider: z.enum(['greedy', 'or-tools']).optional().default('greedy'),
   dryRun: z.boolean().optional().default(true),
@@ -55,7 +49,7 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
       const body = req.body as z.infer<typeof ApplyProposalsBody>;
-      const actingUserId = devAllowed() ? devActingUserId(req) : req.user!.id;
+      const actingUserId = req.user!.id;
 
       try {
         const result = await svc.applyProposals(scheduleId, body.proposals, actingUserId, req.user?.orgId);
@@ -74,7 +68,7 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req, reply) => {
       const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
-      const actingUserId = devAllowed() ? devActingUserId(req) : req.user!.id;
+      const actingUserId = req.user!.id;
 
       try {
         const updated = await svc.publishSchedule(scheduleId, actingUserId);

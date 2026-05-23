@@ -142,11 +142,12 @@ export function ShiftCard({
           )}
           <span
             className={cn(
-              "text-[10px] font-medium rounded-full px-1.5 py-0.5",
+              "text-[10px] font-bold rounded-full px-1.5 py-0.5",
               understaffed
-                ? "bg-destructive/15 text-destructive"
-                : "bg-success/15 text-success",
+                ? "bg-destructive/20 text-destructive"
+                : "bg-success/20 text-success",
             )}
+            aria-label={understaffed ? `${assigned.length} מתוך ${shift.requiredCount} — חסרים עובדים` : `${assigned.length} מתוך ${shift.requiredCount}`}
           >
             {assigned.length}/{shift.requiredCount}
           </span>
@@ -184,7 +185,6 @@ export function ShiftCard({
                     <EmployeeChip
                       employee={emp}
                       density={density}
-                      onRemove={() => onUnassign(emp.id)}
                     />
                   </button>
                 </DropdownMenuTrigger>

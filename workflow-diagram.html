@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>סידור4S — תרשים זרימת עבודה</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --indigo: #6366f1;
+      --indigo-light: #a5b4fc;
+      --cyan: #22d3ee;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --slate-50: #f8fafc;
+      --slate-100: #f1f5f9;
+      --slate-200: #e2e8f0;
+      --slate-300: #cbd5e1;
+      --slate-600: #475569;
+      --slate-700: #334155;
+      --slate-800: #1e293b;
+      --slate-900: #0f172a;
+    }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 32px 24px;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 2rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #a5b4fc, #22d3ee);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      text-align: center;
+      color: #94a3b8;
+      font-size: 0.9rem;
+      margin-bottom: 40px;
+    }
+
+    /* ── PHASE LABELS ── */
+    .phase-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+      display: inline-block;
+    }
+
+    /* ── FLOW COLUMNS ── */
+    .flow-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    /* ── PHASE ROW ── */
+    .phase-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0;
+      position: relative;
+      margin-bottom: 0;
+    }
+
+    .phase-header {
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      transform: rotate(180deg);
+      width: 36px;
+      min-width: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border-radius: 8px 8px 0 0;
+      padding: 12px 4px;
+      flex-shrink: 0;
+    }
+
+    .phase-content {
+      flex: 1;
+      padding: 20px 20px 20px 10px;
+    }
+
+    /* ── CARDS ── */
+    .card-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .card {
+      background: rgba(30, 41, 59, 0.9);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      border-radius: 12px;
+      padding: 14px 16px;
+      min-width: 180px;
+      flex: 1;
+      position: relative;
+      transition: transform 0.2s, box-shadow 0.2s;
+      cursor: default;
+    }
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(99, 102, 241, 0.3);
+      border-color: rgba(99, 102, 241, 0.5);
+    }
+    .card-icon { font-size: 1.4rem; margin-bottom: 6px; display: block; }
+    .card-title { font-size: 0.9rem; font-weight: 700; color: #f1f5f9; margin-bottom: 4px; }
+    .card-sub { font-size: 0.75rem; color: #94a3b8; line-height: 1.5; }
+    .card-route {
+      display: inline-block;
+      margin-top: 6px;
+      font-size: 0.65rem;
+      font-family: 'Courier New', monospace;
+      background: rgba(99, 102, 241, 0.15);
+      color: var(--indigo-light);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .card-endpoint {
+      display: block;
+      margin-top: 4px;
+      font-size: 0.62rem;
+      font-family: 'Courier New', monospace;
+      color: #64748b;
+    }
+
+    /* ── ARROW ── */
+    .arrow-down {
+      text-align: center;
+      font-size: 1.5rem;
+      color: #475569;
+      line-height: 1;
+      padding: 4px 0;
+    }
+    .arrow-row {
+      display: flex;
+      justify-content: center;
+      gap: 48px;
+      padding: 8px 0;
+    }
+    .arrow-right {
+      color: #475569;
+      font-size: 1.2rem;
+      display: flex;
+      align-items: center;
+      padding: 0 4px;
+    }
+
+    /* ── CONNECTOR STRIP ── */
+    .connector {
+      height: 24px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .connector-line {
+      width: 2px;
+      height: 100%;
+      background: linear-gradient(to bottom, rgba(99,102,241,0.5), rgba(34,211,238,0.5));
+    }
+
+    /* ── PHASE COLORS ── */
+    .phase-landing .phase-header { background: rgba(99,102,241,0.15); color: var(--indigo-light); }
+    .phase-landing .card { border-left-color: var(--indigo); border-left-width: 3px; }
+
+    .phase-auth .phase-header { background: rgba(245,158,11,0.15); color: #fcd34d; }
+    .phase-auth .card { border-left-color: var(--amber); border-left-width: 3px; }
+
+    .phase-onboard .phase-header { background: rgba(16,185,129,0.15); color: #6ee7b7; }
+    .phase-onboard .card { border-left-color: var(--emerald); border-left-width: 3px; }
+
+    .phase-schedule .phase-header { background: rgba(99,102,241,0.25); color: #c4b5fd; }
+    .phase-schedule .card { border-left-color: #8b5cf6; border-left-width: 3px; }
+
+    .phase-employees .phase-header { background: rgba(34,211,238,0.15); color: #67e8f9; }
+    .phase-employees .card { border-left-color: var(--cyan); border-left-width: 3px; }
+
+    .phase-ops .phase-header { background: rgba(244,63,94,0.15); color: #fca5a5; }
+    .phase-ops .card { border-left-color: var(--rose); border-left-width: 3px; }
+
+    /* ── DECISION BOX ── */
+    .decision {
+      background: rgba(245,158,11,0.1);
+      border: 2px dashed rgba(245,158,11,0.4);
+      border-radius: 12px;
+      padding: 12px 16px;
+      text-align: center;
+      max-width: 320px;
+      margin: 0 auto;
+    }
+    .decision-title { font-size: 0.8rem; font-weight: 700; color: #fcd34d; margin-bottom: 6px; }
+    .decision-branches {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 8px;
+    }
+    .branch-yes { color: #6ee7b7; font-size: 0.75rem; font-weight: 700; }
+    .branch-no  { color: #fca5a5; font-size: 0.75rem; font-weight: 700; }
+
+    /* ── STATUS BADGE ── */
+    .badge {
+      display: inline-block;
+      font-size: 0.6rem;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 999px;
+      margin-right: 4px;
+    }
+    .badge-green { background: rgba(16,185,129,0.2); color: #6ee7b7; }
+    .badge-amber { background: rgba(245,158,11,0.2); color: #fcd34d; }
+    .badge-purple { background: rgba(139,92,246,0.2); color: #c4b5fd; }
+    .badge-red { background: rgba(244,63,94,0.2); color: #fca5a5; }
+
+    /* ── API LEGEND ── */
+    .legend {
+      max-width: 1100px;
+      margin: 40px auto 0;
+      background: rgba(30,41,59,0.6);
+      border: 1px solid rgba(99,102,241,0.2);
+      border-radius: 16px;
+      padding: 20px 24px;
+    }
+    .legend h2 { font-size: 1rem; font-weight: 700; color: #a5b4fc; margin-bottom: 16px; }
+    .legend-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+    .legend-item { display: flex; flex-direction: column; gap: 2px; }
+    .legend-item .method { font-size: 0.6rem; font-weight: 700; font-family: monospace; }
+    .method-get { color: #6ee7b7; }
+    .method-post { color: #67e8f9; }
+    .method-patch { color: #fcd34d; }
+    .method-delete { color: #fca5a5; }
+    .legend-item .endpoint { font-size: 0.7rem; font-family: monospace; color: #94a3b8; }
+    .legend-item .desc { font-size: 0.7rem; color: #64748b; }
+
+    /* ── SHIFT STATUS ROW ── */
+    .shift-states {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .shift-state {
+      font-size: 0.65rem;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .ss-open     { background: rgba(100,116,139,0.3); color: #94a3b8; }
+    .ss-planned  { background: rgba(99,102,241,0.25); color: #a5b4fc; }
+    .ss-assigned { background: rgba(16,185,129,0.25); color: #6ee7b7; }
+    .ss-locked   { background: rgba(245,158,11,0.25); color: #fcd34d; }
+    .ss-conflict { background: rgba(244,63,94,0.25);  color: #fca5a5; }
+    .ss-published{ background: rgba(34,211,238,0.25); color: #67e8f9; }
+
+    .divider {
+      height: 1px;
+      background: linear-gradient(to right, transparent, rgba(99,102,241,0.3), transparent);
+      margin: 4px 0;
+    }
+
+    .flow-section-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>סידור4S — תרשים זרימת עבודה</h1>
+  <p class="subtitle">כל שלבי המשתמש מהנחתה ועד ניהול שוטף • API endpoints • מצבי משמרת</p>
+
+  <div class="flow-wrapper">
+
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!-- PHASE 1: LANDING                                       -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <div class="phase-row phase-landing">
+      <div class="phase-header">דף בית</div>
+      <div class="phase-content">
+        <div class="flow-section-title">שלב 1 — דף נחיתה</div>
+        <div class="card-row">
+          <div class="card">
+            <span class="card-icon">🏠</span>
+            <div class="card-title">דף הבית</div>
+            <div class="card-sub">Hero, Features Bento, SocialProof, Pricing, Footer</div>
+            <span class="card-route">/</span>
+          </div>
+          <div class="arrow-right">←</div>
+          <div class="card">
+            <span class="card-icon">🟣</span>
+            <div class="card-title">כפתור "התחל חינם"</div>
+            <div class="card-sub">מנווט ל-/login<br/>גם "דמו חי" → /schedule (ללא auth)</div>
+            <span class="card-route">/login</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- connector -->
+    <div class="connector"><div class="connector-line"></div></div>
+
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!-- PHASE 2: AUTH                                          -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <div class="phase-row phase-auth">
+      <div class="phase-header">אימות</div>
+      <div class="phase-content">
+        <div class="flow-section-title">שלב 2 — אימות Supabase</div>
+        <div class="card-row">
+          <div class="card">
+            <span class="card-icon">📧</span>
+            <div class="card-title">Magic Link</div>
+            <div class="card-sub">Supabase שולח מייל עם קישור חד-פעמי.<br/>אין סיסמאות.</div>
+            <span class="card-route">/login</span>
+          </div>
+          <div class="arrow-right">←</div>
+          <div class="card">
+            <span class="card-icon">🔐</span>
+            <div class="card-title">JWT ES256</div>
+            <div class="card-sub">
+              Supabase מוציא JWT עם:<br/>
+              <code style="font-size:0.65rem;color:#a5b4fc">user_id, organization_id, role</code>
+            </div>
+            <span class="card-endpoint">GET /v1/me → memberships[]</span>
+          </div>
+          <div class="arrow-right">←</div>
+          <div class="card">
+            <span class="card-icon">🛡️</span>
+            <div class="card-title">AuthGuard — 3 שערים</div>
+            <div class="card-sub">
+              <span class="badge badge-amber">1</span> session?<br/>
+              <span class="badge badge-amber">2</span> memberships.length ≥ 1?<br/>
+              <span class="badge badge-amber">3</span> render children
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:14px;">
+          <div class="decision">
+            <div class="decision-title">🔀 AuthGuard Decision</div>
+            <div class="card-sub">האם יש session + membership?</div>
+            <div class="decision-branches">
+              <span class="branch-yes">✅ יש → /schedule</span>
+              <span class="branch-no">❌ אין session → /login</span>
+              <span class="branch-no">⚠️ אין membership → /onboarding</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- connector -->
+    <div class="connector"><div class="connector-line"></div></div>
+
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!-- PHASE 3: ONBOARDING                                    -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <div class="phase-row phase-onboard">
+      <div class="phase-header">הכנסה</div>
+      <div class="phase-content">
+        <div class="flow-section-title">שלב 3 — Onboarding (פעם אחת)</div>
+        <div class="card-row">
+          <div class="card">
+            <span class="card-icon">🏢</span>
+            <div class="card-title">יצירת ארגון</div>
+            <div class="card-sub">שם, תחום עסק, סניף ראשי, timezone</div>
+            <span class="card-route">/onboarding</span>
+            <span class="card-endpoint">POST /v1/orgs → Org+Location+Schedule+Membership</span>
+          </div>
+          <div class="arrow-right">←</div>
+          <div class="card">
+            <span class="card-icon">📋</span>
+            <div class="card-title">בחירת טמפלייט</div>
+            <div class="card-sub">
+              13 תבניות לפי ענף:<br/>
+              מסעדה, קמעונאות, פארם, גן ילדים, בית ספר, סיעוד, אירועים, מוסך...
+            </div>
+            <span class="card-route">/onboarding/templates</span>
+            <span class="card-endpoint">POST /v1/templates/:id/apply</span>
+            <span class="card-endpoint">→ roles + shifts + org.industry</span>
+          </div>
+          <div class="arrow-right">←</div>
+          <div class="card">
+            <span class="card-icon">📥</span>
+            <div class="card-title">ייבוא עובדים (אופציונלי)</div>
+            <div class="card-sub">CSV עם שמות, תפקידים, זמינות</div>
+            <span class="card-route">/onboarding/import</span>
+            <span class="card-endpoint">POST /v1/import</span>
+          </div>
+        </div>
+        <div class="arrow-down" style="margin-top:12px;">↓ מיד אחרי יצירת ארגון → JWT refresh → /schedule</div>
+      </div>
+    </div>
+
+    <!-- connector -->
+    <div class="connector"><div class="connector-line"></div></div>
+
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!-- PHASE 4: SCHEDULE                                      -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <div class="phase-row phase-schedule">
+      <div class="phase-header">לוח משמרות</div>
+      <div class="phase-content">
+        <div class="flow-section-title">שלב 4 — ניהול לוח משמרות (שימוש שוטף)</div>
+        <div class="card-row">
+          <div class="card">
+            <span class="card-icon">📅</span>
+            <div class="card-title">צפייה בלוח</div>
+            <div class="card-sub">
+              auto-provisions schedule לפי weekStart.<br/>
+              Grid: ימים × תפקידים
+            </div>
+            <span class="card-route">/schedule</span>
+            <span class="card-endpoint">GET /v1/schedules/ensure?weekStart=...</span>
+            <span class="card-endpoint">GET /v1/schedules/:id/assignments</span>
+          </div>
+          <div class="arrow-right">←</div>
+          <div class="card">
+            <span class="card-icon">🤖</span>
+            <div class="card-title">Auto-Scheduler</div>
+            <div class="card-sub">
+              GreedyProvider או OR-Tools.<br/>
+              dryRun=true → הצגה בלבד.<br/>
+              weights: availability, fairness, weeklyHours...
+            </div>
+            <span class="card-endpoint">POST /v1/schedules/:id/auto-schedule</span>
+          </div>
+          <div class="arrow-right">←</div>
+          <div class="card">
+            <span class="card-icon">✅</span>
+            <div class="card-title">אישור הצעות</div>
+            <div class="card-sub">
+              Manager בוחר הצעות → apply-proposals.<br/>
+              לאחר מכן publish → PUBLISHED.
+            </div>
+            <span class="card-endpoint">POST /v1/schedules/:id/apply-proposals</span>
+            <span class="card-endpoint">POST /v1/schedules/:id/publish</span>
+          </div>
+        </div>
+
+        <!-- Shift States -->
+        <div style="margin-top:14px; padding:12px 14px; background:rgba(15,23,42,0.5); border-radius:10px; border:1px solid rgba(139,92,246,0.2)">
+          <div style="font-size:0.7rem; font-weight:700; color:#94a3b8; margin-bottom:8px;">מצבי משמרת (Shift States)</div>
+          <div class="shift-states">
+            <span class="shift-state ss-open">⬜ OPEN — פתוח</span>
+            <span class="shift-state ss-planned">🟦 PLANNED — משובץ (draft)</span>
+            <span class="shift-state ss-assigned">🟩 ASSIGNED — מאושר</span>
+            <span class="shift-state ss-locked">🔒 LOCKED — נעול</span>
+            <span class="shift-state ss-conflict">🔴 CONFLICT — התנגשות</span>
+            <span class="shift-state ss-published">🔵 PUBLISHED — פורסם לעובדים</span>
+          </div>
+        </div>
+
+        <!-- Manual shift creation -->
+        <div style="margin-top:12px;">
+          <div class="card" style="max-width:400px">
+            <span class="card-icon">➕</span>
+            <div class="card-title">יצירת משמרת ידנית</div>
+            <div class="card-sub">scheduleId, locationId, roleId, startAtUtc, endAtUtc</div>
+            <span class="card-endpoint">POST /v1/shifts  →  PATCH /v1/shifts/:id  →  DELETE /v1/shifts/:id</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- connector -->
+    <div class="connector"><div class="connector-line"></div></div>
+
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!-- PHASE 5: EMPLOYEES                                     -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <div class="phase-row phase-employees">
+      <div class="phase-header">עובדים</div>
+      <div class="phase-content">
+        <div class="flow-section-title">שלב 5 — ניהול עובדים, תפקידים וסניפים</div>
+        <div class="card-row">
+          <div class="card">
+            <span class="card-icon">👤</span>
+            <div class="card-title">עובדים</div>
+            <div class="card-sub">שם, מייל, טלפון, סוג העסקה, תפקידים, סניף ברירת מחדל</div>
+            <span class="card-route">/employees</span>
+            <span class="card-endpoint">POST/PATCH/DELETE /v1/employees</span>
+          </div>
+          <div class="arrow-right">←</div>
+          <div class="card">
+            <span class="card-icon">🏷️</span>
+            <div class="card-title">תפקידים (Roles)</div>
+            <div class="card-sub">מלצר, שף, קופאי, גננת...<br/>נוצרים ע"י template apply או ידנית</div>
+            <span class="card-endpoint">POST /v1/roles</span>
+          </div>
+          <div class="arrow-right">←</div>
+          <div class="card">
+            <span class="card-icon">📍</span>
+            <div class="card-title">סניפים (Locations)</div>
+            <div class="card-sub">שם, timezone<br/>עובד יכול להיות משויך לסניף ספציפי</div>
+            <span class="card-endpoint">POST /v1/locations</span>
+          </div>
+          <div class="arrow-right">←</div>
+          <div class="card">
+            <span class="card-icon">📆</span>
+            <div class="card-title">זמינות עובד</div>
+            <div class="card-sub">הגדרות זמינות לכל יום.<br/>ה-scheduler מכבד אותן.</div>
+            <span class="card-endpoint">GET/POST /v1/availability</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- connector -->
+    <div class="connector"><div class="connector-line"></div></div>
+
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!-- PHASE 6: OPS & ADVANCED                                -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <div class="phase-row phase-ops">
+      <div class="phase-header">תפעול</div>
+      <div class="phase-content">
+        <div class="flow-section-title">שלב 6 — מודולים תפעוליים מתקדמים</div>
+        <div class="card-row">
+          <div class="card">
+            <span class="card-icon">🔄</span>
+            <div class="card-title">החלפות (Swaps)</div>
+            <div class="card-sub">עובד מבקש להחליף משמרת עם אחר. Manager מאשר.</div>
+            <span class="card-route">/swaps</span>
+            <span class="card-endpoint">POST /v1/swaps + /v1/swaps/marketplace</span>
+          </div>
+          <div class="card">
+            <span class="card-icon">⚖️</span>
+            <div class="card-title">הוגנות (Fairness)</div>
+            <div class="card-sub">מעקב אחר חלוקת שעות שוויונית בין עובדים</div>
+            <span class="card-route">/fairness</span>
+            <span class="card-endpoint">GET /v1/schedules/:id/fairness</span>
+          </div>
+          <div class="card">
+            <span class="card-icon">💰</span>
+            <div class="card-title">עלות עבודה</div>
+            <div class="card-sub">חישוב עלות לפי משמרות ושכר</div>
+            <span class="card-endpoint">GET /v1/schedules/:id/labor-cost</span>
+          </div>
+          <div class="card">
+            <span class="card-icon">📤</span>
+            <div class="card-title">שיתוף / WhatsApp</div>
+            <div class="card-sub">ייצוא לוח משמרות לשיתוף עם עובדים</div>
+            <span class="card-endpoint">GET /v1/share/:token</span>
+          </div>
+          <div class="card">
+            <span class="card-icon">🔔</span>
+            <div class="card-title">Realtime</div>
+            <div class="card-sub">SSE — עדכונים חיים בלוח ללא ריענון</div>
+            <span class="card-endpoint">GET /v1/realtime/schedules/:id</span>
+          </div>
+          <div class="card">
+            <span class="card-icon">⚙️</span>
+            <div class="card-title">הגדרות ארגון</div>
+            <div class="card-sub">שם, תחום (13 אפשרויות), timezone, כללי עבודה</div>
+            <span class="card-route">/settings</span>
+            <span class="card-endpoint">GET/PATCH /v1/settings</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /flow-wrapper -->
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- API LEGEND                                              -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="legend">
+    <h2>📡 כל ה-API Endpoints — מיפוי מלא</h2>
+    <div class="legend-grid">
+
+      <div class="legend-item">
+        <span class="method method-get">GET</span>
+        <span class="endpoint">/v1/me</span>
+        <span class="desc">פרופיל + memberships</span>
+      </div>
+      <div class="legend-item">
+        <span class="method method-post">POST</span>
+        <span class="endpoint">/v1/orgs</span>
+        <span class="desc">יצירת ארגון + membership + location + schedule</span>
+      </div>
+      <div class="legend-item">
+        <span class="method method-get">GET</span>
+        <span class="endpoint">/v1/templates</span>
+        <span class="desc">רשימת 13 תבניות</span>
+      </div>
+      <div class="legend-item">
+        <span class="method method-post">POST</span>
+        <span class="endpoint">/v1/templates/:id/apply</span>
+        <span class="desc">החלת תבנית — upsert roles + shifts</span>
+      </div>
+
+      <div class="legend-item">
+        <span class="method method-get">GET</span>
+        <span class="endpoint">/v1/schedules/ensure</span>
+        <span class="desc">קבל/צור schedule לפי weekStart</span>
+      </div>
+      <div class="legend-item">
+        <span class="method method-post">POST</span>
+        <span class="endpoint">/v1/schedules/:id/auto-schedule</span>
+        <span class="desc">הרצת scheduler (greedy/or-tools, dryRun)</span>
+      </div>
+      <div class="legend-item">
+        <span class="method method-post">POST</span>
+        <span class="endpoint">/v1/schedules/:id/apply-proposals</span>
+        <span class="desc">אישור הצעות שיבוץ</span>
+      </div>
+      <div class="legend-item">
+        <span class="method method-post">POST</span>
+        <span class="endpoint">/v1/schedules/:id/publish</span>
+        <span class="desc">פרסום לוח → PUBLISHED status</span>
+      </div>
+
+      <div class="legend-item">
+        <span class="method method-post">POST</span>
+        <span class="endpoint">/v1/shifts</span>
+        <span class="desc">יצירת משמרת ידנית</span>
+      </div>
+      <div class="legend-item">
+        <span class="method method-patch">PATCH</span>
+        <span class="endpoint">/v1/shifts/:id</span>
+        <span class="desc">עדכון שעות/תפקיד/סניף</span>
+      </div>
+      <div class="legend-item">
+        <span class="method method-delete">DELETE</span>
+        <span class="endpoint">/v1/shifts/:id</span>
+        <span class="desc">ביטול משמרת</span>
+      </div>
+
+      <div class="legend-item">
+        <span class="method method-post">POST</span>
+        <span class="endpoint">/v1/employees</span>
+        <span class="desc">הוספת עובד</span>
+      </div>
+      <div class="legend-item">
+        <span class="method method-patch">PATCH</span>
+        <span class="endpoint">/v1/employees/:id</span>
+        <span class="desc">עדכון עובד (roles, location, phone...)</span>
+      </div>
+      <div class="legend-item">
+        <span class="method method-delete">DELETE</span>
+        <span class="endpoint">/v1/employees/:id</span>
+        <span class="desc">מחיקה רכה (soft delete)</span>
+      </div>
+      <div class="legend-item">
+        <span class="method method-post">POST</span>
+        <span class="endpoint">/v1/roles</span>
+        <span class="desc">יצירת תפקיד חדש</span>
+      </div>
+      <div class="legend-item">
+        <span class="method method-post">POST</span>
+        <span class="endpoint">/v1/locations</span>
+        <span class="desc">יצירת סניף חדש</span>
+      </div>
+
+      <div class="legend-item">
+        <span class="method method-post">POST</span>
+        <span class="endpoint">/v1/swaps</span>
+        <span class="desc">בקשת החלפת משמרת</span>
+      </div>
+      <div class="legend-item">
+        <span class="method method-get">GET</span>
+        <span class="endpoint">/v1/schedules/:id/fairness</span>
+        <span class="desc">מדדי הוגנות</span>
+      </div>
+      <div class="legend-item">
+        <span class="method method-get">GET</span>
+        <span class="endpoint">/v1/schedules/:id/labor-cost</span>
+        <span class="desc">עלות עבודה</span>
+      </div>
+      <div class="legend-item">
+        <span class="method method-get">GET</span>
+        <span class="endpoint">/v1/realtime/schedules/:id</span>
+        <span class="desc">SSE stream — עדכונים חיים</span>
+      </div>
+      <div class="legend-item">
+        <span class="method method-patch">PATCH</span>
+        <span class="endpoint">/v1/settings</span>
+        <span class="desc">עדכון הגדרות ארגון</span>
+      </div>
+      <div class="legend-item">
+        <span class="method method-post">POST</span>
+        <span class="endpoint">/v1/import</span>
+        <span class="desc">ייבוא CSV עובדים</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- TEMPLATE LIST                                           -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="legend" style="margin-top:20px;">
+    <h2>📋 13 תבניות תעשייתיות</h2>
+    <div class="legend-grid" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));">
+      <div class="legend-item">
+        <span style="font-size:1.1rem">🍽️</span>
+        <span class="endpoint">restaurant</span>
+        <span class="desc">מסעדה / קפה</span>
+      </div>
+      <div class="legend-item">
+        <span style="font-size:1.1rem">👕</span>
+        <span class="endpoint">retail</span>
+        <span class="desc">קמעונאות / חנות בגדים</span>
+      </div>
+      <div class="legend-item">
+        <span style="font-size:1.1rem">💊</span>
+        <span class="endpoint">pharmacy</span>
+        <span class="desc">פארם / בית מרקחת</span>
+      </div>
+      <div class="legend-item">
+        <span style="font-size:1.1rem">🏥</span>
+        <span class="endpoint">clinic</span>
+        <span class="desc">מרפאה / קליניקה</span>
+      </div>
+      <div class="legend-item">
+        <span style="font-size:1.1rem">🏨</span>
+        <span class="endpoint">hotel</span>
+        <span class="desc">מלון / אירוח</span>
+      </div>
+      <div class="legend-item">
+        <span style="font-size:1.1rem">🔒</span>
+        <span class="endpoint">security</span>
+        <span class="desc">אבטחה / שמירה</span>
+      </div>
+      <div class="legend-item">
+        <span style="font-size:1.1rem">📦</span>
+        <span class="endpoint">warehouse</span>
+        <span class="desc">מחסן / לוגיסטיקה</span>
+      </div>
+      <div class="legend-item">
+        <span style="font-size:1.1rem">🧒</span>
+        <span class="endpoint">kindergarten</span>
+        <span class="desc">גן ילדים / צהרון ✨ חדש</span>
+      </div>
+      <div class="legend-item">
+        <span style="font-size:1.1rem">📚</span>
+        <span class="endpoint">school</span>
+        <span class="desc">בית ספר / אקדמיה ✨ חדש</span>
+      </div>
+      <div class="legend-item">
+        <span style="font-size:1.1rem">🏠</span>
+        <span class="endpoint">homecare</span>
+        <span class="desc">שירותי בית / סיעוד ✨ חדש</span>
+      </div>
+      <div class="legend-item">
+        <span style="font-size:1.1rem">🎉</span>
+        <span class="endpoint">events</span>
+        <span class="desc">אירועים / קייטרינג ✨ חדש</span>
+      </div>
+      <div class="legend-item">
+        <span style="font-size:1.1rem">🔧</span>
+        <span class="endpoint">garage</span>
+        <span class="desc">מוסך / שירות רכב ✨ חדש</span>
+      </div>
+      <div class="legend-item">
+        <span style="font-size:1.1rem">🏢</span>
+        <span class="endpoint">other</span>
+        <span class="desc">אחר (כל תחום)</span>
+      </div>
+    </div>
+  </div>
+
+  <p style="text-align:center; color:#334155; font-size:0.7rem; margin-top:24px;">
+    סידור4S v0.4 • זרימת עבודה מלאה • 2026
+  </p>
+
+</body>
+</html>

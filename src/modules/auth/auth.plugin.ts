@@ -28,7 +28,7 @@ import type {
 import fp from 'fastify-plugin';
 import { verifyJwt } from './jwt-verifier.js';
 import { UnauthorizedError } from './errors.js';
-import { prisma } from '../../db/prisma.js';
+import { prisma, withOrgContext } from '../../db/prisma.js';
 // Side-effect import: registers the `user` field on FastifyRequest via
 // module augmentation.
 import './types.js';
@@ -51,6 +51,23 @@ declare module 'fastify' {
      * the user is not a member of the claimed org.
      */
     requireMembership: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
+  }
+  interface FastifyRequest {
+    /**
+     * Org-scoped Prisma wrapper that sets `app.current_org_id` before each
+     * query, enforcing the RLS tenant-isolation policy.
+     *
+     * Available on any request that has passed through `app.authenticate`.
+     * Use in route handlers:
+     *
+     *     const employees = await req.orgPrisma.query(tx =>
+     *       tx.employee.findMany({ where: { isActive: true } })
+     *     );
+     *
+     * Migration path: replace direct `prisma.foo.*` calls with
+     * `req.orgPrisma.query(tx => tx.foo.*)` to get automatic RLS isolation.
+     */
+    orgPrisma: ReturnType<typeof withOrgContext>;
   }
 }
 
@@ -118,6 +135,12 @@ const authPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
       }
 
       req.user = user;
+      // Attach org-scoped Prisma wrapper so route handlers can use RLS
+      // automatically. orgId may be '' for unauthenticated-but-passing users
+      // (new users hitting onboarding routes); routes requiring an org must
+      // add requireMembership, which guarantees a non-empty orgId before the
+      // handler runs.
+      req.orgPrisma = withOrgContext(user.orgId ?? '');
     } catch (err) {
       if (err instanceof UnauthorizedError) {
         return reply.code(err.statusCode).send({ code: err.code, message: err.message });

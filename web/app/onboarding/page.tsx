@@ -20,11 +20,12 @@ import { AuthGuard } from "@/components/auth/AuthGuard";
 import { Logo } from "@/components/brand/Logo";
 import { getSupabase } from "@/lib/supabase";
 import { createOrg } from "@/lib/api";
+import { INDUSTRY_OPTIONS } from "@/lib/industries";
 
 const schema = z.object({
   name: z.string().min(2, "שם הארגון חייב להיות לפחות 2 תווים"),
   defaultLocationName: z.string().min(1).optional(),
-  industry: z.enum(["restaurant", "retail", "pharmacy", "other"]),
+  industry: z.string().min(1).max(40),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -38,7 +39,7 @@ function OnboardingForm() {
     defaultValues: {
       name: "",
       defaultLocationName: "ראשי",
-      industry: "other",
+      industry: "restaurant",
     },
   });
 
@@ -69,14 +70,15 @@ function OnboardingForm() {
   };
 
   return (
-    <div className="mesh-bg flex min-h-screen items-center justify-center p-4">
+    <main className="mesh-bg flex min-h-screen items-center justify-center p-4">
+      <h1 className="sr-only">הגדרת ארגון — סידור4S</h1>
       <Card className="glass-card w-full max-w-md">
         <CardHeader>
           <div className="mb-3 flex justify-center">
             <Logo size={36} />
           </div>
           {/* 3-dot progress */}
-          <div className="flex gap-2 mb-8 justify-center" aria-label="שלב 1 מתוך 3">
+          <div role="group" className="flex gap-2 mb-8 justify-center" aria-label="שלב 1 מתוך 3">
             {[0,1,2].map(i => (
               <div key={i} className={`w-2 h-2 rounded-full transition-colors ${i === 0 ? 'bg-[#6366F1]' : 'bg-muted'}`} />
             ))}
@@ -125,10 +127,11 @@ function OnboardingForm() {
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs"
                 {...form.register("industry")}
               >
-                <option value="restaurant">מסעדה / קפה</option>
-                <option value="retail">קמעונאות / חנות בגדים</option>
-                <option value="pharmacy">פארם / בית מרקחת</option>
-                <option value="other">אחר</option>
+                {INDUSTRY_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -152,7 +155,7 @@ function OnboardingForm() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </main>
   );
 }
 

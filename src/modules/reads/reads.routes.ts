@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { prisma } from '../../db/prisma';
+import { prisma, withOrgContext } from '../../db/prisma';
 import { HttpError, NotFoundError } from '../../shared/errors';
 
 /**
@@ -111,13 +111,41 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     '/employees',
     { preHandler: authHandlers },
+    /**
+     * RLS POC (WS-5d Task 2): uses req.orgPrisma (withOrgContext wrapper) when
+     * the user has been authenticated, so the query runs inside a transaction
+     * that first executes `SET LOCAL app.current_org_id = '<orgId>'`.
+     *
+     * When AUTH_DISABLED is true (dev/demo mode), req.orgPrisma is undefined
+     * because app.authenticate was skipped; we fall back to direct prisma.
+     *
+     * Migration path for all other reads.routes endpoints:
+     *   Replace `prisma.foo.findMany({ where: { organizationId: orgId } })`
+     *   with `req.orgPrisma.query(tx => tx.foo.findMany(...))` — the RLS
+     *   policy itself then enforces the org scope at the DB level.
+     */
     async (req, reply) => {
       try {
-        const employees = await prisma.employee.findMany({
-          where: { organizationId: orgIdFor(req), isActive: true },
-          include: { roles: { include: { role: true } } },
-          orderBy: { fullName: 'asc' },
-        });
+        const orgId = orgIdFor(req);
+        // When authenticated, req.orgPrisma runs the query inside a transaction
+        // that first sets `app.current_org_id` to activate the RLS policy.
+        // When AUTH_DISABLED is true (dev/demo) req.orgPrisma is undefined because
+        // app.authenticate was skipped — fall back to an ad-hoc withOrgContext or
+        // direct prisma (the RLS policy is not enforced in that case, which is
+        // acceptable for dev-only demo deployments).
+        const employees = req.orgPrisma
+          ? await req.orgPrisma.query((tx) =>
+              tx.employee.findMany({
+                where: { organizationId: orgId, isActive: true },
+                include: { roles: { include: { role: true } } },
+                orderBy: { fullName: 'asc' },
+              }),
+            )
+          : await prisma.employee.findMany({
+              where: { organizationId: orgId, isActive: true },
+              include: { roles: { include: { role: true } } },
+              orderBy: { fullName: 'asc' },
+            });
 
         return reply.send(
           employees.map((e) => ({

@@ -429,6 +429,14 @@ html[data-theme="dark"] .bento-card:hover {
 }
 
 /* ============================================================
+   Mobile utilities — WCAG 2.5.5 touch-target minimum (44×44).
+============================================================ */
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* ============================================================
    Print stylesheet — manager → employee schedule export
    "ייצוא לעובדים" prints the board only; hide chrome + side rails.
    The exported PDF/PNG is shared in WhatsApp manually.

@@ -16,7 +16,7 @@ function fairnessTone(score?: number): {
 } {
   if (score == null) return { label: "—", className: "bg-muted text-muted-foreground" };
   if (score >= 0.8) return { label: "מאוזן", className: "bg-success/15 text-success" };
-  if (score >= 0.5) return { label: "סביר", className: "bg-warning/20 text-warning-foreground" };
+  if (score >= 0.5) return { label: "סביר", className: "bg-warning/20 text-foreground" };
   return { label: "חוסר איזון", className: "bg-destructive/15 text-destructive" };
 }
 

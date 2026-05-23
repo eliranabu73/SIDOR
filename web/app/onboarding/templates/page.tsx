@@ -112,7 +112,7 @@ function TemplatesFlow() {
   };
 
   return (
-    <div className="mesh-bg min-h-screen p-4 pb-28">
+    <main className="mesh-bg min-h-screen p-4 pb-28">
       <div className="mx-auto max-w-3xl space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between pt-2">
@@ -196,7 +196,7 @@ function TemplatesFlow() {
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }
 

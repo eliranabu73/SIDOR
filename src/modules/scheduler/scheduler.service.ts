@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../db/prisma';
 import { GreedySchedulerProvider } from './providers/greedy.provider';
+import { OrToolsSchedulerProvider } from './providers/or-tools.provider';
 import { applyAssignment } from '../assignments/assignments.service';
 import { writeAudit } from '../audit/audit.service';
 import { NotFoundError } from '../../shared/errors';
@@ -41,8 +42,7 @@ export class SchedulerService {
       case 'greedy':
         return new GreedySchedulerProvider(this.prisma);
       case 'or-tools':
-        // TODO(phase-F): plug in ORToolsSchedulerProvider behind this branch.
-        return new GreedySchedulerProvider(this.prisma);
+        return new OrToolsSchedulerProvider(this.prisma);
       default:
         return new GreedySchedulerProvider(this.prisma);
     }
@@ -51,9 +51,21 @@ export class SchedulerService {
   async run(
     input: SchedulerInput,
     providerName: ProviderName = 'greedy',
-  ): Promise<SchedulerOutput> {
+  ): Promise<SchedulerOutput & { warning?: string }> {
     const provider = this.pickProvider(providerName);
-    return provider.run(input);
+    try {
+      return await provider.run(input);
+    } catch (err) {
+      if (providerName === 'or-tools') {
+        // Fail-soft: optimizer crashed (e.g., no feasible solution). Fall back
+        // to greedy so the API still returns proposals, but surface the issue.
+        const fallback = new GreedySchedulerProvider(this.prisma);
+        const result = await fallback.run(input);
+        const message = err instanceof Error ? err.message : String(err);
+        return { ...result, warning: `or-tools optimizer failed (${message}); fell back to greedy` };
+      }
+      throw err;
+    }
   }
 
   async applyProposals(

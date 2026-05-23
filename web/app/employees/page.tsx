@@ -169,19 +169,20 @@ function EmployeesInner() {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between gap-3 mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 mb-4">
         <h1 className="text-xl font-semibold">עובדים</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full sm:w-auto items-center gap-2">
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="חיפוש לפי שם…"
-            className="w-56"
+            className="flex-1 sm:w-56 sm:flex-none h-11 sm:h-9"
             aria-label="חיפוש עובד/ת"
           />
-          <Button onClick={startCreate}>
+          <Button onClick={startCreate} className="h-11 sm:h-10 shrink-0">
             <Plus className="h-4 w-4" />
-            הוסף עובד/ת
+            <span className="hidden sm:inline">הוסף עובד/ת</span>
+            <span className="sm:hidden">הוסף</span>
           </Button>
         </div>
       </div>
@@ -205,7 +206,7 @@ function EmployeesInner() {
       )}
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="left">
+        <SheetContent side="left" className="w-[90%] sm:w-3/4 overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{editing ? "עריכת עובד/ת" : "עובד/ת חדש/ה"}</SheetTitle>
             <SheetDescription>
