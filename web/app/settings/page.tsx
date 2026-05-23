@@ -60,6 +60,22 @@ const TIMEZONES = [
   "Australia/Sydney",
 ];
 
+const INDUSTRY_OPTIONS = [
+  { value: "restaurant",   label: "מסעדה / קפה" },
+  { value: "retail",       label: "קמעונאות / חנות" },
+  { value: "pharmacy",     label: "פארם / בית מרקחת" },
+  { value: "kindergarten", label: "גן ילדים / צהרון" },
+  { value: "school",       label: "בית ספר / אקדמיה" },
+  { value: "homecare",     label: "שירותי בית / סיעוד" },
+  { value: "events",       label: "אירועים / קייטרינג" },
+  { value: "garage",       label: "מוסך / שירות רכב" },
+  { value: "clinic",       label: "מרפאה / קליניקה" },
+  { value: "hotel",        label: "מלון / אירוח" },
+  { value: "security",     label: "אבטחה / שמירה" },
+  { value: "warehouse",    label: "מחסן / לוגיסטיקה" },
+  { value: "other",        label: "אחר (הזן ידנית)" },
+];
+
 function SettingsContent() {
   const [tab, setTab] = React.useState<Tab>("general");
   const [settings, setSettings] = React.useState<OrgSettings | null>(null);
@@ -344,12 +360,29 @@ function SettingsContent() {
 
             <div className="space-y-1">
               <Label htmlFor="industry">תחום / סוג עסק</Label>
-              <Input
+              <select
                 id="industry"
-                value={industry}
-                onChange={(e) => setIndustry(e.target.value)}
-                placeholder="מסעדה, מרפאה, בית מלון, מחסן, קליניקה..."
-              />
+                value={INDUSTRY_OPTIONS.find((o) => o.value === industry) ? industry : "other"}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v !== "other") setIndustry(v);
+                }}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs"
+              >
+                {INDUSTRY_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              {(!INDUSTRY_OPTIONS.find((o) => o.value === industry) ||
+                industry === "other") && (
+                <Input
+                  value={industry}
+                  onChange={(e) => setIndustry(e.target.value)}
+                  placeholder="הזן תחום פעילות..."
+                />
+              )}
               <p className="text-xs text-muted-foreground">
                 ניתן להגדיר כל תחום — הסידור יבנה לפי התפקידים וכללי העבודה שתגדיר.
               </p>

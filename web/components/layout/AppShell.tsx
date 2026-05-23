@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeftRight, CalendarDays, Scale, Settings, Users, LogOut } from "lucide-react";
+import { ArrowLeftRight, CalendarDays, Scale, Settings, Users, LogOut, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/Logo";
@@ -13,6 +13,12 @@ import { toast } from "sonner";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
   const nav: { href: string; label: string; icon: React.ReactNode }[] = [
     { href: "/schedule", label: "סידור עבודה", icon: <CalendarDays className="h-4 w-4" /> },
     { href: "/employees", label: "עובדים", icon: <Users className="h-4 w-4" /> },
@@ -38,7 +44,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/schedule" aria-label="סידור4S">
             <Logo size={26} />
           </Link>
-          <nav className="flex items-center gap-1" aria-label="ניווט ראשי">
+          <button
+            className="sm:hidden ms-auto me-2 rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            aria-label={mobileOpen ? "סגור תפריט" : "פתח תפריט"}
+            aria-expanded={mobileOpen}
+            onClick={() => setMobileOpen((v) => !v)}
+          >
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+          <nav className="hidden sm:flex items-center gap-1" aria-label="ניווט ראשי">
             {nav.map((item) => {
               const active = pathname?.startsWith(item.href);
               return (
@@ -67,6 +81,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
       </header>
+      {mobileOpen && (
+        <nav
+          className="sm:hidden sticky top-14 z-20 border-b border-border bg-card/95 backdrop-blur-sm"
+          aria-label="ניווט נייד"
+        >
+          <div className="flex flex-col px-4 py-2 gap-1">
+            {nav.map((item) => {
+              const active = pathname?.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                    active
+                      ? "bg-secondary text-secondary-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                  )}
+                  aria-current={active ? "page" : undefined}
+                >
+                  {item.icon}
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      )}
       <main className="flex-1 min-h-0">{children}</main>
     </div>
   );
