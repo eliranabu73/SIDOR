@@ -907,6 +907,47 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // -------------------------------------------------------------------------
+  // GET /v1/admin/db-info — diagnostic (no admin gate) — verify which DB
+  // Vercel is connecting to + which columns memberships has. Safe info only.
+  // -------------------------------------------------------------------------
+  app.get('/db-info', async (_req, _reply) => {
+    try {
+      const rows = await prisma.$queryRawUnsafe<
+        Array<{
+          db: string;
+          host: string;
+          user: string;
+          schema: string;
+        }>
+      >(
+        `SELECT current_database()::text AS db,
+                inet_server_addr()::text AS host,
+                current_user::text AS user,
+                current_schema()::text AS schema`,
+      );
+      const cols = await prisma.$queryRawUnsafe<Array<{ column_name: string }>>(
+        `SELECT column_name::text FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'memberships'
+          ORDER BY ordinal_position`,
+      );
+      const orgCols = await prisma.$queryRawUnsafe<Array<{ column_name: string }>>(
+        `SELECT column_name::text FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'organizations'
+          ORDER BY ordinal_position`,
+      );
+      return {
+        connection: rows[0],
+        membershipColumns: cols.map((c) => c.column_name),
+        organizationColumns: orgCols.map((c) => c.column_name),
+      };
+    } catch (err) {
+      return {
+        error: err instanceof Error ? err.message : 'Unknown',
+      };
+    }
+  });
+
+  // -------------------------------------------------------------------------
   // POST /v1/admin/sign-in-as — issue a Supabase session for any user via service role.
   // Body: { email }
   // Returns: { access_token, refresh_token, user } — caller stores in localStorage
