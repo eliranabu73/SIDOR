@@ -81,12 +81,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         tx.organization.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
         tx.shift.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
         tx.$queryRawUnsafe<Array<{ count: bigint }>>(
-          `SELECT COUNT(DISTINCT organization_id)::bigint AS count
+          `SELECT COUNT(DISTINCT "organizationId")::bigint AS count
              FROM schedule_audit_logs
-            WHERE created_at >= NOW() - INTERVAL '7 days'`,
+            WHERE "createdAt" >= NOW() - INTERVAL '7 days'`,
         ),
         tx.$queryRawUnsafe<Array<{ count: bigint }>>(
-          `SELECT COUNT(DISTINCT user_id)::bigint AS count FROM memberships`,
+          `SELECT COUNT(DISTINCT "userId")::bigint AS count FROM memberships`,
         ),
       ]);
 
@@ -238,7 +238,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   // -------------------------------------------------------------------------
   // /v1/admin/users — paginated user listing built from `memberships`.
-  // We can't easily reach auth.users without service-role; expose user_id
+  // We can't easily reach auth.users without service-role; expose "userId"
   // plus their org list for now.
   // -------------------------------------------------------------------------
   app.get(
@@ -252,13 +252,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return db.query(async (tx) => {
         // Group memberships by userId, paginate users, then load orgs per user.
         const grouped = await tx.$queryRawUnsafe<
-          Array<{ user_id: string; org_count: bigint; first_joined: Date }>
+          Array<{ userId: string; org_count: bigint; first_joined: Date }>
         >(
-          `SELECT user_id,
+          `SELECT "userId",
                   COUNT(*)::bigint AS org_count,
-                  MIN(created_at) AS first_joined
+                  MIN("createdAt") AS first_joined
              FROM memberships
-            GROUP BY user_id
+            GROUP BY "userId"
             ORDER BY first_joined DESC
             LIMIT $1 OFFSET $2`,
           q.limit,
@@ -266,10 +266,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         );
 
         const totalRow = await tx.$queryRawUnsafe<Array<{ count: bigint }>>(
-          `SELECT COUNT(DISTINCT user_id)::bigint AS count FROM memberships`,
+          `SELECT COUNT(DISTINCT "userId")::bigint AS count FROM memberships`,
         );
 
-        const userIds = grouped.map((g) => g.user_id);
+        const userIds = grouped.map((g) => g.userId);
         const memberships = userIds.length
           ? await tx.membership.findMany({
               where: { userId: { in: userIds } },
@@ -298,14 +298,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           limit: q.limit,
           offset: q.offset,
           items: grouped.map((g) => {
-            const extra = enrichment.get(g.user_id);
+            const extra = enrichment.get(g.userId);
             return {
-              userId: g.user_id,
+              userId: g.userId,
               email: extra?.email ?? null,
               lastSignInAt: extra?.lastSignInAt ?? null,
               orgCount: Number(g.org_count),
               firstJoined: g.first_joined,
-              memberships: (byUser.get(g.user_id) ?? []).map((m) => ({
+              memberships: (byUser.get(g.userId) ?? []).map((m) => ({
                 role: m.role,
                 joinedAt: m.createdAt,
                 org: m.organization,
@@ -449,7 +449,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         await db.query(async (tx) => {
           await tx.$executeRawUnsafe(
             `INSERT INTO schedule_audit_logs
-               (id, organization_id, user_id, action_type, entity_type, entity_id, "afterDataJsonb", created_at)
+               (id, "organizationId", "userId", "actionType", "entityType", "entityId", "afterDataJsonb", "createdAt")
              VALUES (gen_random_uuid(), $1, $2, 'UPDATE', 'admin.impersonate', $3, $4::jsonb, NOW())`,
             body.targetOrgId ?? '00000000-0000-0000-0000-000000000000',
             adminId,
@@ -514,7 +514,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
         await tx.$executeRawUnsafe(
           `INSERT INTO schedule_audit_logs
-             (id, organization_id, user_id, action_type, entity_type, entity_id, "beforeDataJsonb", "afterDataJsonb", created_at)
+             (id, "organizationId", "userId", "actionType", "entityType", "entityId", "beforeDataJsonb", "afterDataJsonb", "createdAt")
            VALUES (gen_random_uuid(), $1, $2, 'UPDATE', 'admin.plan_change', $1, $3::jsonb, $4::jsonb, NOW())`,
           id,
           req.user!.id,
@@ -557,7 +557,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         );
         await tx.$executeRawUnsafe(
           `INSERT INTO schedule_audit_logs
-             (id, organization_id, user_id, action_type, entity_type, entity_id, "afterDataJsonb", created_at)
+             (id, "organizationId", "userId", "actionType", "entityType", "entityId", "afterDataJsonb", "createdAt")
            VALUES (gen_random_uuid(), $1, $2, 'DELETE', 'admin.org_soft_delete', $1, $3::jsonb, NOW())`,
           id,
           req.user!.id,
@@ -592,19 +592,19 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return db.query(async (tx) => {
         const result = deactivated
           ? await tx.$executeRawUnsafe(
-              `UPDATE memberships SET "deactivatedAt" = NOW() WHERE user_id = $1 AND "deactivatedAt" IS NULL`,
+              `UPDATE memberships SET "deactivatedAt" = NOW() WHERE "userId" = $1 AND "deactivatedAt" IS NULL`,
               id,
             )
           : await tx.$executeRawUnsafe(
-              `UPDATE memberships SET "deactivatedAt" = NULL WHERE user_id = $1`,
+              `UPDATE memberships SET "deactivatedAt" = NULL WHERE "userId" = $1`,
               id,
             );
 
         await tx.$executeRawUnsafe(
           `INSERT INTO schedule_audit_logs
-             (id, organization_id, user_id, action_type, entity_type, entity_id, "afterDataJsonb", created_at)
-           SELECT gen_random_uuid(), organization_id, $2, 'UPDATE', 'admin.user_deactivate', $1, $3::jsonb, NOW()
-             FROM memberships WHERE user_id = $1 LIMIT 1`,
+             (id, "organizationId", "userId", "actionType", "entityType", "entityId", "afterDataJsonb", "createdAt")
+           SELECT gen_random_uuid(), "organizationId", $2, 'UPDATE', 'admin.user_deactivate', $1, $3::jsonb, NOW()
+             FROM memberships WHERE "userId" = $1 LIMIT 1`,
           id,
           req.user!.id,
           JSON.stringify({ deactivated }),
@@ -689,9 +689,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           `SELECT date_trunc('day', first_joined)::date AS date,
                   COUNT(*)::bigint AS count
              FROM (
-               SELECT user_id, MIN(created_at) AS first_joined
+               SELECT "userId", MIN("createdAt") AS first_joined
                  FROM memberships
-                GROUP BY user_id
+                GROUP BY "userId"
              ) s
             WHERE first_joined >= NOW() - ($1::int || ' days')::interval
             GROUP BY 1
@@ -788,20 +788,20 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         if (type === 'users') {
           const rows = await tx.$queryRawUnsafe<
             Array<{
-              user_id: string;
+              userId: string;
               org_count: bigint;
               first_joined: Date;
             }>
           >(
-            `SELECT user_id, COUNT(*)::bigint AS org_count, MIN(created_at) AS first_joined
+            `SELECT "userId", COUNT(*)::bigint AS org_count, MIN("createdAt") AS first_joined
                FROM memberships
-              GROUP BY user_id
+              GROUP BY "userId"
               ORDER BY first_joined DESC`,
           );
           return toCsv(
             ['userId', 'orgCount', 'firstJoined'],
             rows.map((r) => ({
-              userId: r.user_id,
+              userId: r.userId,
               orgCount: Number(r.org_count),
               firstJoined: r.first_joined,
             })),
@@ -893,7 +893,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
         await tx.$executeRawUnsafe(
           `INSERT INTO schedule_audit_logs
-             (id, organization_id, user_id, action_type, entity_type, entity_id, "beforeDataJsonb", "afterDataJsonb", created_at)
+             (id, "organizationId", "userId", "actionType", "entityType", "entityId", "beforeDataJsonb", "afterDataJsonb", "createdAt")
            VALUES (gen_random_uuid(), $1, $2, 'UPDATE', 'admin.feature_flags', $1, $3::jsonb, $4::jsonb, NOW())`,
           id,
           req.user!.id,
