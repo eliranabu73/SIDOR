@@ -1,5 +1,6 @@
-import { prisma as defaultPrisma, ensureTx } from '../../db/prisma';
+import { prisma as defaultPrisma, ensureTx, withOrgContext } from '../../db/prisma';
 import type { Db } from '../../db/prisma';
+import { verifyEmployeeToken } from './share.service';
 
 /**
  * Token-intent: employee acknowledges a published shift.
@@ -248,6 +249,166 @@ export async function createTimeOffRequest(
  * Replace the employee's weekly availability with a fresh set of rules.
  * Frontend posts the full week as { dayOfWeek, startLocalTime, endLocalTime, type }.
  */
+/**
+ * Aggregated read for the Employee Self-Service mini-app (WS-I).
+ * Returns identity + upcoming shifts (14d) + past-week minutes + month summary +
+ * recent time-off requests.
+ *
+ * Token verification is performed here so the route layer stays thin and
+ * cannot accidentally bypass the signature check.
+ */
+export async function getEmployeePortalData(input: { token: string }) {
+  const decoded = verifyEmployeeToken(input.token);
+  if (!decoded) {
+    throw Object.assign(new Error('הקישור אינו תקף או שפג תוקפו'), {
+      statusCode: 401,
+    });
+  }
+  const { employeeId, organizationId } = decoded;
+
+  return withOrgContext(organizationId).query(async (tx) => {
+    const employee = await tx.employee.findFirst({
+      where: { id: employeeId, organizationId, isActive: true },
+      select: {
+        id: true,
+        fullName: true,
+        weeklyRestDay: true,
+        defaultLocation: { select: { name: true } },
+      },
+    });
+    if (!employee) {
+      throw Object.assign(new Error('Employee not found'), { statusCode: 404 });
+    }
+
+    const now = new Date();
+    const horizon = new Date(now.getTime() + 14 * 86400000);
+    const weekAgo = new Date(now.getTime() - 7 * 86400000);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const [upcoming, pastWeek, monthAssignments, timeOff] = await Promise.all([
+      tx.shiftAssignment.findMany({
+        where: {
+          employeeId,
+          shift: {
+            organizationId,
+            startAtUtc: { gte: now, lt: horizon },
+            status: { not: 'CANCELLED' },
+          },
+          assignmentStatus: { in: ['CONFIRMED', 'COMPLETED', 'PROPOSED'] },
+        },
+        include: { shift: { include: { role: true, location: true } } },
+        orderBy: { shift: { startAtUtc: 'asc' } },
+      }),
+      tx.shiftAssignment.findMany({
+        where: {
+          employeeId,
+          shift: {
+            organizationId,
+            startAtUtc: { gte: weekAgo, lt: now },
+            status: { not: 'CANCELLED' },
+          },
+          assignmentStatus: { in: ['CONFIRMED', 'COMPLETED'] },
+        },
+        include: { shift: { select: { startAtUtc: true, endAtUtc: true } } },
+      }),
+      tx.shiftAssignment.findMany({
+        where: {
+          employeeId,
+          shift: {
+            organizationId,
+            startAtUtc: { gte: monthStart, lt: monthEnd },
+            status: { not: 'CANCELLED' },
+          },
+          assignmentStatus: { in: ['CONFIRMED', 'COMPLETED'] },
+        },
+        include: { shift: { select: { startAtUtc: true, endAtUtc: true } } },
+      }),
+      tx.employeeTimeOffRequest.findMany({
+        where: { employeeId },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      }),
+    ]);
+
+    const minutesBetween = (a: Date, b: Date) =>
+      Math.max(0, Math.round((b.getTime() - a.getTime()) / 60000));
+
+    const pastWeekMinutes = pastWeek.reduce(
+      (acc, a) => acc + minutesBetween(a.shift.startAtUtc, a.shift.endAtUtc),
+      0,
+    );
+    const monthMinutes = monthAssignments.reduce(
+      (acc, a) => acc + minutesBetween(a.shift.startAtUtc, a.shift.endAtUtc),
+      0,
+    );
+
+    return {
+      employee: {
+        id: employee.id,
+        fullName: employee.fullName,
+        defaultLocationName: employee.defaultLocation?.name ?? null,
+        weeklyRestDay: employee.weeklyRestDay,
+      },
+      upcomingShifts: upcoming.map((a) => ({
+        id: a.shift.id,
+        assignmentId: a.id,
+        startAt: a.shift.startAtUtc.toISOString(),
+        endAt: a.shift.endAtUtc.toISOString(),
+        role: a.shift.role?.name ?? null,
+        location: a.shift.location?.name ?? null,
+        status: a.assignmentStatus.toLowerCase(),
+      })),
+      pastWeekMinutes,
+      monthSummary: {
+        totalHours: Math.round((monthMinutes / 60) * 10) / 10,
+        totalShifts: monthAssignments.length,
+      },
+      timeOffRequests: timeOff.map((t) => ({
+        id: t.id,
+        startsAt: t.startAtUtc.toISOString(),
+        endsAt: t.endAtUtc.toISOString(),
+        reason: t.reason,
+        status: t.status.toLowerCase(),
+        createdAt: t.createdAt.toISOString(),
+      })),
+    };
+  });
+}
+
+/**
+ * Token-gated time-off submission used by the Employee mini-app.
+ * Accepts ISO date strings (start/end). Reuses createTimeOffRequest internals.
+ */
+export async function requestTimeOffFromShare(input: {
+  token: string;
+  startDate: string;
+  endDate: string;
+  reason?: string;
+}) {
+  const decoded = verifyEmployeeToken(input.token);
+  if (!decoded) {
+    throw Object.assign(new Error('הקישור אינו תקף או שפג תוקפו'), {
+      statusCode: 401,
+    });
+  }
+  const startsAt = new Date(input.startDate);
+  const endsAt = new Date(input.endDate);
+  if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+    throw Object.assign(new Error('Invalid date'), { statusCode: 400 });
+  }
+  return withOrgContext(decoded.organizationId).query((tx) => {
+    const args: Parameters<typeof createTimeOffRequest>[0] = {
+      employeeId: decoded.employeeId,
+      organizationId: decoded.organizationId,
+      startsAt,
+      endsAt,
+    };
+    if (input.reason) args.reason = input.reason;
+    return createTimeOffRequest(args, tx);
+  });
+}
+
 export async function replaceAvailability(
   input: {
     employeeId: string;

@@ -22,25 +22,47 @@ function b64uDecode(s: string): Buffer {
   return Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
 }
 
+/** Token intents. Default (no intent) = legacy share-link (read schedule). */
+export type ShareTokenIntent = 'share' | 'employee_portal';
+
 export function signEmployeeToken(input: {
   employeeId: string;
   organizationId: string;
   ttlSeconds?: number;
+  intent?: ShareTokenIntent;
 }): string {
-  const payload = {
+  const payload: { eid: string; oid: string; exp: number; int?: ShareTokenIntent } = {
     eid: input.employeeId,
     oid: input.organizationId,
     exp: Math.floor(Date.now() / 1000) + (input.ttlSeconds ?? 60 * 60 * 24 * 90),
   };
+  if (input.intent && input.intent !== 'share') payload.int = input.intent;
   const head = b64u(JSON.stringify(payload));
   const sig = b64u(createHmac('sha256', SECRET).update(head).digest());
   return `${head}.${sig}`;
+}
+
+/**
+ * Issue a 90-day employee-portal token. Used by the manager UI to mint the
+ * mini-app deep link the employee installs as a PWA.
+ */
+export function issueEmployeePortalToken(input: {
+  orgId: string;
+  employeeId: string;
+}): string {
+  return signEmployeeToken({
+    organizationId: input.orgId,
+    employeeId: input.employeeId,
+    intent: 'employee_portal',
+    ttlSeconds: 60 * 60 * 24 * 90, // 90 days
+  });
 }
 
 export type DecodedShareToken = {
   employeeId: string;
   organizationId: string;
   exp: number;
+  intent: ShareTokenIntent;
 };
 
 export function verifyEmployeeToken(token: string): DecodedShareToken | null {
@@ -52,7 +74,7 @@ export function verifyEmployeeToken(token: string): DecodedShareToken | null {
   const provided = b64uDecode(sig);
   if (expected.length !== provided.length) return null;
   if (!timingSafeEqual(expected, provided)) return null;
-  let payload: { eid: string; oid: string; exp: number };
+  let payload: { eid: string; oid: string; exp: number; int?: string };
   try {
     payload = JSON.parse(b64uDecode(head).toString('utf8'));
   } catch {
@@ -61,7 +83,14 @@ export function verifyEmployeeToken(token: string): DecodedShareToken | null {
   if (typeof payload.exp !== 'number' || payload.exp < Date.now() / 1000) {
     return null;
   }
-  return { employeeId: payload.eid, organizationId: payload.oid, exp: payload.exp };
+  const intent: ShareTokenIntent =
+    payload.int === 'employee_portal' ? 'employee_portal' : 'share';
+  return {
+    employeeId: payload.eid,
+    organizationId: payload.oid,
+    exp: payload.exp,
+    intent,
+  };
 }
 
 export function shareUrlForEmployee(token: string): string {

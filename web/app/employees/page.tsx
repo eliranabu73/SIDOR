@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppShell } from "@/components/layout/AppShell";
@@ -17,6 +17,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   queryKeys,
@@ -26,9 +34,38 @@ import {
   useRoles,
   useUpdateEmployee,
 } from "@/lib/queries";
-import { createRole as apiCreateRole } from "@/lib/api";
+import { createEmployee as apiCreateEmployee, createRole as apiCreateRole } from "@/lib/api";
 import type { CreateEmployeeBody, UpdateEmployeeBody, RoleItem } from "@/lib/api";
 import type { Employee } from "@/lib/types";
+
+interface BulkRow {
+  fullName: string;
+  phone?: string;
+  role?: string;
+}
+
+/**
+ * Parse a free-form bulk-import textarea where each line is one employee.
+ * Splits on comma, tab, or dash; the first non-empty cell is the name, the
+ * second is treated as a phone, the third as a role. Skips blank lines.
+ */
+function parseBulkRows(raw: string): BulkRow[] {
+  const out: BulkRow[] = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const cells = line
+      .split(/[,\t\-–]/)
+      .map((c) => c.trim())
+      .filter((c) => c.length > 0);
+    if (cells.length === 0) continue;
+    const [name, phone, role] = cells;
+    if (!name) continue;
+    const row: BulkRow = { fullName: name };
+    if (phone) row.phone = phone;
+    if (role) row.role = role;
+    out.push(row);
+  }
+  return out;
+}
 
 export default function EmployeesPage() {
   return (
@@ -86,6 +123,58 @@ function EmployeesInner() {
   const [search, setSearch] = React.useState("");
   const [editing, setEditing] = React.useState<Employee | null>(null);
   const [sheetOpen, setSheetOpen] = React.useState(false);
+  const [bulkOpen, setBulkOpen] = React.useState(false);
+  const [bulkText, setBulkText] = React.useState("");
+  const [bulkSubmitting, setBulkSubmitting] = React.useState(false);
+  const bulkPreview = React.useMemo(() => parseBulkRows(bulkText), [bulkText]);
+
+  const runBulkImport = async () => {
+    if (bulkPreview.length === 0) return;
+    setBulkSubmitting(true);
+    let ok = 0;
+    let failed = 0;
+    try {
+      const existingRoles = rolesQuery.data ?? [];
+      const roleCache = new Map<string, string>(
+        existingRoles.map((r) => [r.name.toLowerCase(), r.id]),
+      );
+      for (const row of bulkPreview) {
+        try {
+          let roleIds: string[] | undefined;
+          if (row.role) {
+            const key = row.role.toLowerCase();
+            let id = roleCache.get(key);
+            if (!id) {
+              const created = await apiCreateRole({ name: row.role });
+              id = created.id;
+              roleCache.set(key, id);
+            }
+            roleIds = [id];
+          }
+          const body: CreateEmployeeBody = {
+            fullName: row.fullName,
+            ...(row.phone ? { phone: row.phone } : {}),
+            ...(roleIds ? { roleIds } : {}),
+          };
+          await apiCreateEmployee(body);
+          ok += 1;
+        } catch (err) {
+          console.error("Bulk import row failed", row, err);
+          failed += 1;
+        }
+      }
+      await qc.invalidateQueries({ queryKey: queryKeys.employees() });
+      await qc.invalidateQueries({ queryKey: queryKeys.roles() });
+      if (failed === 0) toast.success(`נוספו ${ok} עובדים`);
+      else toast.error(`נוספו ${ok}, נכשלו ${failed}`);
+      if (failed === 0) {
+        setBulkOpen(false);
+        setBulkText("");
+      }
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -179,6 +268,15 @@ function EmployeesInner() {
             className="flex-1 sm:w-56 sm:flex-none h-11 sm:h-9"
             aria-label="חיפוש עובד/ת"
           />
+          <Button
+            variant="outline"
+            onClick={() => setBulkOpen(true)}
+            className="h-11 sm:h-10 shrink-0"
+          >
+            <Upload className="h-4 w-4" />
+            <span className="hidden sm:inline">ייבוא מרובה</span>
+            <span className="sm:hidden">ייבוא</span>
+          </Button>
           <Button onClick={startCreate} className="h-11 sm:h-10 shrink-0">
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">הוסף עובד/ת</span>
@@ -204,6 +302,56 @@ function EmployeesInner() {
           onToggleActive={toggleActive}
         />
       )}
+
+      <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>ייבוא מרובה של עובדים</DialogTitle>
+            <DialogDescription>
+              שורה אחת לכל עובד/ת — שם, טלפון, תפקיד (מופרדים בפסיק/טאב/מקף).
+            </DialogDescription>
+          </DialogHeader>
+          <textarea
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+            placeholder={"דנה, 0501111111, מלצרית\nאיתי, 0502222222, ברמן"}
+            rows={8}
+            dir="rtl"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+          {bulkPreview.length > 0 && (
+            <div className="max-h-48 overflow-y-auto rounded-md border text-sm">
+              <ul className="divide-y">
+                {bulkPreview.map((row, i) => (
+                  <li key={i} className="flex justify-between gap-2 px-3 py-2">
+                    <span className="font-medium">{row.fullName}</span>
+                    <span className="text-muted-foreground">
+                      {row.phone ?? "—"} · {row.role ?? "—"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setBulkOpen(false)}
+              disabled={bulkSubmitting}
+            >
+              ביטול
+            </Button>
+            <Button
+              onClick={runBulkImport}
+              disabled={bulkPreview.length === 0 || bulkSubmitting}
+            >
+              {bulkSubmitting
+                ? "מייבא…"
+                : `אישור (${bulkPreview.length})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent side="left" className="w-[90%] sm:w-3/4 overflow-y-auto">

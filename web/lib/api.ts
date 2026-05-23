@@ -1031,3 +1031,96 @@ export async function getComplianceReport(
     throw err;
   }
 }
+
+// --------- WS-F: Payroll Export ---------
+
+export type PayrollFormat = "standard" | "hilan";
+
+/**
+ * Download a payroll CSV for the given date range. Returns a Blob the
+ * caller can hand to a temporary anchor for download. periodStart/periodEnd
+ * are YYYY-MM-DD strings (periodEnd inclusive).
+ */
+export async function downloadPayrollCsv(input: {
+  periodStart: string;
+  periodEnd: string;
+  format: PayrollFormat;
+}): Promise<{ blob: Blob; filename: string }> {
+  const qs = new URLSearchParams({
+    periodStart: input.periodStart,
+    periodEnd: input.periodEnd,
+    format: input.format,
+  }).toString();
+  const headers = await authHeaders();
+  // CSV endpoint — content-type override is fine, server ignores it.
+  const res = await fetch(`${API_URL}/v1/payroll/export.csv?${qs}`, {
+    headers,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new ApiError(`Request failed: ${res.status}`, res.status, text);
+  }
+  const blob = await res.blob();
+  // Try to extract filename from content-disposition.
+  const cd = res.headers.get("content-disposition") ?? "";
+  const match = cd.match(/filename="?([^";]+)"?/);
+  const filename =
+    match?.[1] ?? `payroll-${input.format}-${input.periodStart}_${input.periodEnd}.csv`;
+  return { blob, filename };
+}
+
+// --------- WS-F: Time-Off Manager Inbox ---------
+//
+// NOTE: the backend currently exposes time-off CREATION via the public
+// share token (`POST /v1/share/:token/time-off`), but there is no
+// authenticated manager-side endpoint for listing or approving/rejecting
+// requests. The wrappers below assume a future `/v1/timeoff` resource —
+// if the server returns 404 the inbox UI will degrade to an empty list.
+
+export type TimeOffStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | "CANCELLED";
+
+export interface TimeOffRequestItem {
+  id: ID;
+  employeeId: ID;
+  employeeName: string;
+  startsAt: string;
+  endsAt: string;
+  timezone: string;
+  reason: string | null;
+  status: TimeOffStatus;
+  createdAt: string;
+}
+
+export async function getTimeOffRequests(
+  status?: TimeOffStatus,
+): Promise<TimeOffRequestItem[]> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+  try {
+    return await request<TimeOffRequestItem[]>(`/v1/timeoff${qs}`);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return [];
+    throw err;
+  }
+}
+
+export function approveTimeOff(
+  id: ID,
+): Promise<{ id: ID; status: TimeOffStatus }> {
+  return request<{ id: ID; status: TimeOffStatus }>(
+    `/v1/timeoff/${id}/approve`,
+    { method: "POST" },
+  );
+}
+
+export function rejectTimeOff(
+  id: ID,
+): Promise<{ id: ID; status: TimeOffStatus }> {
+  return request<{ id: ID; status: TimeOffStatus }>(
+    `/v1/timeoff/${id}/reject`,
+    { method: "POST" },
+  );
+}

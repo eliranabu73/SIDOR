@@ -9,8 +9,10 @@ import {
   confirmShiftAssignment,
   createTimeOffRequest,
   fetchEmployeeActivity,
+  getEmployeePortalData,
   replaceAvailability,
   requestSwapWithReason,
+  requestTimeOffFromShare,
 } from './share-actions.service';
 import { loadScheduleExportData } from './export/data';
 import { renderPng } from './export/png-renderer';
@@ -305,6 +307,62 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
         return reply
           .code(status)
           .send({ code: 'EXPORT_FAILED', message: (err as Error).message });
+      }
+    },
+  );
+
+  // PUBLIC (WS-I Employee Self-Service mini-app): aggregated portal data.
+  app.get(
+    '/v1/share/employee-portal/:token/me',
+    { schema: { params: TokenParam } },
+    async (req, reply) => {
+      const { token } = req.params as z.infer<typeof TokenParam>;
+      try {
+        const data = await getEmployeePortalData({ token });
+        return reply.send(data);
+      } catch (err) {
+        const status = (err as { statusCode?: number }).statusCode ?? 500;
+        const code = status === 401 ? 'INVALID_TOKEN' : 'PORTAL_FAILED';
+        return reply.code(status).send({ code, message: (err as Error).message });
+      }
+    },
+  );
+
+  // PUBLIC (WS-I): employee submits a time-off request from the mini-app.
+  const PortalTimeOffBody = z.object({
+    startDate: z.string().datetime(),
+    endDate: z.string().datetime(),
+    type: z.enum(['sicknote', 'vacation', 'personal']).optional(),
+    reason: z.string().max(280).optional(),
+  });
+  app.post(
+    '/v1/share/employee-portal/:token/timeoff',
+    { schema: { params: TokenParam, body: PortalTimeOffBody } },
+    async (req, reply) => {
+      const { token } = req.params as z.infer<typeof TokenParam>;
+      const body = req.body as z.infer<typeof PortalTimeOffBody>;
+      try {
+        // Compose a reason that preserves the leave-type tag (schema has no
+        // dedicated column today; we prefix the free-text reason).
+        const prefix = body.type ? `[${body.type}] ` : '';
+        const reason = body.reason ? `${prefix}${body.reason}` : prefix || undefined;
+        const args: Parameters<typeof requestTimeOffFromShare>[0] = {
+          token,
+          startDate: body.startDate,
+          endDate: body.endDate,
+        };
+        if (reason) args.reason = reason;
+        const r = await requestTimeOffFromShare(args);
+        return reply.code(201).send({
+          id: r.id,
+          status: r.status.toLowerCase(),
+          startsAt: r.startAtUtc.toISOString(),
+          endsAt: r.endAtUtc.toISOString(),
+        });
+      } catch (err) {
+        const status = (err as { statusCode?: number }).statusCode ?? 500;
+        const code = status === 401 ? 'INVALID_TOKEN' : 'TIMEOFF_FAILED';
+        return reply.code(status).send({ code, message: (err as Error).message });
       }
     },
   );
