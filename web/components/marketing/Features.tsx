@@ -1,3 +1,6 @@
+"use client";
+
+import { motion, useReducedMotion } from "framer-motion";
 import { CalendarCheck, ShieldCheck, Zap, Code2, Users } from "lucide-react";
 
 /* ---------------------------------------------------------------
@@ -68,6 +71,8 @@ const features = [
 ];
 
 export function Features() {
+  const reduceMotion = useReducedMotion();
+
   return (
     <section className="py-20 px-4 max-w-6xl mx-auto">
       {/* Section heading */}
@@ -79,11 +84,15 @@ export function Features() {
       </div>
 
       <div className="bento-grid">
-        {features.map((f) => {
+        {features.map((f, i) => {
           const Icon = f.icon;
           return (
-            <div
+            <motion.div
               key={f.title}
+              initial={{ opacity: 0, y: reduceMotion ? 0 : 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-80px" }}
+              transition={{ duration: reduceMotion ? 0 : 0.5, delay: reduceMotion ? 0 : i * 0.1 }}
               className={[
                 "group rounded-3xl p-8 border transition-all duration-300 hover:-translate-y-1 hover:shadow-lg overflow-hidden relative",
                 f.wide ? "bento-wide" : "",
@@ -102,8 +111,8 @@ export function Features() {
 
               {/* Icon */}
               <div
-                className={`inline-flex p-2.5 rounded-xl mb-4 ${
-                  f.gradient ? "bg-white/20" : "bg-[#6366F1]/10 group-hover:bg-[#6366F1]/15 transition-colors"
+                className={`inline-flex p-2.5 rounded-xl mb-4 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6 ${
+                  f.gradient ? "bg-white/20" : "bg-[#6366F1]/10 group-hover:bg-[#6366F1]/15"
                 }`}
               >
                 <Icon
@@ -140,7 +149,7 @@ export function Features() {
                   className="absolute bottom-0 start-8 end-8 h-[2px] rounded-full bg-gradient-to-r from-[#6366F1]/0 via-[#6366F1]/40 to-[#6366F1]/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                 />
               )}
-            </div>
+            </motion.div>
           );
         })}
       </div>

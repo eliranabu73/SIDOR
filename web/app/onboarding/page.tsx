@@ -19,16 +19,59 @@ import {
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { Logo } from "@/components/brand/Logo";
 import { getSupabase } from "@/lib/supabase";
-import { createOrg } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { INDUSTRY_OPTIONS } from "@/lib/industries";
 
 const schema = z.object({
   name: z.string().min(2, "שם הארגון חייב להיות לפחות 2 תווים"),
-  defaultLocationName: z.string().min(1).optional(),
   industry: z.string().min(1).max(40),
+  employeeCount: z
+    .number({ message: "צריך להזין מספר" })
+    .int("מספר שלם בלבד")
+    .min(1, "לפחות עובד אחד")
+    .max(200, "עד 200 עובדים"),
 });
 
 type FormData = z.infer<typeof schema>;
+
+interface QuickBootstrapResult {
+  organizationId: string;
+  scheduleId: string;
+}
+
+async function postQuickBootstrap(payload: FormData): Promise<QuickBootstrapResult> {
+  const apiUrl =
+    process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
+  const supabase = getSupabase();
+  const { data } = await supabase.auth.getSession();
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (data.session?.access_token) {
+    headers["authorization"] = `Bearer ${data.session.access_token}`;
+  }
+  const res = await fetch(`${apiUrl}/v1/onboarding/quick-bootstrap`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const text = await res.text();
+  let body: unknown = null;
+  if (text) {
+    try {
+      body = JSON.parse(text) as unknown;
+    } catch {
+      body = text;
+    }
+  }
+  if (!res.ok) {
+    const msg =
+      body && typeof body === "object" && "message" in body &&
+      typeof (body as { message: unknown }).message === "string"
+        ? (body as { message: string }).message
+        : `Request failed: ${res.status}`;
+    throw new ApiError(msg, res.status, body);
+  }
+  return body as QuickBootstrapResult;
+}
 
 function OnboardingForm() {
   const router = useRouter();
@@ -38,33 +81,26 @@ function OnboardingForm() {
     resolver: zodResolver(schema),
     defaultValues: {
       name: "",
-      defaultLocationName: "ראשי",
       industry: "restaurant",
+      employeeCount: 5,
     },
   });
 
   const onSubmit = async (data: FormData) => {
     setSubmitting(true);
     try {
-      await createOrg({
-        name: data.name,
-        defaultLocationName: data.defaultLocationName,
-        industry: data.industry,
-        defaultTimezone: "Asia/Jerusalem",
-      });
-      // Refresh the JWT so the new organization_id claim arrives.
+      const result = await postQuickBootstrap(data);
+      // Refresh JWT so the new organization_id claim arrives.
       try {
         const supabase = getSupabase();
         await supabase.auth.refreshSession();
       } catch {
         // ignored — backend already scopes by the new org id via DB lookup.
       }
-      toast.success("הארגון נוצר! נכנסים לסידור המשמרות…");
-      router.replace("/schedule");
+      router.replace(`/onboarding/quick-schedule?org=${encodeURIComponent(result.organizationId)}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "יצירת הארגון נכשלה";
       toast.error(msg);
-    } finally {
       setSubmitting(false);
     }
   };
@@ -77,15 +113,9 @@ function OnboardingForm() {
           <div className="mb-3 flex justify-center">
             <Logo size={36} />
           </div>
-          {/* 3-dot progress */}
-          <div role="group" className="flex gap-2 mb-8 justify-center" aria-label="שלב 1 מתוך 3">
-            {[0,1,2].map(i => (
-              <div key={i} className={`w-2 h-2 rounded-full transition-colors ${i === 0 ? 'bg-[#6366F1]' : 'bg-muted'}`} />
-            ))}
-          </div>
-          <CardTitle className="text-center">בוא נכין את העסק שלך</CardTitle>
+          <CardTitle className="text-center">60 שניות לסידור הראשון שלך</CardTitle>
           <CardDescription className="text-center">
-            ניצור לך ארגון חדש, סניף ראשי וסידור ריק לשבוע הקרוב — דקה אחת.
+            ניצור ארגון, סניף, עובדים ראשונים וסידור שבועי מלא — מוכן לעריכה תוך שניות.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -99,7 +129,7 @@ function OnboardingForm() {
               <Input
                 id="name"
                 type="text"
-                placeholder="לדוגמה: העסק שלי"
+                placeholder="לדוגמה: קפה הבוקר"
                 aria-invalid={!!form.formState.errors.name}
                 {...form.register("name")}
               />
@@ -108,16 +138,6 @@ function OnboardingForm() {
                   {form.formState.errors.name.message}
                 </p>
               )}
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="defaultLocationName">שם הסניף הראשי</Label>
-              <Input
-                id="defaultLocationName"
-                type="text"
-                placeholder="ראשי"
-                {...form.register("defaultLocationName")}
-              />
             </div>
 
             <div className="space-y-1">
@@ -135,13 +155,31 @@ function OnboardingForm() {
               </select>
             </div>
 
+            <div className="space-y-1">
+              <Label htmlFor="employeeCount">מספר עובדים משוער</Label>
+              <Input
+                id="employeeCount"
+                type="number"
+                min={1}
+                max={200}
+                inputMode="numeric"
+                aria-invalid={!!form.formState.errors.employeeCount}
+                {...form.register("employeeCount", { valueAsNumber: true })}
+              />
+              {form.formState.errors.employeeCount && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.employeeCount.message}
+                </p>
+              )}
+            </div>
+
             <Button
               type="submit"
               variant="glow"
               className="w-full"
               disabled={submitting}
             >
-              {submitting ? "יוצר ארגון…" : "צור ארגון והיכנס לסידור"}
+              {submitting ? "בונה את הסידור שלך…" : "בנה לי סידור עכשיו"}
             </Button>
           </form>
 
@@ -150,7 +188,7 @@ function OnboardingForm() {
               href="/onboarding/templates"
               className="text-sm text-indigo-600 underline-offset-4 hover:underline dark:text-indigo-400"
             >
-              בחר מתוך תבניות מוכנות לפי סוג העסק ↗
+              העדפה לבחור תבנית ידנית? ↗
             </a>
           </div>
         </CardContent>

@@ -10,6 +10,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { createOrgForUser, listMemberships } from './onboarding.service.js';
+import { quickBootstrap } from './quick-bootstrap.service.js';
+import { prisma } from '../../db/prisma.js';
 
 const CreateOrgBody = z.object({
   name: z.string().min(2).max(120),
@@ -17,6 +19,14 @@ const CreateOrgBody = z.object({
   industry: z.string().max(40).optional(),
   defaultLocationName: z.string().min(1).max(80).optional(),
 });
+
+const QuickBootstrapBody = z.object({
+  name: z.string().min(2).max(120),
+  industry: z.string().min(1).max(40),
+  employeeCount: z.number().int().min(1).max(200),
+});
+
+const OrgIdParam = z.object({ id: z.string().uuid() });
 
 export async function onboardingRoutes(app: FastifyInstance): Promise<void> {
   app.get(
@@ -52,6 +62,47 @@ export async function onboardingRoutes(app: FastifyInstance): Promise<void> {
         defaultLocationName: body.defaultLocationName,
       });
       return reply.code(201).send(result);
+    },
+  );
+
+  // POST /v1/onboarding/quick-bootstrap — 60-second Aha flow.
+  app.post(
+    '/onboarding/quick-bootstrap',
+    {
+      preHandler: [app.authenticate],
+      schema: { body: QuickBootstrapBody },
+    },
+    async (req, reply) => {
+      const body = req.body as z.infer<typeof QuickBootstrapBody>;
+      const u = req.user!;
+      const result = await quickBootstrap({
+        userId: u.id,
+        name: body.name,
+        industry: body.industry,
+        employeeCount: body.employeeCount,
+      });
+      return reply.code(201).send(result);
+    },
+  );
+
+  // GET /v1/orgs/:id/onboarding-status — used by the quick-schedule landing
+  // page to know when the bootstrap transaction has finished materialising
+  // shifts. Naive: any shift in the org means we're done.
+  app.get(
+    '/orgs/:id/onboarding-status',
+    {
+      preHandler: [app.authenticate],
+      schema: { params: OrgIdParam },
+    },
+    async (req) => {
+      const { id } = req.params as z.infer<typeof OrgIdParam>;
+      const shift = await prisma.shift.findFirst({
+        where: { organizationId: id },
+        select: { scheduleId: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (!shift) return { ready: false };
+      return { ready: true, scheduleId: shift.scheduleId ?? undefined };
     },
   );
 }

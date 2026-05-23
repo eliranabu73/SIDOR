@@ -1,5 +1,10 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
 import { Check, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -11,8 +16,9 @@ import { cn } from "@/lib/utils";
 
 type Tier = {
   name: string;
-  priceLabel: string;
-  perBiz: string;
+  monthly: number;
+  tagline: string;
+  roi: string;
   highlight?: boolean;
   features: string[];
 };
@@ -20,35 +26,68 @@ type Tier = {
 const TIERS: Tier[] = [
   {
     name: "Free",
-    priceLabel: "0 ₪",
-    perBiz: "תמיד חינם",
+    monthly: 0,
+    tagline: "להתחיל בקטן",
+    roi: "מתאים לעסק חדש שבודק את המים",
     features: [
-      "צפייה בסידור מפורסם",
-      "מנהל יחיד, עד 5 עובדים",
-      "ייצוא ל-PDF",
+      "סניף יחיד",
+      "עד 5 עובדים",
+      "סידור אוטומטי בסיסי",
+      "שיתוף בוואטסאפ",
     ],
   },
   {
-    name: "Basic",
-    priceLabel: "12 ₪",
-    perBiz: "לעובד / חודש · או 99 ₪ לעסק קטן",
-    features: ["שיבוץ ידני מלא", "שעון נוכחות", "סניף יחיד"],
+    name: "Starter",
+    monthly: 59,
+    tagline: "לעסק קטן עם צוות מתפתח",
+    roi: "חוסך ~6 שעות בשבוע",
+    features: [
+      "סניף יחיד",
+      "עד 15 עובדים",
+      "אופטימייזר AI",
+      "מנוע תאימות לחוק עבודה",
+      "מד עלויות בזמן אמת",
+    ],
+  },
+  {
+    name: "Business",
+    monthly: 149,
+    tagline: "המסלול הפופולרי",
+    roi: "חוסך 6h + מונע קנסות עד ₪50K",
+    highlight: true,
+    features: [
+      "עד 2 סניפים",
+      "עד 40 עובדים",
+      "ייצוא שכר ל-CSV",
+      "ניהול חופשות והיעדרויות",
+      "ייבוא עובדים בכמות",
+      "כל מה ש-Starter כולל",
+    ],
   },
   {
     name: "Pro",
-    priceLabel: "22 ₪",
-    perBiz: "לעובד / חודש · או 199 ₪ לעסק קטן",
-    highlight: true,
+    monthly: 299,
+    tagline: "לרשתות וצוותים גדולים",
+    roi: "ROI מלא + תמיכה אישית",
     features: [
-      "שיבוץ אוטומטי חכם",
-      "אכיפת חוקי עבודה ישראליים",
-      "דוחות וניתוחים",
-      "שוק החלפות פנימי",
+      "סניפים ועובדים ללא הגבלה",
+      "גישת API",
+      "תמיכה בעדיפות גבוהה",
+      "מנהל הצלחה ייעודי",
+      "כל מה ש-Business כולל",
     ],
   },
 ];
 
+function formatPrice(monthly: number, yearly: boolean): string {
+  if (monthly === 0) return "₪0";
+  const value = yearly ? Math.round(monthly * 0.8) : monthly;
+  return `₪${value}`;
+}
+
 export function Pricing() {
+  const [yearly, setYearly] = useState(false);
+
   return (
     <section id="pricing" className="border-b border-border bg-background">
       <div className="mx-auto max-w-6xl px-6 py-20">
@@ -57,18 +96,47 @@ export function Pricing() {
             מחירים שמתאימים לעסק ישראלי
           </h2>
           <p className="mt-3 text-muted-foreground">
-            בתקופת הביטא — כל המסלולים פתוחים בחינם. מחיר רק כשנפיק לך ערך.
+            ללא התחייבות. ניתן לבטל בכל רגע. כל המחירים בשקלים, לא כולל מע״מ.
           </p>
+
+          <div className="mt-8 inline-flex items-center rounded-full border border-border bg-card p-1 text-sm">
+            <button
+              type="button"
+              onClick={() => setYearly(false)}
+              className={cn(
+                "rounded-full px-4 py-1.5 font-medium transition-colors",
+                !yearly
+                  ? "bg-foreground text-background shadow"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              aria-pressed={!yearly}
+            >
+              חודשי
+            </button>
+            <button
+              type="button"
+              onClick={() => setYearly(true)}
+              className={cn(
+                "rounded-full px-4 py-1.5 font-medium transition-colors",
+                yearly
+                  ? "bg-foreground text-background shadow"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              aria-pressed={yearly}
+            >
+              שנתי (חסכון 20%)
+            </button>
+          </div>
         </div>
 
-        <div className="mt-12 grid gap-6 md:grid-cols-3">
+        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {TIERS.map((tier) => (
             <Card
               key={tier.name}
               className={cn(
                 "relative bg-card transition-all duration-300",
                 tier.highlight
-                  ? "border-transparent ring-2 ring-indigo-500/70 shadow-[0_0_60px_-12px_rgb(99_102_241/0.55)] hover:-translate-y-1 mt-4 md:mt-0"
+                  ? "border-transparent ring-2 ring-indigo-500/70 shadow-[0_0_60px_-12px_rgb(99_102_241/0.55)] hover:-translate-y-1 lg:-mt-4"
                   : "overflow-hidden hover:-translate-y-0.5 hover:shadow-lg",
               )}
             >
@@ -90,7 +158,9 @@ export function Pricing() {
               <CardHeader className="relative">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl">{tier.name}</CardTitle>
-                  <Badge variant="secondary">חינם בתקופת הביטא</Badge>
+                  {yearly && tier.monthly > 0 ? (
+                    <Badge variant="success">2 חודשים חינם</Badge>
+                  ) : null}
                 </div>
                 <div className="mt-2 flex items-baseline gap-1">
                   <span
@@ -101,10 +171,23 @@ export function Pricing() {
                         : "text-foreground",
                     )}
                   >
-                    {tier.priceLabel}
+                    {formatPrice(tier.monthly, yearly)}
                   </span>
+                  {tier.monthly > 0 ? (
+                    <span className="text-sm text-muted-foreground">
+                      / חודש
+                    </span>
+                  ) : null}
                 </div>
-                <CardDescription>{tier.perBiz}</CardDescription>
+                <CardDescription>{tier.tagline}</CardDescription>
+                <p
+                  className={cn(
+                    "mt-2 text-xs font-medium",
+                    tier.highlight ? "text-indigo-500" : "text-emerald-600 dark:text-emerald-400",
+                  )}
+                >
+                  {tier.roi}
+                </p>
               </CardHeader>
 
               <CardContent className="relative">
@@ -131,6 +214,15 @@ export function Pricing() {
               </CardContent>
             </Card>
           ))}
+        </div>
+
+        <div className="mt-12 flex flex-col items-center gap-3 text-center">
+          <Button asChild size="lg" variant="glow">
+            <Link href="/login">התחל ניסיון 14 יום — בלי כרטיס אשראי</Link>
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            כל המחירים אינם כוללים מע״מ.
+          </p>
         </div>
       </div>
     </section>

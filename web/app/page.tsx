@@ -3,9 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Hero } from "@/components/marketing/Hero";
+import { CustomerLogos } from "@/components/marketing/CustomerLogos";
 import { Features } from "@/components/marketing/Features";
 import { SocialProof } from "@/components/marketing/SocialProof";
+import { Testimonials } from "@/components/marketing/Testimonials";
 import { Pricing } from "@/components/marketing/Pricing";
+import { Faq } from "@/components/marketing/Faq";
 import { Footer } from "@/components/marketing/Footer";
 
 export default function LandingPage() {
@@ -31,9 +34,12 @@ export default function LandingPage() {
         </div>
       </header>
       <Hero />
+      <CustomerLogos />
       <Features />
       <SocialProof />
+      <Testimonials />
       <Pricing />
+      <Faq />
       <Footer />
     </main>
   );

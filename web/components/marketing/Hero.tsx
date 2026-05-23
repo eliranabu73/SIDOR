@@ -1,6 +1,11 @@
+"use client";
+
 import Link from "next/link";
-import { ArrowLeft, Sparkles, CheckCircle2, AlertCircle } from "lucide-react";
+import { useState } from "react";
+import { motion, useScroll, useTransform, useReducedMotion } from "framer-motion";
+import { ArrowLeft, Sparkles, CheckCircle2, AlertCircle, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { VideoModal } from "./VideoModal";
 
 // Mini schedule preview — realistic-looking shift board
 function SchedulePreview() {
@@ -69,9 +74,31 @@ function SchedulePreview() {
 }
 
 export function Hero() {
+  const [videoOpen, setVideoOpen] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const { scrollY } = useScroll();
+  // Parallax: drift mesh background down ~20% of scroll. Disabled if reduced motion.
+  const parallaxY = useTransform(scrollY, [0, 500], [0, reduceMotion ? 0 : 100]);
+
+  const trustBadges = [
+    "תואם חוק עבודה ומנוחה",
+    "פיילוט חינם 14 יום",
+    "אפס התקנות לעובד",
+  ];
+
   return (
     <section className="mesh-bg relative overflow-hidden min-h-[85vh] flex items-center border-b border-border">
-      <div className="mx-auto max-w-6xl px-6 py-24 lg:py-32 w-full">
+      {/* Parallax overlay layer — uses transform only for perf */}
+      <motion.div
+        aria-hidden
+        style={{ y: parallaxY }}
+        className="pointer-events-none absolute inset-0 -z-0"
+      >
+        <div className="absolute -top-24 -end-24 w-[480px] h-[480px] rounded-full bg-gradient-to-br from-[#6366F1]/15 to-transparent blur-3xl" />
+        <div className="absolute -bottom-32 -start-24 w-[420px] h-[420px] rounded-full bg-gradient-to-tr from-[#22D3EE]/15 to-transparent blur-3xl" />
+      </motion.div>
+
+      <div className="relative mx-auto max-w-6xl px-6 py-24 lg:py-32 w-full">
         <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
 
           {/* Copy column — first in DOM = inline-start (right in RTL) */}
@@ -105,9 +132,29 @@ export function Hero() {
                   <ArrowLeft className="h-4 w-4" />
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="ghost" className="min-w-44">
-                <Link href="/schedule">ראה דמו חי</Link>
+              <Button
+                type="button"
+                size="lg"
+                variant="ghost"
+                className="min-w-44"
+                onClick={() => setVideoOpen(true)}
+              >
+                <Play className="h-4 w-4" aria-hidden />
+                צפה בדמו (60 שניות)
               </Button>
+            </div>
+
+            {/* Trust badges row — directly under CTAs */}
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
+              {trustBadges.map((badge) => (
+                <span
+                  key={badge}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/60 backdrop-blur px-3 py-1 text-[11px] font-medium text-foreground/80 shadow-sm"
+                >
+                  <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" aria-hidden />
+                  {badge}
+                </span>
+              ))}
             </div>
 
             <p className="mt-4 text-xs text-muted-foreground">
@@ -136,6 +183,8 @@ export function Hero() {
 
         </div>
       </div>
+
+      <VideoModal open={videoOpen} onOpenChange={setVideoOpen} />
     </section>
   );
 }
