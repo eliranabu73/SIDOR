@@ -8,14 +8,17 @@ import {
   CalendarDays,
   Scale,
   Settings,
+  ShieldCheck,
   Users,
   LogOut,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getSupabase } from "@/lib/supabase";
+import { adminApi } from "@/lib/api";
 import { toast } from "sonner";
 
 interface NavItem {
@@ -26,6 +29,16 @@ interface NavItem {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+
+  // Platform-admin check — only the SaaS owner sees the admin link.
+  // Failures (403/401) are swallowed so non-admins simply don't see it.
+  const adminCheck = useQuery({
+    queryKey: ["admin", "check"],
+    queryFn: () => adminApi.check().catch(() => ({ isAdmin: false })),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const isAdmin = adminCheck.data?.isAdmin === true;
 
   const nav: NavItem[] = [
     { href: "/schedule", label: "סידור עבודה", icon: <CalendarDays className="h-5 w-5" /> },
@@ -74,6 +87,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             })}
           </nav>
           <div className="me-auto" />
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 transition-colors"
+              aria-label="ניהול מערכת"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+              ניהול מערכת
+            </Link>
+          )}
           <ThemeToggle />
           <Button
             variant="ghost"

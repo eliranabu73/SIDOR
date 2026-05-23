@@ -28,6 +28,7 @@ import { billingRoutes } from './modules/billing/billing.routes';
 import { importRoutes } from './modules/import/import.routes';
 import { settingsRoutes } from './modules/settings/settings.routes';
 import { templatesRoutes } from './modules/templates/templates.routes';
+import { adminRoutes } from './modules/admin/admin.routes';
 
 export async function buildApp(): Promise<FastifyInstance> {
   // Initialise Sentry first so errors during boot get captured.
@@ -121,6 +122,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(settingsRoutes, { prefix: '/v1' });
   await app.register(templatesRoutes, { prefix: '/v1' });
   await app.register(billingRoutes, { prefix: '/v1' });
+  await app.register(adminRoutes, { prefix: '/v1/admin' });
   await app.register(realtimeRoutes);
 
   return app;

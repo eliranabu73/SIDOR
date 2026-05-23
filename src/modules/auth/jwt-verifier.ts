@@ -21,13 +21,16 @@ export interface VerifiedUser {
   id: string;
   orgId: string;
   role: string;
+  email?: string;
 }
 
 /** Shape of Supabase JWT payload fields we care about. */
 interface SupabaseJwtPayload extends JWTPayload {
   sub?: string;
+  email?: string;
   user_metadata?: {
     organization_id?: string;
+    email?: string;
     [key: string]: unknown;
   };
   app_metadata?: {
@@ -160,5 +163,9 @@ export async function verifyJwt(
 
   const role: string = payload.app_metadata?.role ?? 'employee';
 
-  return { id: sub, orgId, role };
+  // email may be in top-level `email` claim (Supabase standard) or fallback
+  // to user_metadata. Used by platform-admin allowlist.
+  const email = payload.email ?? payload.user_metadata?.email;
+
+  return { id: sub, orgId, role, ...(email ? { email } : {}) };
 }

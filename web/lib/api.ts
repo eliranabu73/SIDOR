@@ -765,3 +765,95 @@ export function updateOrgLocation(id: ID, name: string, timezone?: string | null
 export function deleteOrgLocation(id: ID): Promise<void> {
   return request<void>(`/v1/locations/${id}`, { method: "DELETE" });
 }
+
+// --------- Platform Admin (cross-tenant, owner-only) ---------
+
+export interface AdminStats {
+  totalOrgs: number;
+  totalUsers: number;
+  totalEmployees: number;
+  totalShifts: number;
+  signupsLast7d: number;
+  shiftsLast7d: number;
+  activeOrgsLast7d: number;
+}
+
+export interface AdminOrgListItem {
+  id: ID;
+  name: string;
+  industry: string | null;
+  plan: string;
+  createdAt: string;
+  memberCount: number;
+  employeeCount: number;
+  scheduleCount: number;
+}
+
+export interface AdminOrgListResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  items: AdminOrgListItem[];
+}
+
+export interface AdminUserListItem {
+  userId: string;
+  orgCount: number;
+  firstJoined: string;
+  memberships: Array<{
+    role: string;
+    joinedAt: string;
+    org: { id: ID; name: string };
+  }>;
+}
+
+export interface AdminAuditItem {
+  id: string;
+  organizationId: ID;
+  scheduleId: ID | null;
+  userId: string | null;
+  actionType: string;
+  entityType: string;
+  entityId: string;
+  createdAt: string;
+  organization: { name: string } | null;
+}
+
+export const adminApi = {
+  check: () => request<{ isAdmin: boolean }>(`/v1/admin/check`),
+  stats: () => request<AdminStats>(`/v1/admin/stats`),
+  orgs: (params: { search?: string; limit?: number; offset?: number } = {}) => {
+    const sp = new URLSearchParams();
+    if (params.search) sp.set("search", params.search);
+    if (params.limit != null) sp.set("limit", String(params.limit));
+    if (params.offset != null) sp.set("offset", String(params.offset));
+    const qs = sp.toString();
+    return request<AdminOrgListResponse>(`/v1/admin/orgs${qs ? `?${qs}` : ""}`);
+  },
+  orgDetail: (id: ID) =>
+    request<{ org: Record<string, unknown>; recentSchedules: Array<Record<string, unknown>> }>(
+      `/v1/admin/orgs/${id}`,
+    ),
+  users: (params: { search?: string; limit?: number; offset?: number } = {}) => {
+    const sp = new URLSearchParams();
+    if (params.search) sp.set("search", params.search);
+    if (params.limit != null) sp.set("limit", String(params.limit));
+    if (params.offset != null) sp.set("offset", String(params.offset));
+    const qs = sp.toString();
+    return request<{
+      total: number;
+      limit: number;
+      offset: number;
+      items: AdminUserListItem[];
+    }>(`/v1/admin/users${qs ? `?${qs}` : ""}`);
+  },
+  audit: (params: { orgId?: ID; limit?: number } = {}) => {
+    const sp = new URLSearchParams();
+    if (params.orgId) sp.set("orgId", params.orgId);
+    if (params.limit != null) sp.set("limit", String(params.limit));
+    const qs = sp.toString();
+    return request<{ items: AdminAuditItem[] }>(
+      `/v1/admin/audit${qs ? `?${qs}` : ""}`,
+    );
+  },
+};

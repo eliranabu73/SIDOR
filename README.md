@@ -127,6 +127,18 @@ Styles: `minimal` (B&W), `branded` (indigo→cyan gradient), `dark` (slate-950).
 - **RLS** — Postgres Row Level Security enabled on 17 org-scoped tables via `app.current_org_id` setting. Migration: `prisma/migrations/20260523120000_enable_rls/`.
 - **Production guard** — `AUTH_DISABLED=true` rejected at boot when `NODE_ENV=production`.
 - **HMAC share tokens** — Stateless, 90-day expiry, base64url-encoded.
+- **Platform admin** — Cross-tenant `/admin` dashboard gated by `PLATFORM_ADMIN_EMAILS` env (comma-separated, defaults to `eliranabu320@gmail.com`). Admin queries explicitly bypass RLS via `withAdminContext()` (issues `SET LOCAL row_security = off` inside the transaction). Distinct from per-org `OWNER` role.
+
+---
+
+## Platform admin (/admin)
+
+Reserved for the SaaS owner. Lives under `/admin` in the web app and `/v1/admin/*` in the API.
+
+- **Auth**: Bearer JWT + email allowlist (`PLATFORM_ADMIN_EMAILS`). Non-allowlisted users get 403 from the API and a client-side redirect to `/`.
+- **Routes**: `/v1/admin/check`, `/stats`, `/orgs`, `/orgs/:id`, `/users`, `/audit`.
+- **RLS bypass**: All admin queries run inside `withAdminContext()`, which issues `SET LOCAL row_security = off` so cross-tenant reads work.
+- **UI**: dashboard with metrics cards (orgs / users / employees / shifts / signups7d / activeOrgs7d), searchable orgs table with detail drawer, users list, cross-tenant audit log.
 
 ---
 

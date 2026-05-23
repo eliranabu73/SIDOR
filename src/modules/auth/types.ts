@@ -19,6 +19,8 @@ declare module 'fastify' {
       orgId: string;
       /** Role from app_metadata.role — defaults to 'employee' */
       role: string;
+      /** Email from JWT `email` claim — used for platform-admin allowlist. */
+      email?: string;
     };
   }
 }
