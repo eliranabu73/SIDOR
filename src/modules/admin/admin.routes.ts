@@ -907,6 +907,217 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // -------------------------------------------------------------------------
+  // POST /v1/admin/e2e-setup — seed a test org for E2E verification.
+  // Body: { email, orgName?, industry?, employees?, locationName? }
+  // Creates org + membership + location + roles + employees + a schedule.
+  // Idempotent on org name + email (returns existing if already provisioned).
+  // -------------------------------------------------------------------------
+  const E2ESetupBody = z.object({
+    email: z.string().email(),
+    orgName: z.string().min(2).max(120).default('חנות סלולר אלירן'),
+    industry: z.string().max(40).default('retail'),
+    locationName: z.string().min(1).max(80).default('סניף מרכזי'),
+    timezone: z.string().default('Asia/Jerusalem'),
+    roles: z.array(z.string().min(1).max(80)).default([
+      'מנהל חנות',
+      'מוכר',
+      'טכנאי',
+    ]),
+    employees: z
+      .array(
+        z.object({
+          fullName: z.string().min(1).max(120),
+          phone: z.string().max(40).nullable().default(null),
+          email: z.string().email().nullable().default(null),
+          roles: z.array(z.string()).default([]),
+        }),
+      )
+      .default([
+        { fullName: 'אלירן (מנהל)', phone: '0523736241', email: null, roles: ['מנהל חנות'] },
+        { fullName: 'דנה כהן', phone: '0501112233', email: null, roles: ['מוכר'] },
+        { fullName: 'יוסי לוי', phone: '0502223344', email: null, roles: ['מוכר', 'טכנאי'] },
+        { fullName: 'מאיה רביב', phone: '0503334455', email: null, roles: ['מוכר'] },
+        { fullName: 'אבי גרין', phone: '0504445566', email: null, roles: ['טכנאי'] },
+      ]),
+  });
+
+  app.post(
+    '/e2e-setup',
+    { preHandler: auth, schema: { body: E2ESetupBody } },
+    async (req, reply) => {
+      if (!ensureAdmin(req, reply)) return;
+      const body = req.body as z.infer<typeof E2ESetupBody>;
+      const srk = env.SUPABASE_SERVICE_ROLE_KEY;
+      const sbu = env.SUPABASE_URL;
+      if (!srk || !sbu) {
+        return reply.code(501).send({
+          code: 'NOT_CONFIGURED',
+          message: 'SUPABASE_SERVICE_ROLE_KEY/SUPABASE_URL required',
+        });
+      }
+      // 1) Resolve userId from Supabase by email
+      let targetUserId: string | null = null;
+      for (let page = 1; page <= 20 && !targetUserId; page++) {
+        const r = await fetch(
+          `${sbu}/auth/v1/admin/users?page=${page}&per_page=200`,
+          {
+            headers: {
+              apikey: srk,
+              Authorization: `Bearer ${srk}`,
+            },
+          },
+        );
+        const data = (await r.json()) as Record<string, unknown>;
+        const users = (data['users'] as Array<Record<string, unknown>>) || [];
+        const m = users.find(
+          (u) =>
+            ((u['email'] as string) || '').toLowerCase() ===
+            body.email.toLowerCase(),
+        );
+        if (m) targetUserId = m['id'] as string;
+        if (users.length < 200) break;
+      }
+      if (!targetUserId) {
+        return reply.code(404).send({
+          code: 'USER_NOT_FOUND',
+          message: `No Supabase user with email ${body.email}`,
+        });
+      }
+
+      try {
+        const result = await prisma.$transaction(async (tx) => {
+          // 2) Find or create org
+          let org = await tx.organization.findFirst({
+            where: { name: body.orgName, ownerUserId: targetUserId! },
+          });
+          if (!org) {
+            org = await tx.organization.create({
+              data: {
+                name: body.orgName,
+                industry: body.industry,
+                defaultTimezone: body.timezone,
+                ownerUserId: targetUserId!,
+                weekStartDay: 0,
+                plan: 'FREE',
+              },
+            });
+          }
+          // 3) Membership (idempotent via @@unique([userId, organizationId]))
+          await tx.membership.upsert({
+            where: {
+              userId_organizationId: {
+                userId: targetUserId!,
+                organizationId: org.id,
+              },
+            },
+            update: { role: 'OWNER' },
+            create: {
+              userId: targetUserId!,
+              organizationId: org.id,
+              role: 'OWNER',
+            },
+          });
+          // 4) Location
+          let loc = await tx.location.findFirst({
+            where: { organizationId: org.id, name: body.locationName },
+          });
+          if (!loc) {
+            loc = await tx.location.create({
+              data: {
+                organizationId: org.id,
+                name: body.locationName,
+                timezone: body.timezone,
+              },
+            });
+          }
+          // 5) Roles
+          const roleRecords: Record<string, string> = {};
+          for (const roleName of body.roles) {
+            let role = await tx.role.findFirst({
+              where: { organizationId: org.id, name: roleName },
+            });
+            if (!role) {
+              role = await tx.role.create({
+                data: { organizationId: org.id, name: roleName },
+              });
+            }
+            roleRecords[roleName] = role.id;
+          }
+          // 6) Employees
+          const employeeRecords: Array<{ id: string; fullName: string; phone: string | null }> = [];
+          for (const e of body.employees) {
+            let emp = await tx.employee.findFirst({
+              where: { organizationId: org.id, fullName: e.fullName },
+            });
+            if (!emp) {
+              emp = await tx.employee.create({
+                data: {
+                  organizationId: org.id,
+                  fullName: e.fullName,
+                  email: e.email,
+                  phone: e.phone,
+                  isActive: true,
+                  defaultLocationId: loc.id,
+                  roles: {
+                    create: e.roles
+                      .map((rn) => roleRecords[rn])
+                      .filter((v): v is string => !!v)
+                      .map((roleId) => ({ roleId })),
+                  },
+                },
+              });
+            }
+            employeeRecords.push({
+              id: emp.id,
+              fullName: emp.fullName,
+              phone: emp.phone,
+            });
+          }
+          // 7) Schedule for current week (Sunday-based)
+          const today = new Date();
+          const dayOfWeek = today.getUTCDay();
+          const weekStart = new Date(
+            Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - dayOfWeek),
+          );
+          const weekEnd = new Date(weekStart.getTime() + 6 * 86400_000);
+          let schedule = await tx.schedule.findFirst({
+            where: { organizationId: org.id, periodStartDate: weekStart },
+          });
+          if (!schedule) {
+            schedule = await tx.schedule.create({
+              data: {
+                organizationId: org.id,
+                locationId: loc.id,
+                name: `שבוע ${weekStart.toISOString().slice(0, 10)}`,
+                periodStartDate: weekStart,
+                periodEndDate: weekEnd,
+                timezone: body.timezone,
+                status: 'DRAFT',
+              },
+            });
+          }
+          return {
+            orgId: org.id,
+            orgName: org.name,
+            userId: targetUserId,
+            locationId: loc.id,
+            roleIds: roleRecords,
+            employees: employeeRecords,
+            scheduleId: schedule.id,
+            weekStart: weekStart.toISOString().slice(0, 10),
+          };
+        });
+        return reply.send(result);
+      } catch (err) {
+        return reply.code(500).send({
+          code: 'E2E_SETUP_FAILED',
+          message: err instanceof Error ? err.message.slice(0, 500) : 'Unknown',
+        });
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
   // POST /v1/admin/apply-schema-migrations — idempotent ALTER TABLEs for
   // admin v2 + RLS. Safe to run multiple times (uses IF NOT EXISTS).
   // -------------------------------------------------------------------------
