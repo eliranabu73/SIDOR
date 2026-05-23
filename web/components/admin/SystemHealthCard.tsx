@@ -49,15 +49,34 @@ function Row({
   );
 }
 
+type HealthData = {
+  db?: { ok: boolean; latencyMs?: number; error?: string };
+  redis?: { ok: boolean; latencyMs?: number; error?: string } | null;
+  uptime?: number;
+  nodeVersion?: string;
+  envCheck?: Record<string, boolean>;
+};
+
 export function SystemHealthCard() {
-  const { data, isLoading, isError } = useQuery({
+  const { data: rawData, isLoading, isError } = useQuery({
     queryKey: ["admin", "system-health"],
     queryFn: () => adminApi.systemHealth(),
     refetchInterval: 30_000,
     staleTime: 15_000,
   });
 
-  const allOk = !!data?.ok;
+  const data = rawData as HealthData | undefined;
+  const dbOk = !!data?.db?.ok;
+  const redisOk = data?.redis == null ? true : !!data.redis.ok;
+  const envOk = data?.envCheck
+    ? Object.values(data.envCheck).every((v) => v === true)
+    : true;
+  const missingEnv = data?.envCheck
+    ? Object.entries(data.envCheck)
+        .filter(([, v]) => !v)
+        .map(([k]) => k.replace(/^has/, ""))
+    : [];
+  const allOk = dbOk && redisOk && envOk;
 
   return (
     <Card className="relative overflow-hidden">
@@ -100,38 +119,36 @@ export function SystemHealthCard() {
           <>
             <Row
               label="DB"
-              ok={data.checks.db.ok}
+              ok={dbOk}
               hint={
-                data.checks.db.ok
-                  ? data.checks.db.latencyMs != null
-                    ? `${data.checks.db.latencyMs}ms`
+                dbOk
+                  ? data.db?.latencyMs != null
+                    ? `${data.db.latencyMs}ms`
                     : "תקין"
-                  : data.checks.db.error
+                  : (data.db?.error ?? "כשל")
               }
             />
             <Row
               label="Redis"
-              ok={data.checks.redis.ok}
+              ok={redisOk}
               hint={
-                data.checks.redis.ok
-                  ? data.checks.redis.latencyMs != null
-                    ? `${data.checks.redis.latencyMs}ms`
-                    : "תקין"
-                  : data.checks.redis.error
+                data.redis == null
+                  ? "לא מוגדר"
+                  : data.redis.ok
+                    ? data.redis.latencyMs != null
+                      ? `${data.redis.latencyMs}ms`
+                      : "תקין"
+                    : (data.redis.error ?? "כשל")
               }
             />
             <Row
               label="Env"
-              ok={data.checks.env.ok}
-              hint={
-                data.checks.env.ok
-                  ? "תקין"
-                  : `חסר: ${(data.checks.env.missing ?? []).join(", ")}`
-              }
+              ok={envOk}
+              hint={envOk ? "תקין" : `חסר: ${missingEnv.join(", ")}`}
             />
             <div className="flex items-center justify-between px-1 pt-1 text-[11px] text-muted-foreground">
-              <span>Uptime: {formatUptime(data.uptimeSec)}</span>
-              <span>{data.env ?? ""}</span>
+              <span>Uptime: {formatUptime(data.uptime ?? 0)}</span>
+              <span>{data.nodeVersion ?? ""}</span>
             </div>
           </>
         )}
