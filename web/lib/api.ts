@@ -426,6 +426,26 @@ export function getScheduleExportUrl(
   return `${API_URL}/v1/schedules/${scheduleId}/export.${format}?style=${style}`;
 }
 
+export interface SchedulePosterLink {
+  url: string;
+  expiresInDays: number;
+}
+
+/**
+ * Manager-only: mint a public 7-day signed URL for the schedule poster PNG.
+ * The URL is crawlable, so WhatsApp renders it as an image preview when the
+ * link is pasted into a chat (no file attachment needed).
+ */
+export function getSchedulePosterLink(
+  scheduleId: ID,
+  style: ScheduleExportStyle = "branded",
+): Promise<SchedulePosterLink> {
+  return request<SchedulePosterLink>(
+    `/v1/share/schedules/${scheduleId}/poster-link?style=${style}`,
+    { method: "POST" },
+  );
+}
+
 export interface EmployeeShareShift {
   id: ID;
   assignmentId: ID;
@@ -1123,4 +1143,129 @@ export function rejectTimeOff(
     `/v1/timeoff/${id}/reject`,
     { method: "POST" },
   );
+}
+
+// --------- Manager-side employee availability + preferences ---------
+
+export type ManagerAvailabilityType =
+  | "AVAILABLE"
+  | "UNAVAILABLE"
+  | "PREFERRED";
+
+export interface ManagerAvailabilityRule {
+  id: ID;
+  dayOfWeek: number; // 0..6 (Sunday=0)
+  startLocalTime: string; // "HH:mm:ss"
+  endLocalTime: string;
+  availabilityType: ManagerAvailabilityType;
+  timezone: string;
+}
+
+export function fetchEmployeeAvailability(
+  employeeId: ID,
+): Promise<{ rules: ManagerAvailabilityRule[] }> {
+  return request<{ rules: ManagerAvailabilityRule[] }>(
+    `/v1/employees/${employeeId}/availability`,
+  );
+}
+
+export function saveEmployeeAvailability(
+  employeeId: ID,
+  rules: Array<{
+    dayOfWeek: number;
+    startLocalTime: string;
+    endLocalTime: string;
+    availabilityType: ManagerAvailabilityType;
+  }>,
+): Promise<{ rules: ManagerAvailabilityRule[] }> {
+  return request<{ rules: ManagerAvailabilityRule[] }>(
+    `/v1/employees/${employeeId}/availability`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ rules }),
+    },
+  );
+}
+
+export interface EmployeePreferencesPayload {
+  maxHoursPerWeek?: number | null;
+  preferredHoursPerWeek?: number | null;
+  minShiftsPerWeek?: number | null;
+  maxShiftsPerWeek?: number | null;
+  preferredShiftsPerWeek?: number | null;
+  prefersMornings?: boolean;
+  prefersEvenings?: boolean;
+  prefersWeekends?: boolean;
+  avoidBackToBackShifts?: boolean;
+  preferredShiftLength?: number | null;
+  noWorkAfter?: string | null;
+  noWorkBefore?: string | null;
+  avoidWeekends?: boolean;
+  avoidNightShifts?: boolean;
+  notes?: string | null;
+}
+
+export function fetchEmployeePreferences(
+  employeeId: ID,
+): Promise<EmployeePreferencesPayload | null> {
+  return request<EmployeePreferencesPayload | null>(
+    `/v1/employees/${employeeId}/preferences`,
+  );
+}
+
+export function saveEmployeePreferences(
+  employeeId: ID,
+  body: EmployeePreferencesPayload,
+): Promise<EmployeePreferencesPayload> {
+  return request<EmployeePreferencesPayload>(
+    `/v1/employees/${employeeId}/preferences`,
+    {
+      method: "PUT",
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+// Manager-side time-off list filtered to a single employee.
+// The /v1/timeoff endpoint returns { items: [...] } with UTC field names —
+// normalize to TimeOffRequestItem shape for UI consumption.
+export interface RawTimeOffItem {
+  id: ID;
+  employeeId: ID;
+  employeeName: string;
+  startAtUtc: string;
+  endAtUtc: string;
+  timezone: string;
+  reason: string | null;
+  status: TimeOffStatus;
+  createdAt: string;
+}
+
+export async function fetchTimeOffForEmployee(
+  employeeId: ID,
+): Promise<TimeOffRequestItem[]> {
+  try {
+    const res = await request<{ items: RawTimeOffItem[] } | RawTimeOffItem[]>(
+      `/v1/timeoff`,
+    );
+    const items: RawTimeOffItem[] = Array.isArray(res)
+      ? res
+      : (res?.items ?? []);
+    return items
+      .filter((t) => t.employeeId === employeeId)
+      .map((t) => ({
+        id: t.id,
+        employeeId: t.employeeId,
+        employeeName: t.employeeName,
+        startsAt: t.startAtUtc,
+        endsAt: t.endAtUtc,
+        timezone: t.timezone,
+        reason: t.reason,
+        status: t.status,
+        createdAt: t.createdAt,
+      }));
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return [];
+    throw err;
+  }
 }

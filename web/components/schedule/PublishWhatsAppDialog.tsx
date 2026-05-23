@@ -1,7 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { Check, Copy, ExternalLink, MessageCircle, Phone } from "lucide-react";
+import {
+  Check,
+  Copy,
+  ExternalLink,
+  Image as ImageIcon,
+  MessageCircle,
+  Phone,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,7 +18,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fetchPublishBundle, type PublishBundle } from "@/lib/api";
+import {
+  fetchPublishBundle,
+  getSchedulePosterLink,
+  type PublishBundle,
+} from "@/lib/api";
 import { toast } from "sonner";
 
 type Props = {
@@ -24,6 +35,26 @@ export function PublishWhatsAppDialog({ open, onOpenChange, scheduleId }: Props)
   const [loading, setLoading] = React.useState(false);
   const [bundle, setBundle] = React.useState<PublishBundle | null>(null);
   const [copiedKey, setCopiedKey] = React.useState<string | null>(null);
+  const [posterBusy, setPosterBusy] = React.useState(false);
+
+  const shareGroupWithPoster = React.useCallback(async () => {
+    if (!scheduleId || !bundle) return;
+    setPosterBusy(true);
+    try {
+      const { url } = await getSchedulePosterLink(scheduleId, "branded");
+      const text = `${bundle.groupMessage}\n\n📸 תצוגת הסידור:\n${url}`;
+      window.open(
+        `https://wa.me/?text=${encodeURIComponent(text)}`,
+        "_blank",
+        "noopener,noreferrer",
+      );
+      toast.success("WhatsApp נפתח עם תצוגה מקדימה של הסידור");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "יצירת הקישור נכשלה");
+    } finally {
+      setPosterBusy(false);
+    }
+  }, [scheduleId, bundle]);
 
   React.useEffect(() => {
     if (!open || !scheduleId) return;
@@ -71,6 +102,31 @@ export function PublishWhatsAppDialog({ open, onOpenChange, scheduleId }: Props)
           </div>
         ) : !bundle ? null : (
           <div className="space-y-5">
+            {/* Quick action — send group message with auto image preview */}
+            <section className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold flex items-center gap-2">
+                    <ImageIcon className="h-4 w-4 text-emerald-500" />
+                    שלח לקבוצה עם תמונת תצוגה
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    יוצר קישור חתום (7 ימים) לתמונת הסידור — WhatsApp יציג
+                    תצוגה מקדימה אוטומטית.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="glow"
+                  onClick={shareGroupWithPoster}
+                  disabled={posterBusy}
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  שלח עם תצוגה
+                </Button>
+              </div>
+            </section>
+
             {/* Group message */}
             <section>
               <div className="mb-2 flex items-center justify-between">

@@ -21,6 +21,7 @@ import { onboardingRoutes } from './modules/onboarding/onboarding.routes';
 import { employeesRoutes } from './modules/employees/employees.routes';
 import { shiftsCrudRoutes } from './modules/shifts-crud/shifts-crud.routes';
 import { shareRoutes } from './modules/share/share.routes';
+import { posterRoutes } from './modules/share/poster.routes';
 import { laborCostRoutes } from './modules/labor-cost/labor-cost.routes';
 import { swapsMarketplaceRoutes } from './modules/swaps/swaps-marketplace.routes';
 import { fairnessRoutes } from './modules/fairness/fairness.routes';
@@ -117,6 +118,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(employeesRoutes, { prefix: '/v1' });
   await app.register(shiftsCrudRoutes, { prefix: '/v1' });
   await app.register(shareRoutes);
+  await app.register(posterRoutes);
   await app.register(laborCostRoutes, { prefix: '/v1' });
   await app.register(swapsMarketplaceRoutes);
   await app.register(fairnessRoutes, { prefix: '/v1' });

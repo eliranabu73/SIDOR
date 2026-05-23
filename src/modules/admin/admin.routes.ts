@@ -1159,6 +1159,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       `ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS "weeklyBudgetHours" INTEGER NULL`,
       `ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS "dateOfBirth" DATE NULL`,
       `ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS "weeklyRestDay" "WeeklyRestDay" NOT NULL DEFAULT 'SATURDAY'`,
+      // Extended employee preferences (manager-side constraints UI)
+      `ALTER TABLE "employee_preferences" ADD COLUMN IF NOT EXISTS "preferredShiftLength" INTEGER NULL`,
+      `ALTER TABLE "employee_preferences" ADD COLUMN IF NOT EXISTS "noWorkAfter" VARCHAR(8) NULL`,
+      `ALTER TABLE "employee_preferences" ADD COLUMN IF NOT EXISTS "noWorkBefore" VARCHAR(8) NULL`,
+      `ALTER TABLE "employee_preferences" ADD COLUMN IF NOT EXISTS "avoidWeekends" BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE "employee_preferences" ADD COLUMN IF NOT EXISTS "avoidNightShifts" BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE "employee_preferences" ADD COLUMN IF NOT EXISTS "notes" TEXT NULL`,
     ];
     for (const stmt of statements) {
       try {

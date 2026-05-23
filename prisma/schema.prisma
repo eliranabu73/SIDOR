@@ -378,6 +378,13 @@ model EmployeePreferences {
   prefersEvenings        Boolean  @default(false)
   prefersWeekends        Boolean  @default(false)
   avoidBackToBackShifts  Boolean  @default(false)
+  // Manager-side extended constraints (migration 20260524100000)
+  preferredShiftLength   Int?
+  noWorkAfter            String?  @db.VarChar(8)
+  noWorkBefore           String?  @db.VarChar(8)
+  avoidWeekends          Boolean  @default(false)
+  avoidNightShifts       Boolean  @default(false)
+  notes                  String?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 

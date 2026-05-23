@@ -1,6 +1,7 @@
 "use client";
 
-import { Pencil, Power } from "lucide-react";
+import Link from "next/link";
+import { Lock, Pencil, Power, Sliders } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useLocations } from "@/lib/queries";
@@ -10,9 +11,34 @@ interface Props {
   employees: Employee[];
   onEdit: (employee: Employee) => void;
   onToggleActive: (employee: Employee) => void;
+  /** Per-employee constraint count for the lock chip. Optional —
+   * when undefined the chip is hidden. */
+  constraintCounts?: Record<string, number>;
 }
 
-export function EmployeeTable({ employees, onEdit, onToggleActive }: Props) {
+function ConstraintChip({ count }: { count: number }) {
+  if (count > 0) {
+    return (
+      <Badge variant="secondary" className="gap-1">
+        <Lock className="h-3 w-3" />
+        {count} אילוצים
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="gap-1 text-emerald-600">
+      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+      גמיש
+    </Badge>
+  );
+}
+
+export function EmployeeTable({
+  employees,
+  onEdit,
+  onToggleActive,
+  constraintCounts,
+}: Props) {
   const locationsQuery = useLocations();
   const locations = Object.fromEntries(
     (locationsQuery.data ?? []).map((l) => [l.id, l.name]),
@@ -58,6 +84,9 @@ export function EmployeeTable({ employees, onEdit, onToggleActive }: Props) {
                   סניף: {locations[e.primaryLocationId] ?? "—"}
                 </div>
               ) : null}
+              <div className="mt-2">
+                <ConstraintChip count={constraintCounts?.[e.id] ?? 0} />
+              </div>
               <div className="mt-3 flex gap-2">
                 <Button
                   variant="outline"
@@ -68,6 +97,18 @@ export function EmployeeTable({ employees, onEdit, onToggleActive }: Props) {
                 >
                   <Pencil className="h-4 w-4" />
                   ערוך
+                </Button>
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="h-11"
+                  aria-label={`ערוך אילוצים — ${e.fullName}`}
+                >
+                  <Link href={`/employees/${e.id}?tab=constraints`}>
+                    <Sliders className="h-4 w-4" />
+                    אילוצים
+                  </Link>
                 </Button>
                 <Button
                   variant="ghost"
@@ -93,6 +134,7 @@ export function EmployeeTable({ employees, onEdit, onToggleActive }: Props) {
             <th className="text-start p-3 font-medium">תפקידים</th>
             <th className="text-start p-3 font-medium">סניף</th>
             <th className="text-start p-3 font-medium">סטטוס</th>
+            <th className="text-start p-3 font-medium">אילוצים</th>
             <th className="text-start p-3 font-medium" aria-label="פעולות" />
           </tr>
         </thead>
@@ -120,6 +162,9 @@ export function EmployeeTable({ employees, onEdit, onToggleActive }: Props) {
                   <Badge variant="outline">לא פעיל/ה</Badge>
                 )}
               </td>
+              <td className="p-3">
+                <ConstraintChip count={constraintCounts?.[e.id] ?? 0} />
+              </td>
               <td className="p-3 text-end">
                 <div className="inline-flex gap-1">
                   <Button
@@ -129,6 +174,16 @@ export function EmployeeTable({ employees, onEdit, onToggleActive }: Props) {
                     aria-label={`ערוך את ${e.fullName}`}
                   >
                     <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`ערוך אילוצים — ${e.fullName}`}
+                  >
+                    <Link href={`/employees/${e.id}?tab=constraints`}>
+                      <Sliders className="h-4 w-4" />
+                    </Link>
                   </Button>
                   <Button
                     variant="ghost"
@@ -144,7 +199,7 @@ export function EmployeeTable({ employees, onEdit, onToggleActive }: Props) {
           ))}
           {employees.length === 0 ? (
             <tr>
-              <td colSpan={6} className="p-8 text-center text-muted-foreground">
+              <td colSpan={7} className="p-8 text-center text-muted-foreground">
                 אין עובדים להצגה
               </td>
             </tr>

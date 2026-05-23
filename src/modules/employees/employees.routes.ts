@@ -10,6 +10,13 @@ import {
   softDeleteEmployee,
   updateEmployee,
 } from './employees.service.js';
+import {
+  getPreferences,
+  listAvailability,
+  replaceAvailabilityForManager,
+  upsertPreferences,
+  type PreferencesPayload,
+} from './availability.service.js';
 import { prisma } from '../../db/prisma.js';
 import type { PrismaClient } from '@prisma/client';
 
@@ -158,6 +165,110 @@ export async function employeesRoutes(app: FastifyInstance): Promise<void> {
       try {
         const row = await dbFor(req).query((tx) => createRole(orgIdFor(req), body.name, tx));
         return reply.code(201).send(row);
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
+
+  // ---- Availability + preferences (manager-side, org-scoped) ----
+
+  const TimeStr = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, 'expected HH:mm or HH:mm:ss');
+  const AvailabilityRuleSchema = z.object({
+    dayOfWeek: z.number().int().min(0).max(6),
+    startLocalTime: TimeStr,
+    endLocalTime: TimeStr,
+    availabilityType: z.enum(['AVAILABLE', 'UNAVAILABLE', 'PREFERRED']),
+  });
+  const PutAvailabilityBody = z.object({
+    rules: z.array(AvailabilityRuleSchema).max(500),
+  });
+
+  app.get(
+    '/employees/:id/availability',
+    { schema: { params: IdParam }, preHandler: authHandlers },
+    async (req, reply) => {
+      const { id } = req.params as z.infer<typeof IdParam>;
+      try {
+        const out = await dbFor(req).query((tx) =>
+          listAvailability(orgIdFor(req), id, tx),
+        );
+        return reply.send(out);
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
+
+  app.put(
+    '/employees/:id/availability',
+    { schema: { params: IdParam, body: PutAvailabilityBody }, preHandler: authHandlers },
+    async (req, reply) => {
+      const { id } = req.params as z.infer<typeof IdParam>;
+      const body = req.body as z.infer<typeof PutAvailabilityBody>;
+      // Normalize "HH:mm" → "HH:mm:00" so Postgres TIME accepts it.
+      const rules = body.rules.map((r) => ({
+        dayOfWeek: r.dayOfWeek,
+        startLocalTime: r.startLocalTime.length === 5 ? `${r.startLocalTime}:00` : r.startLocalTime,
+        endLocalTime: r.endLocalTime.length === 5 ? `${r.endLocalTime}:00` : r.endLocalTime,
+        availabilityType: r.availabilityType,
+      }));
+      try {
+        const out = await dbFor(req).query((tx) =>
+          replaceAvailabilityForManager(orgIdFor(req), id, rules, tx),
+        );
+        return reply.send(out);
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
+
+  const PreferencesBody = z.object({
+    maxHoursPerWeek: z.number().int().min(0).max(168).nullable().optional(),
+    preferredHoursPerWeek: z.number().int().min(0).max(168).nullable().optional(),
+    minShiftsPerWeek: z.number().int().min(0).max(14).nullable().optional(),
+    maxShiftsPerWeek: z.number().int().min(0).max(14).nullable().optional(),
+    preferredShiftsPerWeek: z.number().int().min(0).max(14).nullable().optional(),
+    prefersMornings: z.boolean().optional(),
+    prefersEvenings: z.boolean().optional(),
+    prefersWeekends: z.boolean().optional(),
+    avoidBackToBackShifts: z.boolean().optional(),
+    preferredShiftLength: z.number().int().min(0).max(24).nullable().optional(),
+    noWorkAfter: TimeStr.nullable().optional(),
+    noWorkBefore: TimeStr.nullable().optional(),
+    avoidWeekends: z.boolean().optional(),
+    avoidNightShifts: z.boolean().optional(),
+    notes: z.string().max(2000).nullable().optional(),
+  });
+
+  app.get(
+    '/employees/:id/preferences',
+    { schema: { params: IdParam }, preHandler: authHandlers },
+    async (req, reply) => {
+      const { id } = req.params as z.infer<typeof IdParam>;
+      try {
+        const out = await dbFor(req).query((tx) =>
+          getPreferences(orgIdFor(req), id, tx),
+        );
+        return reply.send(out);
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
+
+  app.put(
+    '/employees/:id/preferences',
+    { schema: { params: IdParam, body: PreferencesBody }, preHandler: authHandlers },
+    async (req, reply) => {
+      const { id } = req.params as z.infer<typeof IdParam>;
+      const body = req.body as PreferencesPayload;
+      try {
+        const out = await dbFor(req).query((tx) =>
+          upsertPreferences(orgIdFor(req), id, body, tx),
+        );
+        return reply.send(out);
       } catch (err) {
         return handleHttpError(reply, err);
       }

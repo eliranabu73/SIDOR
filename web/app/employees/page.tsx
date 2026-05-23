@@ -25,7 +25,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
+import {
+  fetchEmployeeAvailability,
+  fetchEmployeePreferences,
+} from "@/lib/api";
 import {
   queryKeys,
   useCreateEmployee,
@@ -176,6 +180,48 @@ function EmployeesInner() {
     }
   };
 
+  const employeeIds = React.useMemo(
+    () => (employeesQuery.data ?? []).map((e) => e.id),
+    [employeesQuery.data],
+  );
+
+  // Per-employee constraint snapshot. Computes (availability rules + non-trivial
+  // preference fields) so the row chip can show "🔒 N אילוצים" vs "🟢 גמיש".
+  const availabilityResults = useQueries({
+    queries: employeeIds.map((id) => ({
+      queryKey: ["employee-availability", id] as const,
+      queryFn: () => fetchEmployeeAvailability(id),
+      staleTime: 60_000,
+    })),
+  });
+  const preferencesResults = useQueries({
+    queries: employeeIds.map((id) => ({
+      queryKey: ["employee-preferences", id] as const,
+      queryFn: () => fetchEmployeePreferences(id),
+      staleTime: 60_000,
+    })),
+  });
+
+  const constraintCounts = React.useMemo(() => {
+    const map: Record<string, number> = {};
+    employeeIds.forEach((id, i) => {
+      const avail = availabilityResults[i]?.data?.rules?.length ?? 0;
+      const prefs = preferencesResults[i]?.data;
+      let prefCount = 0;
+      if (prefs) {
+        if (prefs.maxHoursPerWeek != null) prefCount += 1;
+        if (prefs.preferredShiftLength != null) prefCount += 1;
+        if (prefs.noWorkAfter) prefCount += 1;
+        if (prefs.noWorkBefore) prefCount += 1;
+        if (prefs.avoidWeekends) prefCount += 1;
+        if (prefs.avoidNightShifts) prefCount += 1;
+        if (prefs.notes && prefs.notes.trim() !== "") prefCount += 1;
+      }
+      map[id] = avail + prefCount;
+    });
+    return map;
+  }, [employeeIds, availabilityResults, preferencesResults]);
+
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
     return (employeesQuery.data ?? []).filter((e) =>
@@ -300,6 +346,7 @@ function EmployeesInner() {
           employees={filtered}
           onEdit={startEdit}
           onToggleActive={toggleActive}
+          constraintCounts={constraintCounts}
         />
       )}
 

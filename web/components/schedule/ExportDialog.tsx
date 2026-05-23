@@ -1,7 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { Download, FileImage, FileText, MessageCircle } from "lucide-react";
+import {
+  Download,
+  FileImage,
+  FileText,
+  Image as ImageIcon,
+  Link2,
+  MessageCircle,
+  Send,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,9 +20,14 @@ import {
 } from "@/components/ui/dialog";
 import {
   getScheduleExportUrl,
+  getSchedulePosterLink,
   type ScheduleExportFormat,
   type ScheduleExportStyle,
 } from "@/lib/api";
+import {
+  canNativeShareFiles,
+  shareScheduleImage,
+} from "@/lib/whatsapp-share";
 import { toast } from "sonner";
 
 type Props = {
@@ -137,6 +150,61 @@ export function ExportDialog({
   const [format, setFormat] = React.useState<ScheduleExportFormat>("png");
   const [style, setStyle] = React.useState<ScheduleExportStyle>("branded");
   const [busy, setBusy] = React.useState(false);
+  const [managerPhone, setManagerPhone] = React.useState("");
+  const nativeShareReady = React.useMemo(
+    () => (typeof window === "undefined" ? false : canNativeShareFiles()),
+    [],
+  );
+
+  const handleNativeShare = React.useCallback(async () => {
+    if (!scheduleId) return;
+    setBusy(true);
+    try {
+      const res = await shareScheduleImage({ scheduleId, style, weekStart });
+      if (res.method === "native_share" && res.ok) {
+        toast.success("התמונה נשלחה לבחירת קבוצה/איש קשר");
+      } else if (res.error === "cancelled") {
+        toast.message("השיתוף בוטל");
+      } else if (res.method === "download_fallback") {
+        toast.success("התמונה ירדה — צרפו אותה ידנית בצ׳אט שנפתח");
+      } else if (!res.ok) {
+        toast.error("השיתוף נכשל");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }, [scheduleId, style, weekStart]);
+
+  const handleShareViaUrl = React.useCallback(
+    async (toPhone?: string) => {
+      if (!scheduleId) return;
+      setBusy(true);
+      try {
+        const { url } = await getSchedulePosterLink(scheduleId, style);
+        const res = await shareScheduleImage({
+          scheduleId,
+          style,
+          weekStart,
+          posterUrl: url,
+          ...(toPhone ? { toPhone } : {}),
+        });
+        if (res.ok) {
+          toast.success(
+            toPhone
+              ? "הקישור נשלח למנהל — WhatsApp יציג תצוגה מקדימה של התמונה"
+              : "הקישור הועתק ל-WhatsApp — תצוגת התמונה תופיע אוטומטית",
+          );
+        } else {
+          toast.error("פתיחת WhatsApp נכשלה");
+        }
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "יצירת הקישור נכשלה");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [scheduleId, style, weekStart],
+  );
 
   const handleDownload = React.useCallback(
     async (alsoOpenWhatsApp: boolean) => {
@@ -241,7 +309,69 @@ export function ExportDialog({
             </div>
           </div>
 
-          {/* Actions */}
+          {/* Smart share actions — appear above the legacy download row */}
+          <div className="space-y-2 pt-2 border-t">
+            <div className="text-xs font-semibold">שיתוף חכם ב-WhatsApp</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Button
+                variant="glow"
+                onClick={handleNativeShare}
+                disabled={busy || !scheduleId}
+                className="justify-start"
+                title={
+                  nativeShareReady
+                    ? "פותח את חלון השיתוף של המכשיר — בחרו קבוצה/איש קשר"
+                    : "במכשיר זה: התמונה תרד והקישור ייפתח ב-WhatsApp"
+                }
+              >
+                <ImageIcon className="h-4 w-4" />
+                {nativeShareReady
+                  ? "שתף תמונה ב-WhatsApp"
+                  : "הורד תמונה + פתח WhatsApp"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleShareViaUrl()}
+                disabled={busy || !scheduleId}
+                className="justify-start"
+                title="WhatsApp יצור תצוגה מקדימה של התמונה אוטומטית"
+              >
+                <Link2 className="h-4 w-4" />
+                שתף לינק תמונה (preview אוטומטי)
+              </Button>
+            </div>
+
+            {/* Send to manager — direct DM with poster link */}
+            <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3 space-y-2">
+              <div className="text-xs font-semibold">שלח לאישור מנהל</div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  dir="ltr"
+                  placeholder="050-1234567"
+                  value={managerPhone}
+                  onChange={(e) => setManagerPhone(e.target.value)}
+                  className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  aria-label="טלפון מנהל לאישור"
+                />
+                <Button
+                  variant="secondary"
+                  onClick={() => handleShareViaUrl(managerPhone.trim())}
+                  disabled={busy || !scheduleId || !managerPhone.trim()}
+                >
+                  <Send className="h-4 w-4" />
+                  שלח לאישור
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                המנהל יקבל הודעת WhatsApp עם תצוגה מקדימה של הסידור — לחיצה
+                אחת לאישור.
+              </p>
+            </div>
+          </div>
+
+          {/* Legacy download row */}
           <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t">
             <Button
               variant="outline"
@@ -250,21 +380,22 @@ export function ExportDialog({
               className="flex-1"
             >
               <Download className="h-4 w-4" />
-              הורד
+              הורד {format.toUpperCase()}
             </Button>
             <Button
-              variant="glow"
+              variant="ghost"
               onClick={() => handleDownload(true)}
               disabled={busy || !scheduleId}
               className="flex-1"
             >
               <MessageCircle className="h-4 w-4" />
-              שתף ב-WhatsApp
+              הורד + פתח WhatsApp ריק
             </Button>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            עצה: WhatsApp Web לא מצרף קבצים אוטומטית — הקובץ ירד למחשב, וצריך
-            לגרור אותו לחלון הצ׳אט שנפתח.
+            עצה: על מובייל — &quot;שתף תמונה&quot; מצרף את התמונה ישירות. בדסקטופ
+            — &quot;שתף לינק&quot; הוא הדרך המהירה ביותר (WhatsApp Web יציג
+            תצוגה מקדימה).
           </p>
         </div>
       </DialogContent>

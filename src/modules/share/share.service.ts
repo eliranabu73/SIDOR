@@ -25,6 +25,67 @@ function b64uDecode(s: string): Buffer {
 /** Token intents. Default (no intent) = legacy share-link (read schedule). */
 export type ShareTokenIntent = 'share' | 'employee_portal';
 
+/**
+ * Sign a short-lived poster token bound to a (scheduleId, organizationId)
+ * pair. Used to expose a public PNG URL that WhatsApp can crawl for an
+ * image preview. 7-day expiry; rotation via EMPLOYEE_SHARE_SECRET.
+ */
+export function signPosterToken(input: {
+  scheduleId: string;
+  organizationId: string;
+  ttlSeconds?: number;
+}): string {
+  const payload = {
+    sid: input.scheduleId,
+    oid: input.organizationId,
+    exp: Math.floor(Date.now() / 1000) + (input.ttlSeconds ?? 60 * 60 * 24 * 7),
+    int: 'poster' as const,
+  };
+  const head = b64u(JSON.stringify(payload));
+  const sig = b64u(createHmac('sha256', SECRET).update(head).digest());
+  return `${head}.${sig}`;
+}
+
+export type DecodedPosterToken = {
+  scheduleId: string;
+  organizationId: string;
+  exp: number;
+};
+
+/**
+ * Verify a poster token and (optionally) check it was minted for the given
+ * scheduleId. Returns null on any failure (bad sig, expired, wrong intent,
+ * scheduleId mismatch).
+ */
+export function verifyPosterToken(
+  token: string,
+  expectedScheduleId?: string,
+): DecodedPosterToken | null {
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const [head, sig] = parts;
+  if (!head || !sig) return null;
+  const expected = createHmac('sha256', SECRET).update(head).digest();
+  const provided = b64uDecode(sig);
+  if (expected.length !== provided.length) return null;
+  if (!timingSafeEqual(expected, provided)) return null;
+  let payload: { sid?: string; oid?: string; exp?: number; int?: string };
+  try {
+    payload = JSON.parse(b64uDecode(head).toString('utf8'));
+  } catch {
+    return null;
+  }
+  if (payload.int !== 'poster') return null;
+  if (typeof payload.exp !== 'number' || payload.exp < Date.now() / 1000) return null;
+  if (!payload.sid || !payload.oid) return null;
+  if (expectedScheduleId && payload.sid !== expectedScheduleId) return null;
+  return {
+    scheduleId: payload.sid,
+    organizationId: payload.oid,
+    exp: payload.exp,
+  };
+}
+
 export function signEmployeeToken(input: {
   employeeId: string;
   organizationId: string;
