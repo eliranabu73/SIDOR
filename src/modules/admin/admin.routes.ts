@@ -935,14 +935,16 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           message: 'SUPABASE_SERVICE_ROLE_KEY or SUPABASE_URL not set',
         });
       }
+      const supabaseHeaders = {
+        'Content-Type': 'application/json',
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+      };
       try {
-        const res = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
+        // Try create
+        const createRes = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: serviceRoleKey,
-            Authorization: `Bearer ${serviceRoleKey}`,
-          },
+          headers: supabaseHeaders,
           body: JSON.stringify({
             email: body.email,
             password: body.password,
@@ -950,19 +952,74 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
             user_metadata: body.fullName ? { full_name: body.fullName } : undefined,
           }),
         });
-        const data = (await res.json()) as Record<string, unknown>;
-        if (!res.ok) {
-          return reply.code(res.status).send({
-            code: 'SUPABASE_CREATE_FAILED',
-            message: (data['msg'] || data['error_description'] || data['error']) ?? 'Unknown',
-            supabaseStatus: res.status,
+        const createData = (await createRes.json()) as Record<string, unknown>;
+        if (createRes.ok) {
+          return reply.code(201).send({
+            userId: createData['id'],
+            email: createData['email'],
+            confirmed: createData['email_confirmed_at'] != null,
+            createdAt: createData['created_at'],
+            action: 'created',
           });
         }
-        return reply.code(201).send({
-          userId: data['id'],
-          email: data['email'],
-          confirmed: data['email_confirmed_at'] != null,
-          createdAt: data['created_at'],
+        // If user exists — fetch by email, update password + confirm
+        if (createRes.status === 422) {
+          const listRes = await fetch(
+            `${supabaseUrl}/auth/v1/admin/users?filter=email.eq.${encodeURIComponent(body.email)}`,
+            { headers: supabaseHeaders },
+          );
+          const listData = (await listRes.json()) as Record<string, unknown>;
+          const users = (listData['users'] as Array<Record<string, unknown>>) || [];
+          const existing = users.find(
+            (u) =>
+              ((u['email'] as string) || '').toLowerCase() === body.email.toLowerCase(),
+          );
+          if (!existing) {
+            return reply.code(404).send({
+              code: 'USER_LOOKUP_FAILED',
+              message: 'User exists but could not be located',
+            });
+          }
+          const updateRes = await fetch(
+            `${supabaseUrl}/auth/v1/admin/users/${existing['id']}`,
+            {
+              method: 'PUT',
+              headers: supabaseHeaders,
+              body: JSON.stringify({
+                password: body.password,
+                email_confirm: true,
+                user_metadata: body.fullName
+                  ? { full_name: body.fullName }
+                  : undefined,
+              }),
+            },
+          );
+          const updateData = (await updateRes.json()) as Record<string, unknown>;
+          if (!updateRes.ok) {
+            return reply.code(updateRes.status).send({
+              code: 'SUPABASE_UPDATE_FAILED',
+              message:
+                (updateData['msg'] ||
+                  updateData['error_description'] ||
+                  updateData['error']) ??
+                'Unknown',
+            });
+          }
+          return reply.code(200).send({
+            userId: updateData['id'],
+            email: updateData['email'],
+            confirmed: updateData['email_confirmed_at'] != null,
+            action: 'updated',
+          });
+        }
+        return reply.code(createRes.status).send({
+          code: 'SUPABASE_CREATE_FAILED',
+          message:
+            (createData['msg'] ||
+              createData['error_description'] ||
+              createData['error']) ??
+            'Unknown',
+          supabaseStatus: createRes.status,
         });
       } catch (err) {
         return reply.code(500).send({
