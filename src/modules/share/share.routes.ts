@@ -14,6 +14,8 @@ import { loadScheduleExportData } from './export/data';
 import { renderPng } from './export/png-renderer';
 import { renderPdf } from './export/pdf-renderer';
 import { isExportStyle, type ExportStyle } from './export/types';
+import { prisma, withOrgContext } from '../../db/prisma';
+import type { PrismaClient } from '@prisma/client';
 
 const DEMO_ORG_ID = '10000000-0000-0000-0000-000000000001';
 function orgIdFor(req: { user?: { orgId: string } }): string {
@@ -21,6 +23,10 @@ function orgIdFor(req: { user?: { orgId: string } }): string {
 }
 function devAllowed(): boolean {
   return process.env['AUTH_DISABLED'] === 'true';
+}
+/** RLS-aware DB handle for authenticated routes. */
+function dbFor(req: { orgPrisma?: { query: <T>(fn: (tx: PrismaClient) => Promise<T>) => Promise<T> } }) {
+  return req.orgPrisma ?? { query: <T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> => fn(prisma) };
 }
 
 const SchedulePublishParam = z.object({ scheduleId: z.string() });
@@ -36,10 +42,15 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const { scheduleId } = req.params as z.infer<typeof SchedulePublishParam>;
       try {
-        const bundle = await buildPublishBundle({
-          scheduleId,
-          organizationId: orgIdFor(req),
-        });
+        const bundle = await dbFor(req).query((tx) =>
+          buildPublishBundle(
+            {
+              scheduleId,
+              organizationId: orgIdFor(req),
+            },
+            tx,
+          ),
+        );
         return reply.send(bundle);
       } catch (err) {
         const status = (err as { statusCode?: number }).statusCode ?? 500;
@@ -58,10 +69,15 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
       const { token } = req.params as z.infer<typeof TokenParam>;
       const decoded = verifyEmployeeToken(token);
       if (!decoded) return reply.code(401).send({ code: 'INVALID_TOKEN' });
-      const data = await fetchEmployeeActivity({
-        employeeId: decoded.employeeId,
-        organizationId: decoded.organizationId,
-      });
+      const data = await withOrgContext(decoded.organizationId).query((tx) =>
+        fetchEmployeeActivity(
+          {
+            employeeId: decoded.employeeId,
+            organizationId: decoded.organizationId,
+          },
+          tx,
+        ),
+      );
       return reply.send(data);
     },
   );
@@ -81,13 +97,18 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
       const decoded = verifyEmployeeToken(token);
       if (!decoded) return reply.code(401).send({ code: 'INVALID_TOKEN' });
       try {
-        const r = await createTimeOffRequest({
-          employeeId: decoded.employeeId,
-          organizationId: decoded.organizationId,
-          startsAt: new Date(body.startsAt),
-          endsAt: new Date(body.endsAt),
-          reason: body.reason,
-        });
+        const r = await withOrgContext(decoded.organizationId).query((tx) =>
+          createTimeOffRequest(
+            {
+              employeeId: decoded.employeeId,
+              organizationId: decoded.organizationId,
+              startsAt: new Date(body.startsAt),
+              endsAt: new Date(body.endsAt),
+              reason: body.reason,
+            },
+            tx,
+          ),
+        );
         return reply.code(201).send({
           id: r.id,
           status: r.status.toLowerCase(),
@@ -123,11 +144,16 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
       const decoded = verifyEmployeeToken(token);
       if (!decoded) return reply.code(401).send({ code: 'INVALID_TOKEN' });
       try {
-        const rules = await replaceAvailability({
-          employeeId: decoded.employeeId,
-          organizationId: decoded.organizationId,
-          rules: body.rules,
-        });
+        const rules = await withOrgContext(decoded.organizationId).query((tx) =>
+          replaceAvailability(
+            {
+              employeeId: decoded.employeeId,
+              organizationId: decoded.organizationId,
+              rules: body.rules,
+            },
+            tx,
+          ),
+        );
         return reply.send({
           rules: rules.map((r) => ({
             id: r.id,
@@ -223,9 +249,8 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
         });
       }
       try {
-        const view = await fetchEmployeeView(
-          decoded.employeeId,
-          decoded.organizationId,
+        const view = await withOrgContext(decoded.organizationId).query((tx) =>
+          fetchEmployeeView(decoded.employeeId, decoded.organizationId, tx),
         );
         return reply.send(view);
       } catch (err) {

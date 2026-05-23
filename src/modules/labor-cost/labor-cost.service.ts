@@ -1,4 +1,5 @@
-import { prisma } from '../../db/prisma';
+import { prisma as defaultPrisma } from '../../db/prisma';
+import type { Db } from '../../db/prisma';
 
 /**
  * Israeli minimum wage (gross) — 2026 estimate. Used as fallback when an
@@ -12,10 +13,13 @@ const DEFAULT_HOURLY_RATE_ILS = 35;
  * - Hours = shift duration × required count for unassigned; or 1 per assignment
  * - Cost = hours × employee.hourlyRate (fallback to DEFAULT_HOURLY_RATE_ILS)
  */
-export async function fetchLaborCostForWeek(input: {
-  organizationId: string;
-  weekStart: Date;
-}) {
+export async function fetchLaborCostForWeek(
+  input: {
+    organizationId: string;
+    weekStart: Date;
+  },
+  db: Db = defaultPrisma,
+) {
   const start = input.weekStart;
   const end = new Date(start.getTime() + 7 * 86400000);
 
@@ -24,7 +28,7 @@ export async function fetchLaborCostForWeek(input: {
   // first; on column-missing error, fall back to a query without it.
   type ShiftWithRels = Awaited<ReturnType<typeof loadShifts>>;
   async function loadShifts(includeRate: boolean) {
-    return prisma.shift.findMany({
+    return db.shift.findMany({
       where: {
         organizationId: input.organizationId,
         startAtUtc: { gte: start, lt: end },

@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { env } from '../../env';
-import { prisma } from '../../db/prisma';
+import { prisma as defaultPrisma } from '../../db/prisma';
+import type { Db } from '../../db/prisma';
 
 /**
  * Stateless signed share tokens for employee read-only access.
@@ -81,17 +82,20 @@ export function whatsappLinkForPhone(phone: string | null | undefined, message: 
  * given schedule. The manager paste-sends the group message; each employee
  * also gets a personal wa.me link the manager can DM individually.
  */
-export async function buildPublishBundle(input: {
-  scheduleId: string;
-  organizationId: string;
-}) {
-  const schedule = await prisma.schedule.findFirst({
+export async function buildPublishBundle(
+  input: {
+    scheduleId: string;
+    organizationId: string;
+  },
+  db: Db = defaultPrisma,
+) {
+  const schedule = await db.schedule.findFirst({
     where: { id: input.scheduleId, organizationId: input.organizationId },
   });
   if (!schedule) {
     throw Object.assign(new Error('Schedule not found'), { statusCode: 404 });
   }
-  const employees = await prisma.employee.findMany({
+  const employees = await db.employee.findMany({
     where: { organizationId: input.organizationId, isActive: true },
     select: { id: true, fullName: true, phone: true },
     orderBy: { fullName: 'asc' },
@@ -132,8 +136,12 @@ export async function buildPublishBundle(input: {
 /**
  * Read-only schedule view for one employee, derived from their share token.
  */
-export async function fetchEmployeeView(employeeId: string, organizationId: string) {
-  const employee = await prisma.employee.findFirst({
+export async function fetchEmployeeView(
+  employeeId: string,
+  organizationId: string,
+  db: Db = defaultPrisma,
+) {
+  const employee = await db.employee.findFirst({
     where: { id: employeeId, organizationId, isActive: true },
     select: { id: true, fullName: true, phone: true, email: true },
   });
@@ -142,7 +150,7 @@ export async function fetchEmployeeView(employeeId: string, organizationId: stri
   }
   const now = new Date();
   const horizon = new Date(now.getTime() + 21 * 86400000); // 3 weeks ahead
-  const assignments = await prisma.shiftAssignment.findMany({
+  const assignments = await db.shiftAssignment.findMany({
     where: {
       employeeId,
       shift: {
@@ -160,7 +168,7 @@ export async function fetchEmployeeView(employeeId: string, organizationId: stri
     orderBy: { shift: { startAtUtc: 'asc' } },
   });
 
-  const org = await prisma.organization.findUnique({
+  const org = await db.organization.findUnique({
     where: { id: organizationId },
     select: { name: true, defaultTimezone: true },
   });

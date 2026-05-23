@@ -3,6 +3,13 @@ import { z } from 'zod';
 import { AssignmentBodySchema, ShiftIdParam } from './assignments.schemas.js';
 import { applyAssignment, validateOnly } from './assignments.service.js';
 import { HttpError } from '../../shared/errors.js';
+import { prisma } from '../../db/prisma.js';
+import type { PrismaClient } from '@prisma/client';
+
+/** RLS-aware DB handle (falls back to direct prisma in AUTH_DISABLED mode). */
+function dbFor(req: { orgPrisma?: { query: <T>(fn: (tx: PrismaClient) => Promise<T>) => Promise<T> } }) {
+  return req.orgPrisma ?? { query: <T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> => fn(prisma) };
+}
 
 const AUTH_DISABLED =
   process.env['NODE_ENV'] !== 'production' && process.env['AUTH_DISABLED'] === 'true';
@@ -30,14 +37,19 @@ export async function assignmentsRoutes(app: FastifyInstance): Promise<void> {
       const organizationId = req.user?.orgId;
 
       try {
-        const result = await validateOnly({
-          shiftId,
-          employeeId: body.employeeId,
-          expectedShiftVersion: body.expectedShiftVersion,
-          action: body.action,
-          actingUserId,
-          organizationId,
-        });
+        const result = await dbFor(req).query((tx) =>
+          validateOnly(
+            {
+              shiftId,
+              employeeId: body.employeeId,
+              expectedShiftVersion: body.expectedShiftVersion,
+              action: body.action,
+              actingUserId,
+              organizationId,
+            },
+            tx,
+          ),
+        );
         return reply.send(result);
       } catch (err) {
         return handleHttpError(reply, err);
@@ -62,16 +74,21 @@ export async function assignmentsRoutes(app: FastifyInstance): Promise<void> {
       const organizationId = req.user?.orgId;
 
       try {
-        const result = await applyAssignment({
-          shiftId,
-          employeeId: body.employeeId,
-          expectedShiftVersion: body.expectedShiftVersion,
-          expectedAssignmentVersion: body.expectedAssignmentVersion,
-          action: body.action,
-          acknowledgeWarnings: body.acknowledgeWarnings,
-          actingUserId,
-          organizationId,
-        });
+        const result = await dbFor(req).query((tx) =>
+          applyAssignment(
+            {
+              shiftId,
+              employeeId: body.employeeId,
+              expectedShiftVersion: body.expectedShiftVersion,
+              expectedAssignmentVersion: body.expectedAssignmentVersion,
+              action: body.action,
+              acknowledgeWarnings: body.acknowledgeWarnings,
+              actingUserId,
+              organizationId,
+            },
+            tx,
+          ),
+        );
         return reply.send(result);
       } catch (err) {
         return handleHttpError(reply, err);

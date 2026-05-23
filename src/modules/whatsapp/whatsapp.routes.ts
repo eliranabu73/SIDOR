@@ -17,6 +17,8 @@ import {
   handleStatusUpdate,
   sendBulkSchedulePublish,
 } from './whatsapp.service';
+import { prisma } from '../../db/prisma';
+import type { PrismaClient } from '@prisma/client';
 
 const DEMO_ORG_ID = '10000000-0000-0000-0000-000000000001';
 function orgIdFor(req: { user?: { orgId: string } }): string {
@@ -24,6 +26,10 @@ function orgIdFor(req: { user?: { orgId: string } }): string {
 }
 function devAllowed(): boolean {
   return process.env['AUTH_DISABLED'] === 'true';
+}
+/** RLS-aware DB handle (falls back to direct prisma in AUTH_DISABLED mode). */
+function dbFor(req: { orgPrisma?: { query: <T>(fn: (tx: PrismaClient) => Promise<T>) => Promise<T> } }) {
+  return req.orgPrisma ?? { query: <T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> => fn(prisma) };
 }
 
 const ScheduleParam = z.object({ id: z.string().min(1) });
@@ -79,9 +85,14 @@ export async function whatsappRoutes(app: FastifyInstance): Promise<void> {
       const { id } = req.params as z.infer<typeof ScheduleParam>;
       const body = (req.body ?? {}) as z.infer<typeof SendBody>;
       try {
-        const result = await sendBulkSchedulePublish(orgIdFor(req), id, {
-          dryRun: body.dryRun ?? false,
-        });
+        const result = await dbFor(req).query((tx) =>
+          sendBulkSchedulePublish(
+            orgIdFor(req),
+            id,
+            { dryRun: body.dryRun ?? false },
+            tx,
+          ),
+        );
         return reply.send(result);
       } catch (err) {
         const status = (err as { statusCode?: number }).statusCode ?? 500;

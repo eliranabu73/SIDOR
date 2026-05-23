@@ -1,4 +1,5 @@
-import { prisma } from '../../db/prisma';
+import { prisma as defaultPrisma, ensureTx } from '../../db/prisma';
+import type { Db } from '../../db/prisma';
 
 /**
  * Suggest candidate employees who could cover the shift attached to
@@ -7,11 +8,14 @@ import { prisma } from '../../db/prisma';
  *
  * Future: integrate the rules engine for proper feasibility.
  */
-export async function suggestSwapCandidates(input: {
-  organizationId: string;
-  sourceAssignmentId: string;
-}) {
-  const src = await prisma.shiftAssignment.findFirst({
+export async function suggestSwapCandidates(
+  input: {
+    organizationId: string;
+    sourceAssignmentId: string;
+  },
+  db: Db = defaultPrisma,
+) {
+  const src = await db.shiftAssignment.findFirst({
     where: { id: input.sourceAssignmentId },
     include: {
       shift: { include: { role: true } },
@@ -27,7 +31,7 @@ export async function suggestSwapCandidates(input: {
   const startsAt = src.shift.startAtUtc;
   const endsAt = src.shift.endAtUtc;
 
-  const candidatePool = await prisma.employee.findMany({
+  const candidatePool = await db.employee.findMany({
     where: {
       organizationId: input.organizationId,
       isActive: true,
@@ -67,13 +71,16 @@ export async function suggestSwapCandidates(input: {
     .sort((a, b) => Number(a.conflicting) - Number(b.conflicting));
 }
 
-export async function createSwapRequest(input: {
-  organizationId: string;
-  requestingEmployeeId: string;
-  sourceAssignmentId: string;
-}) {
+export async function createSwapRequest(
+  input: {
+    organizationId: string;
+    requestingEmployeeId: string;
+    sourceAssignmentId: string;
+  },
+  db: Db = defaultPrisma,
+) {
   // Verify the assignment belongs to the requester
-  const assignment = await prisma.shiftAssignment.findFirst({
+  const assignment = await db.shiftAssignment.findFirst({
     where: {
       id: input.sourceAssignmentId,
       employeeId: input.requestingEmployeeId,
@@ -88,12 +95,12 @@ export async function createSwapRequest(input: {
   }
 
   // Avoid duplicate pending requests for the same assignment
-  const existing = await prisma.shiftSwapRequest.findFirst({
+  const existing = await db.shiftSwapRequest.findFirst({
     where: { sourceAssignmentId: input.sourceAssignmentId, status: 'PENDING' },
   });
   if (existing) return existing;
 
-  return prisma.shiftSwapRequest.create({
+  return db.shiftSwapRequest.create({
     data: {
       organizationId: input.organizationId,
       sourceAssignmentId: input.sourceAssignmentId,
@@ -103,8 +110,8 @@ export async function createSwapRequest(input: {
   });
 }
 
-export async function listPendingSwaps(organizationId: string) {
-  const rows = await prisma.shiftSwapRequest.findMany({
+export async function listPendingSwaps(organizationId: string, db: Db = defaultPrisma) {
+  const rows = await db.shiftSwapRequest.findMany({
     where: { organizationId, status: 'PENDING' },
     include: {
       sourceAssignment: {
@@ -131,13 +138,16 @@ export async function listPendingSwaps(organizationId: string) {
   }));
 }
 
-export async function approveSwap(input: {
-  organizationId: string;
-  swapId: string;
-  targetEmployeeId: string;
-  managerUserId: string | null;
-}) {
-  return prisma.$transaction(async (tx) => {
+export async function approveSwap(
+  input: {
+    organizationId: string;
+    swapId: string;
+    targetEmployeeId: string;
+    managerUserId: string | null;
+  },
+  db: Db = defaultPrisma,
+) {
+  return ensureTx(db, async (tx) => {
     const swap = await tx.shiftSwapRequest.findFirst({
       where: { id: input.swapId, organizationId: input.organizationId, status: 'PENDING' },
       include: { sourceAssignment: true },
@@ -162,17 +172,20 @@ export async function approveSwap(input: {
   });
 }
 
-export async function rejectSwap(input: {
-  organizationId: string;
-  swapId: string;
-}) {
-  const swap = await prisma.shiftSwapRequest.findFirst({
+export async function rejectSwap(
+  input: {
+    organizationId: string;
+    swapId: string;
+  },
+  db: Db = defaultPrisma,
+) {
+  const swap = await db.shiftSwapRequest.findFirst({
     where: { id: input.swapId, organizationId: input.organizationId, status: 'PENDING' },
   });
   if (!swap) {
     throw Object.assign(new Error('Swap not found / already handled'), { statusCode: 404 });
   }
-  return prisma.shiftSwapRequest.update({
+  return db.shiftSwapRequest.update({
     where: { id: swap.id },
     data: { status: 'REJECTED' },
   });

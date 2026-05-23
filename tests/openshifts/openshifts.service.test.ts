@@ -2,7 +2,13 @@
 import { ConflictError, NotFoundError } from '../../src/shared/errors';
 
 // Mock shared deps before importing the service under test.
-jest.mock('../../src/db/prisma', () => ({ prisma: {} }));
+jest.mock('../../src/db/prisma', () => ({
+  prisma: {},
+  // Service tests pass a fake `db` that exposes `$transaction` (a PrismaClient
+  // shape).  When ensureTx receives such a value it will call its `$transaction`.
+  ensureTx: <T>(db: any, fn: (tx: any) => Promise<T>): Promise<T> =>
+    db && typeof db.$transaction === 'function' ? db.$transaction(fn) : fn(db),
+}));
 jest.mock('../../src/modules/audit/audit.service', () => ({
   writeAudit: jest.fn().mockResolvedValue(undefined),
 }));

@@ -1,4 +1,5 @@
-import { prisma } from '../../db/prisma';
+import { prisma as defaultPrisma } from '../../db/prisma';
+import type { Db } from '../../db/prisma';
 import { DateTime } from 'luxon';
 
 /**
@@ -27,16 +28,19 @@ function isClosingShift(end: DateTime): boolean {
   return end.hour >= 22 || end.hour < 6;
 }
 
-export async function fetchFairness(input: {
-  organizationId: string;
-  weeks?: number;
-}) {
+export async function fetchFairness(
+  input: {
+    organizationId: string;
+    weeks?: number;
+  },
+  db: Db = defaultPrisma,
+) {
   const weeks = input.weeks ?? 4;
   const tz = 'Asia/Jerusalem';
   const now = DateTime.now().setZone(tz);
   const windowStart = now.minus({ weeks }).startOf('day');
 
-  const assignments = await prisma.shiftAssignment.findMany({
+  const assignments = await db.shiftAssignment.findMany({
     where: {
       assignmentStatus: { in: ['CONFIRMED', 'COMPLETED'] },
       shift: {

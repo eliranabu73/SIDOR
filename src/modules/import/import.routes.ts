@@ -94,17 +94,22 @@ export async function importRoutes(app: FastifyInstance): Promise<void> {
         });
       }
       try {
-        const result = await applyImport({
-          orgId: u.orgId,
-          userId: u.id,
-          ...(body.weekStart ? { weekStart: body.weekStart } : {}),
-          ...(body.scheduleId ? { scheduleId: body.scheduleId } : {}),
-          ...(body.defaultLocationId
-            ? { defaultLocationId: body.defaultLocationId }
-            : {}),
-          employees: body.employees,
-          shifts: body.shifts,
-        });
+        const result = await req.orgPrisma.query((tx) =>
+          applyImport(
+            {
+              orgId: u.orgId,
+              userId: u.id,
+              ...(body.weekStart ? { weekStart: body.weekStart } : {}),
+              ...(body.scheduleId ? { scheduleId: body.scheduleId } : {}),
+              ...(body.defaultLocationId
+                ? { defaultLocationId: body.defaultLocationId }
+                : {}),
+              employees: body.employees,
+              shifts: body.shifts,
+            },
+            tx,
+          ),
+        );
         return reply.code(201).send(result);
       } catch (err) {
         return handle(reply, err);

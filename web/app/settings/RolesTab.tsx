@@ -48,7 +48,7 @@ export default function RolesTab({ settings, setSettings }: RolesTabProps) {
       setEditingRole(null);
       toast.success("תפקיד עודכן");
     } catch {
-      toast.error("שגיאה בעדכון");
+      toast.error("עדכון התפקיד נכשל");
     } finally {
       setRoleBusy(null);
     }
@@ -62,7 +62,7 @@ export default function RolesTab({ settings, setSettings }: RolesTabProps) {
       setSettings((s) => (s ? { ...s, roles: s.roles.filter((r) => r.id !== role.id) } : s));
       toast.success("תפקיד נמחק");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "שגיאה במחיקה";
+      const msg = err instanceof Error ? err.message : "מחיקת התפקיד נכשלה";
       toast.error(msg);
     } finally {
       setRoleBusy(null);
@@ -79,7 +79,7 @@ export default function RolesTab({ settings, setSettings }: RolesTabProps) {
       setNewRoleName("");
       toast.success("תפקיד נוצר");
     } catch {
-      toast.error("שגיאה ביצירה");
+      toast.error("יצירת התפקיד נכשלה");
     } finally {
       setAddingRole(false);
     }

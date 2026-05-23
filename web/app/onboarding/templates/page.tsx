@@ -91,7 +91,7 @@ function TemplatesFlow() {
   React.useEffect(() => {
     fetchTemplates()
       .then(setTemplates)
-      .catch(() => toast.error("שגיאה בטעינת טמפלייטים"))
+      .catch(() => toast.error("טעינת התבניות נכשלה"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -101,11 +101,11 @@ function TemplatesFlow() {
     try {
       const result = await applyTemplate(selected);
       toast.success(
-        `טמפלייט "${result.template}" הוחל — ${result.createdShifts} משמרות נוצרו`,
+        `תבנית "${result.template}" הוחלה — ${result.createdShifts} משמרות נוצרו`,
       );
       router.replace("/schedule");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "שגיאה בהחלת הטמפלייט";
+      const msg = err instanceof Error ? err.message : "החלת התבנית נכשלה";
       toast.error(msg);
       setApplying(false);
     }
@@ -134,7 +134,7 @@ function TemplatesFlow() {
 
         <section aria-labelledby="templates-title">
         <div className="text-center">
-          <h1 id="templates-title" className="text-2xl font-bold">בחר טמפלייט סידור</h1>
+          <h1 id="templates-title" className="text-2xl font-bold">בחר תבנית סידור</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             נבנה לך תפקידים ומשמרות מיד — אפשר לערוך הכל לאחר מכן בהגדרות.
           </p>
@@ -193,7 +193,7 @@ function TemplatesFlow() {
               disabled={applying}
               className="shrink-0"
             >
-              {applying ? "מייצר סידור…" : "החל טמפלייט →"}
+              {applying ? "מייצר סידור…" : "החל תבנית →"}
             </Button>
           </div>
         </div>

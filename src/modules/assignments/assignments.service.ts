@@ -1,6 +1,7 @@
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { DateTime } from 'luxon';
-import { prisma as defaultPrisma } from '../../db/prisma';
+import { prisma as defaultPrisma, ensureTx } from '../../db/prisma';
+import type { Db } from '../../db/prisma';
 import { LocksService } from '../locks/locks.service';
 import { writeAudit } from '../audit/audit.service';
 import { writeEvent, publishEvent } from '../events/events.service';
@@ -181,9 +182,9 @@ async function applyMetricsDelta(
 
 export async function validateOnly(
   input: Omit<AssignInput, 'acknowledgeWarnings'> & { acknowledgeWarnings?: boolean },
-  prisma: PrismaClient = defaultPrisma,
+  prisma: Db = defaultPrisma,
 ): Promise<ValidationResult> {
-  return prisma.$transaction(async (tx) => {
+  return ensureTx(prisma, async (tx) => {
     const ctx = await loadContext(tx, input.shiftId, input.employeeId, input.actingUserId, input.organizationId);
     return validateAssignment(ctx);
   });
@@ -191,9 +192,9 @@ export async function validateOnly(
 
 export async function applyAssignment(
   input: AssignInput,
-  prisma: PrismaClient = defaultPrisma,
+  prisma: Db = defaultPrisma,
 ): Promise<AssignResult> {
-  const eventToPublish = await prisma.$transaction(async (tx) => {
+  const eventToPublish = await ensureTx(prisma, async (tx) => {
     const ctx = await loadContext(tx, input.shiftId, input.employeeId, input.actingUserId, input.organizationId);
 
     if (ctx.shift.version !== input.expectedShiftVersion) {

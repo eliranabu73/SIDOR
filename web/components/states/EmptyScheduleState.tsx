@@ -32,7 +32,7 @@ export function EmptyScheduleState({
       <div>
         <p className="text-base font-medium mb-1">אין עדיין משמרות בשבוע הזה</p>
         <p className="text-sm text-muted-foreground max-w-md">
-          אפשר להתחיל ממשמרת ראשונה או ליצור לוח מתוך תבנית קיימת.
+          אפשר להתחיל ממשמרת ראשונה או ליצור סידור מתוך תבנית קיימת.
         </p>
       </div>
       <div className="flex flex-wrap items-center justify-center gap-2 mt-2">

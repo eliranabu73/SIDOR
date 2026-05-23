@@ -13,6 +13,13 @@ import {
   rejectClaim,
 } from './openshifts.service';
 import { HttpError } from '../../shared/errors';
+import { prisma } from '../../db/prisma';
+import type { PrismaClient } from '@prisma/client';
+
+/** RLS-aware DB handle (falls back to direct prisma in AUTH_DISABLED mode). */
+function dbFor(req: { orgPrisma?: { query: <T>(fn: (tx: PrismaClient) => Promise<T>) => Promise<T> } }) {
+  return req.orgPrisma ?? { query: <T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> => fn(prisma) };
+}
 
 function handleHttpError(reply: FastifyReply, err: unknown) {
   if (err instanceof HttpError) {
@@ -40,12 +47,17 @@ export async function openShiftsRoutes(app: FastifyInstance): Promise<void> {
       const { shiftId } = req.params as z.infer<typeof ShiftIdParam>;
       const body = req.body as z.infer<typeof ClaimCreateBody>;
       try {
-        const result = await claimOpenShift({
-          shiftId,
-          employeeId: body.employeeId,
-          acknowledgeWarnings: body.acknowledgeWarnings ?? false,
-          actingUserId: req.user?.id ?? '00000000-0000-0000-0000-0000000000aa',
-        });
+        const result = await dbFor(req).query((tx) =>
+          claimOpenShift(
+            {
+              shiftId,
+              employeeId: body.employeeId,
+              acknowledgeWarnings: body.acknowledgeWarnings ?? false,
+              actingUserId: req.user?.id ?? '00000000-0000-0000-0000-0000000000aa',
+            },
+            tx,
+          ),
+        );
         return reply.code(201).send(result);
       } catch (err) {
         return handleHttpError(reply, err);
@@ -60,11 +72,16 @@ export async function openShiftsRoutes(app: FastifyInstance): Promise<void> {
       const { claimId } = req.params as z.infer<typeof ClaimIdParam>;
       const body = req.body as z.infer<typeof ClaimApproveBody>;
       try {
-        const result = await approveClaim({
-          claimId,
-          actingUserId: req.user?.id ?? '00000000-0000-0000-0000-0000000000aa',
-          expectedShiftVersion: body.expectedShiftVersion,
-        });
+        const result = await dbFor(req).query((tx) =>
+          approveClaim(
+            {
+              claimId,
+              actingUserId: req.user?.id ?? '00000000-0000-0000-0000-0000000000aa',
+              expectedShiftVersion: body.expectedShiftVersion,
+            },
+            tx,
+          ),
+        );
         return reply.send(result);
       } catch (err) {
         return handleHttpError(reply, err);
@@ -79,11 +96,16 @@ export async function openShiftsRoutes(app: FastifyInstance): Promise<void> {
       const { claimId } = req.params as z.infer<typeof ClaimIdParam>;
       const body = req.body as z.infer<typeof ClaimRejectBody>;
       try {
-        const result = await rejectClaim({
-          claimId,
-          actingUserId: req.user?.id ?? '00000000-0000-0000-0000-0000000000aa',
-          reason: body.reason,
-        });
+        const result = await dbFor(req).query((tx) =>
+          rejectClaim(
+            {
+              claimId,
+              actingUserId: req.user?.id ?? '00000000-0000-0000-0000-0000000000aa',
+              reason: body.reason,
+            },
+            tx,
+          ),
+        );
         return reply.send(result);
       } catch (err) {
         return handleHttpError(reply, err);

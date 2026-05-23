@@ -1,5 +1,6 @@
 import type { PrismaClient, Prisma } from '@prisma/client';
-import { prisma as defaultPrisma } from '../../db/prisma';
+import { prisma as defaultPrisma, ensureTx } from '../../db/prisma';
+import type { Db } from '../../db/prisma';
 import { writeAudit } from '../audit/audit.service';
 import { writeEvent, publishEvent } from '../events/events.service';
 import {
@@ -105,9 +106,9 @@ async function applyMetricsDelta(
 
 export async function createSwap(
   input: CreateSwapInput,
-  prisma: PrismaClient = defaultPrisma,
+  prisma: Db = defaultPrisma,
 ): Promise<CreateSwapResult> {
-  const committed = await prisma.$transaction(async (tx) => {
+  const committed = await ensureTx(prisma, async (tx) => {
     const assignment = await tx.shiftAssignment.findUnique({
       where: { id: input.sourceAssignmentId },
       include: { shift: true },
@@ -209,9 +210,9 @@ export async function createSwap(
 
 export async function approveSwap(
   input: ApproveSwapInput,
-  prisma: PrismaClient = defaultPrisma,
+  prisma: Db = defaultPrisma,
 ): Promise<ApproveSwapResult> {
-  const committed = await prisma.$transaction(async (tx) => {
+  const committed = await ensureTx(prisma, async (tx) => {
     const swap = await tx.shiftSwapRequest.findUnique({
       where: { id: input.swapId },
     });
@@ -439,9 +440,9 @@ export async function approveSwap(
 
 export async function rejectSwap(
   input: RejectSwapInput,
-  prisma: PrismaClient = defaultPrisma,
+  prisma: Db = defaultPrisma,
 ): Promise<{ status: 'ok'; swap: { id: string; status: string } }> {
-  const committed = await prisma.$transaction(async (tx) => {
+  const committed = await ensureTx(prisma, async (tx) => {
     const swap = await tx.shiftSwapRequest.findUnique({
       where: { id: input.swapId },
     });

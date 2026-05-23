@@ -1,4 +1,5 @@
-import { prisma } from '../../db/prisma.js';
+import { prisma as defaultPrisma, ensureTx } from '../../db/prisma.js';
+import type { Db } from '../../db/prisma.js';
 import { NotFoundError } from '../../shared/errors.js';
 
 const EMPLOYMENT_TYPES = [
@@ -55,10 +56,13 @@ export type CreateEmployeeInput = {
   defaultLocationId?: string | undefined;
 };
 
-export async function createEmployee(input: CreateEmployeeInput): Promise<EmployeeResponse> {
+export async function createEmployee(
+  input: CreateEmployeeInput,
+  db: Db = defaultPrisma,
+): Promise<EmployeeResponse> {
   const roleIds = input.roleIds ?? [];
   if (roleIds.length > 0) {
-    const count = await prisma.role.count({
+    const count = await db.role.count({
       where: { id: { in: roleIds }, organizationId: input.orgId },
     });
     if (count !== roleIds.length) {
@@ -66,13 +70,13 @@ export async function createEmployee(input: CreateEmployeeInput): Promise<Employ
     }
   }
   if (input.defaultLocationId) {
-    const loc = await prisma.location.findFirst({
+    const loc = await db.location.findFirst({
       where: { id: input.defaultLocationId, organizationId: input.orgId },
     });
     if (!loc) throw new NotFoundError('defaultLocationId not found in organization');
   }
 
-  const created = await prisma.employee.create({
+  const created = await db.employee.create({
     data: {
       organizationId: input.orgId,
       fullName: input.fullName,
@@ -101,15 +105,18 @@ export type UpdateEmployeeInput = {
   defaultLocationId?: string | null | undefined;
 };
 
-export async function updateEmployee(input: UpdateEmployeeInput): Promise<EmployeeResponse> {
-  const existing = await prisma.employee.findFirst({
+export async function updateEmployee(
+  input: UpdateEmployeeInput,
+  db: Db = defaultPrisma,
+): Promise<EmployeeResponse> {
+  const existing = await db.employee.findFirst({
     where: { id: input.id, organizationId: input.orgId },
   });
   if (!existing) throw new NotFoundError('Employee not found');
 
   if (input.roleIds) {
     if (input.roleIds.length > 0) {
-      const count = await prisma.role.count({
+      const count = await db.role.count({
         where: { id: { in: input.roleIds }, organizationId: input.orgId },
       });
       if (count !== input.roleIds.length) {
@@ -118,7 +125,7 @@ export async function updateEmployee(input: UpdateEmployeeInput): Promise<Employ
     }
   }
   if (input.defaultLocationId) {
-    const loc = await prisma.location.findFirst({
+    const loc = await db.location.findFirst({
       where: { id: input.defaultLocationId, organizationId: input.orgId },
     });
     if (!loc) throw new NotFoundError('defaultLocationId not found in organization');
@@ -131,7 +138,7 @@ export async function updateEmployee(input: UpdateEmployeeInput): Promise<Employ
   if (input.employmentType !== undefined) data['employmentType'] = input.employmentType;
   if (input.defaultLocationId !== undefined) data['defaultLocationId'] = input.defaultLocationId;
 
-  await prisma.$transaction(async (tx) => {
+  await ensureTx(db, async (tx) => {
     if (Object.keys(data).length > 0) {
       await tx.employee.update({ where: { id: input.id }, data });
     }
@@ -146,18 +153,22 @@ export async function updateEmployee(input: UpdateEmployeeInput): Promise<Employ
     }
   });
 
-  const updated = await prisma.employee.findFirstOrThrow({
+  const updated = await db.employee.findFirstOrThrow({
     where: { id: input.id, organizationId: input.orgId },
     include: { roles: { include: { role: true } } },
   });
   return mapEmployee(updated);
 }
 
-export async function softDeleteEmployee(orgId: string, id: string): Promise<EmployeeResponse> {
-  const existing = await prisma.employee.findFirst({ where: { id, organizationId: orgId } });
+export async function softDeleteEmployee(
+  orgId: string,
+  id: string,
+  db: Db = defaultPrisma,
+): Promise<EmployeeResponse> {
+  const existing = await db.employee.findFirst({ where: { id, organizationId: orgId } });
   if (!existing) throw new NotFoundError('Employee not found');
-  await prisma.employee.update({ where: { id }, data: { isActive: false } });
-  const updated = await prisma.employee.findFirstOrThrow({
+  await db.employee.update({ where: { id }, data: { isActive: false } });
+  const updated = await db.employee.findFirstOrThrow({
     where: { id, organizationId: orgId },
     include: { roles: { include: { role: true } } },
   });
@@ -166,8 +177,9 @@ export async function softDeleteEmployee(orgId: string, id: string): Promise<Emp
 
 export async function listLocations(
   orgId: string,
+  db: Db = defaultPrisma,
 ): Promise<Array<{ id: string; name: string; timezone: string }>> {
-  const rows = await prisma.location.findMany({
+  const rows = await db.location.findMany({
     where: { organizationId: orgId, isActive: true },
     orderBy: { name: 'asc' },
     select: { id: true, name: true, timezone: true },
@@ -175,8 +187,11 @@ export async function listLocations(
   return rows;
 }
 
-export async function listRoles(orgId: string): Promise<Array<{ id: string; name: string }>> {
-  const rows = await prisma.role.findMany({
+export async function listRoles(
+  orgId: string,
+  db: Db = defaultPrisma,
+): Promise<Array<{ id: string; name: string }>> {
+  const rows = await db.role.findMany({
     where: { organizationId: orgId },
     orderBy: { name: 'asc' },
     select: { id: true, name: true },
@@ -187,8 +202,9 @@ export async function listRoles(orgId: string): Promise<Array<{ id: string; name
 export async function createRole(
   orgId: string,
   name: string,
+  db: Db = defaultPrisma,
 ): Promise<{ id: string; name: string }> {
-  const row = await prisma.role.create({
+  const row = await db.role.create({
     data: { organizationId: orgId, name },
     select: { id: true, name: true },
   });
@@ -198,9 +214,10 @@ export async function createRole(
 export async function createLocation(
   orgId: string,
   name: string,
-  timezone?: string,
+  timezone: string | undefined,
+  db: Db = defaultPrisma,
 ): Promise<{ id: string; name: string; timezone: string }> {
-  const row = await prisma.location.create({
+  const row = await db.location.create({
     data: { organizationId: orgId, name, timezone: timezone ?? 'Asia/Jerusalem' },
     select: { id: true, name: true, timezone: true },
   });

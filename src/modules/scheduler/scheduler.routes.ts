@@ -2,6 +2,13 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { SchedulerService, type ProviderName } from './scheduler.service';
 import { HttpError } from '../../shared/errors';
+import { prisma } from '../../db/prisma';
+import type { PrismaClient } from '@prisma/client';
+
+/** RLS-aware DB handle (falls back to direct prisma in AUTH_DISABLED mode). */
+function dbFor(req: { orgPrisma?: { query: <T>(fn: (tx: PrismaClient) => Promise<T>) => Promise<T> } }) {
+  return req.orgPrisma ?? { query: <T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> => fn(prisma) };
+}
 
 const ScheduleIdParam = z.object({ scheduleId: z.string().uuid() });
 
@@ -38,7 +45,6 @@ function devAllowed(): boolean {
 
 export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
   const authHandlers = devAllowed() ? [] : [app.authenticate];
-  const svc = new SchedulerService();
 
   app.post(
     '/schedules/:scheduleId/apply-proposals',
@@ -52,7 +58,10 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
       const actingUserId = req.user!.id;
 
       try {
-        const result = await svc.applyProposals(scheduleId, body.proposals, actingUserId, req.user?.orgId);
+        const result = await dbFor(req).query((tx) => {
+          const svc = new SchedulerService(tx);
+          return svc.applyProposals(scheduleId, body.proposals, actingUserId, req.user?.orgId);
+        });
         return reply.send(result);
       } catch (err) {
         return handleHttpError(reply, err);
@@ -71,7 +80,10 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
       const actingUserId = req.user!.id;
 
       try {
-        const updated = await svc.publishSchedule(scheduleId, actingUserId);
+        const updated = await dbFor(req).query((tx) => {
+          const svc = new SchedulerService(tx);
+          return svc.publishSchedule(scheduleId, actingUserId);
+        });
         return reply.send(updated);
       } catch (err) {
         return handleHttpError(reply, err);
@@ -90,14 +102,17 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
       const body = req.body as z.infer<typeof AutoScheduleBody>;
 
       try {
-        const result = await svc.run(
-          {
-            scheduleId,
-            dryRun: body.dryRun,
-            weights: body.weights,
-          },
-          body.provider as ProviderName,
-        );
+        const result = await dbFor(req).query((tx) => {
+          const svc = new SchedulerService(tx);
+          return svc.run(
+            {
+              scheduleId,
+              dryRun: body.dryRun,
+              weights: body.weights,
+            },
+            body.provider as ProviderName,
+          );
+        });
         return reply.send(result);
       } catch (err) {
         return handleHttpError(reply, err);

@@ -10,7 +10,8 @@
  * Israel time and converted to UTC by treating the wall-clock as Asia/Jerusalem
  * via a fixed +02:00 / +03:00 lookup. For MVP we assume Asia/Jerusalem.
  */
-import { prisma } from '../../db/prisma.js';
+import { prisma as defaultPrisma } from '../../db/prisma.js';
+import type { Db } from '../../db/prisma.js';
 import { ValidationFailedError } from '../../shared/errors.js';
 
 export interface ApplyEmployee {
@@ -96,21 +97,25 @@ function localIsraelToUtc(dateUtcMidnight: Date, hh: number, mm: number): Date {
 async function upsertRoleByName(
   orgId: string,
   name: string,
+  db: Db,
 ): Promise<{ id: string; created: boolean }> {
   const trimmed = name.trim();
-  const existing = await prisma.role.findFirst({
+  const existing = await db.role.findFirst({
     where: { organizationId: orgId, name: { equals: trimmed, mode: 'insensitive' } },
     select: { id: true },
   });
   if (existing) return { id: existing.id, created: false };
-  const created = await prisma.role.create({
+  const created = await db.role.create({
     data: { organizationId: orgId, name: trimmed },
     select: { id: true },
   });
   return { id: created.id, created: true };
 }
 
-export async function applyImport(input: ApplyImportInput): Promise<ApplyImportResult> {
+export async function applyImport(
+  input: ApplyImportInput,
+  db: Db = defaultPrisma,
+): Promise<ApplyImportResult> {
   // Resolve weekStart
   const weekStart = input.weekStart
     ? new Date(`${input.weekStart}T00:00:00Z`)
@@ -122,7 +127,7 @@ export async function applyImport(input: ApplyImportInput): Promise<ApplyImportR
   // Default location: first active location for org.
   let locationId = input.defaultLocationId;
   if (!locationId) {
-    const loc = await prisma.location.findFirst({
+    const loc = await db.location.findFirst({
       where: { organizationId: input.orgId, isActive: true },
       orderBy: { createdAt: 'asc' },
       select: { id: true },
@@ -139,7 +144,7 @@ export async function applyImport(input: ApplyImportInput): Promise<ApplyImportR
   // Determine / create target schedule.
   let scheduleId = input.scheduleId;
   if (scheduleId) {
-    const ok = await prisma.schedule.findFirst({
+    const ok = await db.schedule.findFirst({
       where: { id: scheduleId, organizationId: input.orgId },
       select: { id: true },
     });
@@ -149,7 +154,7 @@ export async function applyImport(input: ApplyImportInput): Promise<ApplyImportR
   } else {
     const weekEnd = new Date(weekStart);
     weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
-    const sch = await prisma.schedule.create({
+    const sch = await db.schedule.create({
       data: {
         organizationId: input.orgId,
         locationId,
@@ -180,14 +185,14 @@ export async function applyImport(input: ApplyImportInput): Promise<ApplyImportR
   const roleIdByName = new Map<string, string>();
   let createdRoles = 0;
   for (const name of roleNames) {
-    const r = await upsertRoleByName(input.orgId, name);
+    const r = await upsertRoleByName(input.orgId, name, db);
     roleIdByName.set(name.toLowerCase(), r.id);
     if (r.created) createdRoles += 1;
   }
 
   // 2) Employees — bulk insert, skipping those that exist (by fullName).
   const wantedEmployees = input.employees.filter((e) => !e.skip && e.fullName.trim());
-  const existingEmployees = await prisma.employee.findMany({
+  const existingEmployees = await db.employee.findMany({
     where: {
       organizationId: input.orgId,
       fullName: { in: wantedEmployees.map((e) => e.fullName.trim()) },
@@ -203,7 +208,7 @@ export async function applyImport(input: ApplyImportInput): Promise<ApplyImportR
     if (empIdByName.has(name)) continue;
     const roleId =
       e.role && roleIdByName.get(e.role.trim().toLowerCase());
-    const created = await prisma.employee.create({
+    const created = await db.employee.create({
       data: {
         organizationId: input.orgId,
         fullName: name,
@@ -278,7 +283,7 @@ export async function applyImport(input: ApplyImportInput): Promise<ApplyImportR
       continue;
     }
 
-    const created = await prisma.shift.create({
+    const created = await db.shift.create({
       data: {
         organizationId: input.orgId,
         scheduleId,
@@ -315,7 +320,7 @@ export async function applyImport(input: ApplyImportInput): Promise<ApplyImportR
         const empId = empIdByName.get(name);
         if (!empId) continue;
         try {
-          await prisma.shiftAssignment.create({
+          await db.shiftAssignment.create({
             data: {
               shiftId: created.id,
               employeeId: empId,

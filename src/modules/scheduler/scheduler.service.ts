@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
-import { prisma as defaultPrisma } from '../../db/prisma';
+import { prisma as defaultPrisma, ensureTx } from '../../db/prisma';
+import type { Db } from '../../db/prisma';
 import { GreedySchedulerProvider } from './providers/greedy.provider';
 import { OrToolsSchedulerProvider } from './providers/or-tools.provider';
 import { applyAssignment } from '../assignments/assignments.service';
@@ -35,16 +36,20 @@ export type ProviderName = 'greedy' | 'or-tools';
  * stable when we ship the optimizer.
  */
 export class SchedulerService {
-  constructor(private readonly prisma: PrismaClient = defaultPrisma) {}
+  constructor(private readonly prisma: Db = defaultPrisma) {}
 
   pickProvider(name: ProviderName = 'greedy'): SchedulerProvider {
+    // Providers expect a PrismaClient — when running inside an outer transaction
+    // (Db is a TransactionClient) we still pass it through; greedy / or-tools
+    // only call read-only helpers on the prisma surface.
+    const p = this.prisma as PrismaClient;
     switch (name) {
       case 'greedy':
-        return new GreedySchedulerProvider(this.prisma);
+        return new GreedySchedulerProvider(p);
       case 'or-tools':
-        return new OrToolsSchedulerProvider(this.prisma);
+        return new OrToolsSchedulerProvider(p);
       default:
-        return new GreedySchedulerProvider(this.prisma);
+        return new GreedySchedulerProvider(p);
     }
   }
 
@@ -59,7 +64,7 @@ export class SchedulerService {
       if (providerName === 'or-tools') {
         // Fail-soft: optimizer crashed (e.g., no feasible solution). Fall back
         // to greedy so the API still returns proposals, but surface the issue.
-        const fallback = new GreedySchedulerProvider(this.prisma);
+        const fallback = new GreedySchedulerProvider(this.prisma as PrismaClient);
         const result = await fallback.run(input);
         const message = err instanceof Error ? err.message : String(err);
         return { ...result, warning: `or-tools optimizer failed (${message}); fell back to greedy` };
@@ -149,7 +154,7 @@ export class SchedulerService {
     scheduleId: string,
     actingUserId: string,
   ): Promise<ReturnType<typeof mapSchedule>> {
-    return this.prisma.$transaction(async (tx) => {
+    return ensureTx(this.prisma, async (tx) => {
       const existing = await tx.schedule.findUnique({ where: { id: scheduleId } });
       if (!existing) throw new NotFoundError('Schedule not found');
 

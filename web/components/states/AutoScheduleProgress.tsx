@@ -13,7 +13,7 @@ import { Sparkles } from "lucide-react";
  *   - Staged copy:
  *       0s    → "יוצר הצעת שיבוץ..."  / "בודק זמינות, העדפות וחוקי עבודה"
  *       >2s   → "נמצאו N אפשרויות שיבוץ. מחשב את ההצעה הטובה ביותר..."
- *       >5s   → "עדיין עובד... אפשר להמשיך לצפות בלוח."
+ *       >5s   → "עדיין עובד... אפשר להמשיך לצפות בסידור."
  */
 interface Props {
   /** Optional candidate count to surface in the >2s copy. */
@@ -53,7 +53,7 @@ export function AutoScheduleProgress({ candidatesCount, active }: Props) {
       ? "בודק זמינות, העדפות וחוקי עבודה"
       : stage === 2
         ? "מחשב את ההצעה הטובה ביותר..."
-        : "אפשר להמשיך לצפות בלוח.";
+        : "אפשר להמשיך לצפות בסידור.";
 
   return (
     <div

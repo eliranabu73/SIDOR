@@ -1,4 +1,5 @@
-import { prisma } from '../../db/prisma.js';
+import { prisma as defaultPrisma } from '../../db/prisma.js';
+import type { Db } from '../../db/prisma.js';
 import { HttpError } from '../../shared/errors.js';
 
 export interface LaborRules {
@@ -23,8 +24,8 @@ export interface OrgSettings {
   locations: Array<{ id: string; name: string; timezone: string | null; address: string | null }>;
 }
 
-export async function getOrgSettings(orgId: string): Promise<OrgSettings> {
-  const org = await prisma.organization.findUniqueOrThrow({
+export async function getOrgSettings(orgId: string, db: Db = defaultPrisma): Promise<OrgSettings> {
+  const org = await db.organization.findUniqueOrThrow({
     where: { id: orgId },
     include: {
       roles: { orderBy: { name: 'asc' } },
@@ -63,7 +64,11 @@ export interface PatchOrgInput {
   laborRules?: LaborRules;
 }
 
-export async function patchOrgSettings(orgId: string, input: PatchOrgInput): Promise<OrgSettings> {
+export async function patchOrgSettings(
+  orgId: string,
+  input: PatchOrgInput,
+  db: Db = defaultPrisma,
+): Promise<OrgSettings> {
   const update: Record<string, unknown> = {};
   if (input.name !== undefined) update['name'] = input.name;
   if (input.industry !== undefined) update['industry'] = input.industry;
@@ -71,7 +76,7 @@ export async function patchOrgSettings(orgId: string, input: PatchOrgInput): Pro
   if (input.weekStartDay !== undefined) update['weekStartDay'] = input.weekStartDay;
   if (input.laborRules !== undefined) {
     // Merge with existing rules instead of replace, so partial patches work.
-    const existing = await prisma.organization.findUniqueOrThrow({
+    const existing = await db.organization.findUniqueOrThrow({
       where: { id: orgId },
       select: { laborRulesJsonb: true },
     });
@@ -82,32 +87,37 @@ export async function patchOrgSettings(orgId: string, input: PatchOrgInput): Pro
     update['laborRulesJsonb'] = { ...prev, ...input.laborRules };
   }
 
-  await prisma.organization.update({ where: { id: orgId }, data: update });
-  return getOrgSettings(orgId);
+  await db.organization.update({ where: { id: orgId }, data: update });
+  return getOrgSettings(orgId, db);
 }
 
 export async function updateRole(
   orgId: string,
   roleId: string,
   name: string,
-  description?: string | null,
+  description: string | null | undefined,
+  db: Db = defaultPrisma,
 ): Promise<{ id: string; name: string; description: string | null }> {
-  const role = await prisma.role.findFirst({ where: { id: roleId, organizationId: orgId } });
+  const role = await db.role.findFirst({ where: { id: roleId, organizationId: orgId } });
   if (!role) throw new HttpError(404, 'NOT_FOUND', 'Role not found');
 
-  const updated = await prisma.role.update({
+  const updated = await db.role.update({
     where: { id: roleId },
     data: { name, ...(description !== undefined ? { description } : {}) },
   });
   return { id: updated.id, name: updated.name, description: updated.description ?? null };
 }
 
-export async function deleteRole(orgId: string, roleId: string): Promise<void> {
-  const role = await prisma.role.findFirst({ where: { id: roleId, organizationId: orgId } });
+export async function deleteRole(
+  orgId: string,
+  roleId: string,
+  db: Db = defaultPrisma,
+): Promise<void> {
+  const role = await db.role.findFirst({ where: { id: roleId, organizationId: orgId } });
   if (!role) throw new HttpError(404, 'NOT_FOUND', 'Role not found');
 
   // Check if any employee is assigned this role before deleting.
-  const employeeUsage = await prisma.employeeRole.count({ where: { roleId } });
+  const employeeUsage = await db.employeeRole.count({ where: { roleId } });
   if (employeeUsage > 0)
     throw new HttpError(
       409,
@@ -116,7 +126,7 @@ export async function deleteRole(orgId: string, roleId: string): Promise<void> {
     );
 
   // Check if any active shift is using this role.
-  const shiftUsage = await prisma.shift.count({ where: { roleId } });
+  const shiftUsage = await db.shift.count({ where: { roleId } });
   if (shiftUsage > 0)
     throw new HttpError(
       409,
@@ -124,21 +134,22 @@ export async function deleteRole(orgId: string, roleId: string): Promise<void> {
       `לא ניתן למחוק תפקיד המשובץ ב-${shiftUsage} משמרת/ות`,
     );
 
-  await prisma.role.delete({ where: { id: roleId } });
+  await db.role.delete({ where: { id: roleId } });
 }
 
 export async function updateLocation(
   orgId: string,
   locationId: string,
   name: string,
-  timezone?: string | null,
+  timezone: string | null | undefined,
+  db: Db = defaultPrisma,
 ): Promise<{ id: string; name: string; timezone: string | null }> {
-  const loc = await prisma.location.findFirst({
+  const loc = await db.location.findFirst({
     where: { id: locationId, organizationId: orgId },
   });
   if (!loc) throw new HttpError(404, 'NOT_FOUND', 'Location not found');
 
-  const updated = await prisma.location.update({
+  const updated = await db.location.update({
     where: { id: locationId },
     data: {
       name,
@@ -150,11 +161,15 @@ export async function updateLocation(
   return { id: updated.id, name: updated.name, timezone: updated.timezone ?? null };
 }
 
-export async function deleteLocation(orgId: string, locationId: string): Promise<void> {
-  const loc = await prisma.location.findFirst({
+export async function deleteLocation(
+  orgId: string,
+  locationId: string,
+  db: Db = defaultPrisma,
+): Promise<void> {
+  const loc = await db.location.findFirst({
     where: { id: locationId, organizationId: orgId },
   });
   if (!loc) throw new HttpError(404, 'NOT_FOUND', 'Location not found');
 
-  await prisma.location.delete({ where: { id: locationId } });
+  await db.location.delete({ where: { id: locationId } });
 }

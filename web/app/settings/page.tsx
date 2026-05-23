@@ -113,7 +113,7 @@ function SettingsContent() {
       setSettings(s);
       toast.success("הגדרות נשמרו");
     } catch {
-      toast.error("שגיאה בשמירה");
+      toast.error("שמירת ההגדרות נכשלה");
     } finally {
       setSaving(false);
     }
@@ -143,7 +143,7 @@ function SettingsContent() {
       setSettings(s);
       toast.success("כללי עבודה נשמרו");
     } catch {
-      toast.error("שגיאה בשמירה");
+      toast.error("שמירת כללי העבודה נכשלה");
     } finally {
       setSaving(false);
     }

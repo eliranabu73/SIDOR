@@ -1,4 +1,28 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
+
+/**
+ * Union of full Prisma client and a transaction client.  Service-layer
+ * functions accept this so they can run either standalone (using the global
+ * client) or be composed inside a caller-managed transaction (e.g. one
+ * opened by `withOrgContext.query()` for RLS isolation).
+ */
+export type Db = PrismaClient | Prisma.TransactionClient;
+
+/**
+ * Run `fn` inside a transaction.  If `db` is already a transaction client
+ * (no `$transaction` method) we reuse it instead of nesting — Prisma does
+ * not support nested `$transaction`s and doing so would lose the outer
+ * `SET LOCAL app.current_org_id` context.
+ */
+export async function ensureTx<T>(
+  db: Db,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  if ('$transaction' in db && typeof (db as PrismaClient).$transaction === 'function') {
+    return (db as PrismaClient).$transaction(fn);
+  }
+  return fn(db as Prisma.TransactionClient);
+}
 
 declare global {
   // eslint-disable-next-line no-var

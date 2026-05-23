@@ -18,7 +18,8 @@
  * into the schedule-publish transaction.
  */
 import { env } from '../../env';
-import { prisma } from '../../db/prisma';
+import { prisma as defaultPrisma } from '../../db/prisma';
+import type { Db } from '../../db/prisma';
 import { buildPublishBundle } from '../share/share.service';
 
 // ---------------------------------------------------------------------------
@@ -131,6 +132,7 @@ export async function sendScheduleToEmployee(
   orgId: string,
   employeeId: string,
   params: SendScheduleParams,
+  db: Db = defaultPrisma,
 ): Promise<SendResult> {
   requireConfigured();
 
@@ -156,7 +158,7 @@ export async function sendScheduleToEmployee(
     },
   };
 
-  const delivery = await prisma.messageDelivery.create({
+  const delivery = await db.messageDelivery.create({
     data: {
       organizationId: orgId,
       employeeId,
@@ -171,7 +173,7 @@ export async function sendScheduleToEmployee(
   try {
     const res = await callCloudApi(requestBody);
     const wabaId = res.messages?.[0]?.id;
-    await prisma.messageDelivery.update({
+    await db.messageDelivery.update({
       where: { id: delivery.id },
       data: {
         status: 'sent',
@@ -183,7 +185,7 @@ export async function sendScheduleToEmployee(
     return ok;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await prisma.messageDelivery.update({
+    await db.messageDelivery.update({
       where: { id: delivery.id },
       data: { status: 'failed', error: message.slice(0, 500) },
     });
@@ -219,12 +221,13 @@ export async function sendBulkSchedulePublish(
   orgId: string,
   scheduleId: string,
   options: { dryRun?: boolean } = {},
+  db: Db = defaultPrisma,
 ): Promise<BulkResult> {
   if (!options.dryRun) {
     requireConfigured();
   }
 
-  const bundle = await buildPublishBundle({ scheduleId, organizationId: orgId });
+  const bundle = await buildPublishBundle({ scheduleId, organizationId: orgId }, db);
   const week = `${bundle.weekStart} – ${bundle.weekEnd}`;
   const deliveries: BulkDelivery[] = [];
 
@@ -248,11 +251,16 @@ export async function sendBulkSchedulePublish(
       });
       continue;
     }
-    const result = await sendScheduleToEmployee(orgId, link.employeeId, {
-      to,
-      week,
-      link: link.url,
-    });
+    const result = await sendScheduleToEmployee(
+      orgId,
+      link.employeeId,
+      {
+        to,
+        week,
+        link: link.url,
+      },
+      db,
+    );
     const row: BulkDelivery = {
       employeeId: link.employeeId,
       fullName: link.fullName,
@@ -312,7 +320,10 @@ type WabaWebhookPayload = {
  * Update MessageDelivery rows from Meta status receipts. Idempotent: a later
  * "read" event simply overwrites the prior "delivered" status.
  */
-export async function handleStatusUpdate(payload: WabaWebhookPayload): Promise<{
+export async function handleStatusUpdate(
+  payload: WabaWebhookPayload,
+  db: Db = defaultPrisma,
+): Promise<{
   updated: number;
 }> {
   let updated = 0;
@@ -324,7 +335,7 @@ export async function handleStatusUpdate(payload: WabaWebhookPayload): Promise<{
         const errMsg = s.errors?.[0]?.message ?? s.errors?.[0]?.title;
         const data: { status: string; error?: string } = { status: s.status };
         if (errMsg) data.error = errMsg.slice(0, 500);
-        const res = await prisma.messageDelivery.updateMany({
+        const res = await db.messageDelivery.updateMany({
           where: { wabaMessageId: s.id },
           data,
         });

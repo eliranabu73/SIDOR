@@ -8,7 +8,7 @@ import {
   suggestSwapCandidates,
 } from './swaps-marketplace.service';
 import { verifyEmployeeToken } from '../share/share.service';
-import { prisma } from '../../db/prisma';
+import { prisma, withOrgContext } from '../../db/prisma';
 import type { PrismaClient } from '@prisma/client';
 
 /**
@@ -47,11 +47,18 @@ export async function swapsMarketplaceRoutes(app: FastifyInstance): Promise<void
       const decoded = verifyEmployeeToken(token);
       if (!decoded) return reply.code(401).send({ code: 'INVALID_TOKEN' });
       try {
-        const r = await createSwapRequest({
-          organizationId: decoded.organizationId,
-          requestingEmployeeId: decoded.employeeId,
-          sourceAssignmentId: assignmentId,
-        });
+        // Token-authenticated public route: use withOrgContext from the
+        // verified token payload so RLS sees the right org.
+        const r = await withOrgContext(decoded.organizationId).query((tx) =>
+          createSwapRequest(
+            {
+              organizationId: decoded.organizationId,
+              requestingEmployeeId: decoded.employeeId,
+              sourceAssignmentId: assignmentId,
+            },
+            tx,
+          ),
+        );
         return reply.code(201).send({
           id: r.id,
           status: r.status.toLowerCase(),
@@ -70,7 +77,7 @@ export async function swapsMarketplaceRoutes(app: FastifyInstance): Promise<void
     '/v1/swap-requests',
     { preHandler: authHandlers },
     async (req, reply) => {
-      const data = await listPendingSwaps(orgIdFor(req));
+      const data = await dbFor(req).query((tx) => listPendingSwaps(orgIdFor(req), tx));
       return reply.send(data);
     },
   );
@@ -89,10 +96,15 @@ export async function swapsMarketplaceRoutes(app: FastifyInstance): Promise<void
         }),
       );
       if (!swap) return reply.code(404).send({ code: 'NOT_FOUND' });
-      const candidates = await suggestSwapCandidates({
-        organizationId: orgIdFor(req),
-        sourceAssignmentId: swap.sourceAssignmentId,
-      });
+      const candidates = await dbFor(req).query((tx) =>
+        suggestSwapCandidates(
+          {
+            organizationId: orgIdFor(req),
+            sourceAssignmentId: swap.sourceAssignmentId,
+          },
+          tx,
+        ),
+      );
       return reply.send(candidates);
     },
   );
@@ -105,12 +117,17 @@ export async function swapsMarketplaceRoutes(app: FastifyInstance): Promise<void
       const { id } = req.params as z.infer<typeof SwapIdParam>;
       const { targetEmployeeId } = req.body as z.infer<typeof ApproveBody>;
       try {
-        const result = await approveSwap({
-          organizationId: orgIdFor(req),
-          swapId: id,
-          targetEmployeeId,
-          managerUserId: req.user?.id ?? null,
-        });
+        const result = await dbFor(req).query((tx) =>
+          approveSwap(
+            {
+              organizationId: orgIdFor(req),
+              swapId: id,
+              targetEmployeeId,
+              managerUserId: req.user?.id ?? null,
+            },
+            tx,
+          ),
+        );
         return reply.send({ id: result.id, status: result.status.toLowerCase() });
       } catch (err) {
         const status = (err as { statusCode?: number }).statusCode ?? 500;
@@ -128,10 +145,15 @@ export async function swapsMarketplaceRoutes(app: FastifyInstance): Promise<void
     async (req, reply) => {
       const { id } = req.params as z.infer<typeof SwapIdParam>;
       try {
-        const result = await rejectSwap({
-          organizationId: orgIdFor(req),
-          swapId: id,
-        });
+        const result = await dbFor(req).query((tx) =>
+          rejectSwap(
+            {
+              organizationId: orgIdFor(req),
+              swapId: id,
+            },
+            tx,
+          ),
+        );
         return reply.send({ id: result.id, status: result.status.toLowerCase() });
       } catch (err) {
         const status = (err as { statusCode?: number }).statusCode ?? 500;

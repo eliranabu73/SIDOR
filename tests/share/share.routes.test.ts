@@ -14,7 +14,18 @@
  *   POST /v1/schedules/:id/publish-message — auth-gated (requires JWT)
  */
 
-jest.mock('../../src/db/prisma', () => ({ prisma: {} }));
+jest.mock('../../src/db/prisma', () => ({
+  prisma: {},
+  // Routes wrap service calls in withOrgContext(orgId).query(fn).  Since the
+  // services themselves are mocked above we just need the wrapper to invoke
+  // the function with a noop tx and forward the result.
+  withOrgContext: (_orgId: string) => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query: <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({} as any),
+  }),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ensureTx: <T>(db: any, fn: (tx: any) => Promise<T>): Promise<T> => fn(db),
+}));
 jest.mock('../../src/shared/sentry', () => ({
   initSentry: jest.fn().mockResolvedValue(undefined),
   captureException: jest.fn(),

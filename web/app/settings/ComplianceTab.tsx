@@ -59,7 +59,7 @@ export default function ComplianceTab({
         <CardHeader>
           <CardTitle>הגבלות שעות</CardTitle>
           <CardDescription>
-            מגבלות חוקיות ועסקיות — ינוסו אוטומטית בבניית הסידור.
+            מגבלות חוקיות ועסקיות — ייאכפו אוטומטית בבניית הסידור.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-3">

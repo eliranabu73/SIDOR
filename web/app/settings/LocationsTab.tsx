@@ -53,7 +53,7 @@ export default function LocationsTab({ settings, setSettings }: LocationsTabProp
       setEditingLocation(null);
       toast.success("סניף עודכן");
     } catch {
-      toast.error("שגיאה בעדכון");
+      toast.error("עדכון הסניף נכשל");
     } finally {
       setLocationBusy(null);
     }
@@ -69,7 +69,7 @@ export default function LocationsTab({ settings, setSettings }: LocationsTabProp
       );
       toast.success("סניף נמחק");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "שגיאה במחיקה";
+      const msg = err instanceof Error ? err.message : "מחיקת הסניף נכשלה";
       toast.error(msg);
     } finally {
       setLocationBusy(null);
@@ -91,7 +91,7 @@ export default function LocationsTab({ settings, setSettings }: LocationsTabProp
       setNewLocationName("");
       toast.success("סניף נוצר");
     } catch {
-      toast.error("שגיאה ביצירה");
+      toast.error("יצירת הסניף נכשלה");
     } finally {
       setAddingLocation(false);
     }
@@ -100,7 +100,7 @@ export default function LocationsTab({ settings, setSettings }: LocationsTabProp
   return (
     <Card className="glass-card">
       <CardHeader>
-        <CardTitle>סניפים / מיקומים</CardTitle>
+        <CardTitle>סניפים</CardTitle>
         <CardDescription>הגדר את הסניפים שבהם מנוהל הסידור.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">

@@ -59,7 +59,7 @@ function OnboardingForm() {
       } catch {
         // ignored — backend already scopes by the new org id via DB lookup.
       }
-      toast.success("הארגון נוצר! נכנסים ללוח המשמרות…");
+      toast.success("הארגון נוצר! נכנסים לסידור המשמרות…");
       router.replace("/schedule");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "יצירת הארגון נכשלה";
@@ -141,7 +141,7 @@ function OnboardingForm() {
               className="w-full"
               disabled={submitting}
             >
-              {submitting ? "יוצר ארגון…" : "צור ארגון והיכנס ללוח"}
+              {submitting ? "יוצר ארגון…" : "צור ארגון והיכנס לסידור"}
             </Button>
           </form>
 
@@ -150,7 +150,7 @@ function OnboardingForm() {
               href="/onboarding/templates"
               className="text-sm text-indigo-600 underline-offset-4 hover:underline dark:text-indigo-400"
             >
-              בחר מתוך טמפלייטים מוכנים לפי סוג העסק ↗
+              בחר מתוך תבניות מוכנות לפי סוג העסק ↗
             </a>
           </div>
         </CardContent>

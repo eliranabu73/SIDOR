@@ -16,7 +16,7 @@ function SchedulePreview() {
     <div className="glass-card rounded-2xl p-5 shadow-2xl w-80 shrink-0">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <span className="text-xs font-semibold text-foreground/80">לוח משמרות — שבוע 22</span>
+        <span className="text-xs font-semibold text-foreground/80">סידור שבועי — שבוע 22</span>
         <span className="inline-flex items-center gap-1 rounded-full bg-brand-500/10 px-2 py-0.5 text-[10px] font-medium text-brand-500">
           <Sparkles className="h-2.5 w-2.5" aria-hidden />
           AI שיבץ

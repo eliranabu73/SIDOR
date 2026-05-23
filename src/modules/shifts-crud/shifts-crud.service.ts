@@ -1,4 +1,5 @@
-import { prisma } from '../../db/prisma.js';
+import { prisma as defaultPrisma } from '../../db/prisma.js';
+import type { Db } from '../../db/prisma.js';
 import { NotFoundError, ValidationFailedError } from '../../shared/errors.js';
 
 export type ShiftResponse = {
@@ -43,9 +44,6 @@ function mapShift(s: ShiftRow): ShiftResponse {
 }
 
 function toLocalDate(d: Date): Date {
-  // Use UTC date portion. localStartDate/localEndDate are @db.Date which strips
-  // time. Caller passes UTC instants; deriving a calendar Date from the UTC
-  // instant is acceptable for MVP — timezone shifting can refine later.
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
 
@@ -60,28 +58,31 @@ export type CreateShiftInput = {
   timezone?: string | undefined;
 };
 
-export async function createShift(input: CreateShiftInput): Promise<ShiftResponse> {
+export async function createShift(
+  input: CreateShiftInput,
+  db: Db = defaultPrisma,
+): Promise<ShiftResponse> {
   if (input.endAtUtc.getTime() <= input.startAtUtc.getTime()) {
     throw new ValidationFailedError('INVALID_RANGE', 'endAtUtc must be after startAtUtc');
   }
 
-  const schedule = await prisma.schedule.findFirst({
+  const schedule = await db.schedule.findFirst({
     where: { id: input.scheduleId, organizationId: input.orgId },
   });
   if (!schedule) throw new NotFoundError('Schedule not found');
 
-  const location = await prisma.location.findFirst({
+  const location = await db.location.findFirst({
     where: { id: input.locationId, organizationId: input.orgId },
   });
   if (!location) throw new NotFoundError('Location not found');
 
-  const role = await prisma.role.findFirst({
+  const role = await db.role.findFirst({
     where: { id: input.roleId, organizationId: input.orgId },
   });
   if (!role) throw new NotFoundError('Role not found');
 
   const timezone = input.timezone ?? 'Asia/Jerusalem';
-  const created = await prisma.shift.create({
+  const created = await db.shift.create({
     data: {
       organizationId: input.orgId,
       scheduleId: input.scheduleId,
@@ -111,8 +112,11 @@ export type UpdateShiftInput = {
   roleId?: string | undefined;
 };
 
-export async function updateShift(input: UpdateShiftInput): Promise<ShiftResponse> {
-  const existing = await prisma.shift.findFirst({
+export async function updateShift(
+  input: UpdateShiftInput,
+  db: Db = defaultPrisma,
+): Promise<ShiftResponse> {
+  const existing = await db.shift.findFirst({
     where: { id: input.id, organizationId: input.orgId },
   });
   if (!existing) throw new NotFoundError('Shift not found');
@@ -124,13 +128,13 @@ export async function updateShift(input: UpdateShiftInput): Promise<ShiftRespons
   }
 
   if (input.locationId) {
-    const loc = await prisma.location.findFirst({
+    const loc = await db.location.findFirst({
       where: { id: input.locationId, organizationId: input.orgId },
     });
     if (!loc) throw new NotFoundError('Location not found');
   }
   if (input.roleId) {
-    const role = await prisma.role.findFirst({
+    const role = await db.role.findFirst({
       where: { id: input.roleId, organizationId: input.orgId },
     });
     if (!role) throw new NotFoundError('Role not found');
@@ -151,14 +155,18 @@ export async function updateShift(input: UpdateShiftInput): Promise<ShiftRespons
   if (input.locationId !== undefined) data['locationId'] = input.locationId;
   if (input.roleId !== undefined) data['roleId'] = input.roleId;
 
-  const updated = await prisma.shift.update({ where: { id: input.id }, data });
+  const updated = await db.shift.update({ where: { id: input.id }, data });
   return mapShift(updated);
 }
 
-export async function cancelShift(orgId: string, id: string): Promise<ShiftResponse> {
-  const existing = await prisma.shift.findFirst({ where: { id, organizationId: orgId } });
+export async function cancelShift(
+  orgId: string,
+  id: string,
+  db: Db = defaultPrisma,
+): Promise<ShiftResponse> {
+  const existing = await db.shift.findFirst({ where: { id, organizationId: orgId } });
   if (!existing) throw new NotFoundError('Shift not found');
-  const updated = await prisma.shift.update({
+  const updated = await db.shift.update({
     where: { id },
     data: { status: 'CANCELLED' },
   });

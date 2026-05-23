@@ -1,18 +1,22 @@
-import { prisma } from '../../db/prisma';
+import { prisma as defaultPrisma, ensureTx } from '../../db/prisma';
+import type { Db } from '../../db/prisma';
 
 /**
  * Read-only summary of an employee's time-off requests + recent availability
  * rules. Powers the "מה ביקשתי" tab on /e/[token].
  */
-export async function fetchEmployeeActivity(input: {
-  employeeId: string;
-  organizationId: string;
-}) {
+export async function fetchEmployeeActivity(
+  input: {
+    employeeId: string;
+    organizationId: string;
+  },
+  db: Db = defaultPrisma,
+) {
   const horizon = new Date(Date.now() + 60 * 86400000); // 60 days ahead
   const past = new Date(Date.now() - 30 * 86400000); // 30 days back
 
   const [timeOff, availability] = await Promise.all([
-    prisma.employeeTimeOffRequest.findMany({
+    db.employeeTimeOffRequest.findMany({
       where: {
         employeeId: input.employeeId,
         startAtUtc: { gte: past, lt: horizon },
@@ -20,7 +24,7 @@ export async function fetchEmployeeActivity(input: {
       orderBy: { startAtUtc: 'desc' },
       take: 20,
     }),
-    prisma.employeeAvailabilityRule.findMany({
+    db.employeeAvailabilityRule.findMany({
       where: { employeeId: input.employeeId },
       orderBy: [{ dayOfWeek: 'asc' }, { startLocalTime: 'asc' }],
     }),
@@ -44,27 +48,30 @@ export async function fetchEmployeeActivity(input: {
   };
 }
 
-export async function createTimeOffRequest(input: {
-  employeeId: string;
-  organizationId: string;
-  startsAt: Date;
-  endsAt: Date;
-  reason?: string;
-  timezone?: string;
-}) {
+export async function createTimeOffRequest(
+  input: {
+    employeeId: string;
+    organizationId: string;
+    startsAt: Date;
+    endsAt: Date;
+    reason?: string;
+    timezone?: string;
+  },
+  db: Db = defaultPrisma,
+) {
   if (input.endsAt <= input.startsAt) {
     throw Object.assign(new Error('תאריך סיום חייב להיות אחרי תאריך התחלה'), {
       statusCode: 400,
     });
   }
   // Make sure employee belongs to org (defence in depth)
-  const emp = await prisma.employee.findFirst({
+  const emp = await db.employee.findFirst({
     where: { id: input.employeeId, organizationId: input.organizationId },
     select: { id: true, defaultTimezone: true },
   });
   if (!emp) throw Object.assign(new Error('Employee not found'), { statusCode: 404 });
 
-  return prisma.employeeTimeOffRequest.create({
+  return db.employeeTimeOffRequest.create({
     data: {
       employeeId: emp.id,
       startAtUtc: input.startsAt,
@@ -80,25 +87,28 @@ export async function createTimeOffRequest(input: {
  * Replace the employee's weekly availability with a fresh set of rules.
  * Frontend posts the full week as { dayOfWeek, startLocalTime, endLocalTime, type }.
  */
-export async function replaceAvailability(input: {
-  employeeId: string;
-  organizationId: string;
-  rules: Array<{
-    dayOfWeek: number;
-    startLocalTime: string;
-    endLocalTime: string;
-    type: 'AVAILABLE' | 'UNAVAILABLE' | 'PREFERRED';
-  }>;
-  timezone?: string;
-}) {
-  const emp = await prisma.employee.findFirst({
+export async function replaceAvailability(
+  input: {
+    employeeId: string;
+    organizationId: string;
+    rules: Array<{
+      dayOfWeek: number;
+      startLocalTime: string;
+      endLocalTime: string;
+      type: 'AVAILABLE' | 'UNAVAILABLE' | 'PREFERRED';
+    }>;
+    timezone?: string;
+  },
+  db: Db = defaultPrisma,
+) {
+  const emp = await db.employee.findFirst({
     where: { id: input.employeeId, organizationId: input.organizationId },
     select: { id: true, defaultTimezone: true },
   });
   if (!emp) throw Object.assign(new Error('Employee not found'), { statusCode: 404 });
 
   const tz = input.timezone ?? emp.defaultTimezone ?? 'Asia/Jerusalem';
-  return prisma.$transaction(async (tx) => {
+  return ensureTx(db, async (tx) => {
     await tx.employeeAvailabilityRule.deleteMany({
       where: { employeeId: emp.id },
     });

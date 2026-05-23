@@ -9,10 +9,16 @@ import {
   updateLocation,
   deleteLocation,
 } from './settings.service.js';
+import { prisma } from '../../db/prisma.js';
+import type { PrismaClient } from '@prisma/client';
 
 const DEMO_ORG_ID = '10000000-0000-0000-0000-000000000001';
 function orgIdFor(req: { user?: { orgId: string } }): string {
   return req.user?.orgId ?? DEMO_ORG_ID;
+}
+/** RLS-aware DB handle (falls back to direct prisma in AUTH_DISABLED mode). */
+function dbFor(req: { orgPrisma?: { query: <T>(fn: (tx: PrismaClient) => Promise<T>) => Promise<T> } }) {
+  return req.orgPrisma ?? { query: <T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> => fn(prisma) };
 }
 
 const IdParam = z.object({ id: z.string().uuid() });
@@ -51,7 +57,9 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
   // GET /v1/settings — full org config
   app.get('/settings', { preHandler: authHandlers }, async (req, reply) => {
     try {
-      return reply.send(await getOrgSettings(orgIdFor(req)));
+      return reply.send(
+        await dbFor(req).query((tx) => getOrgSettings(orgIdFor(req), tx)),
+      );
     } catch (err) {
       return handleHttpError(reply, err);
     }
@@ -64,7 +72,9 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       try {
         const body = req.body as z.infer<typeof PatchOrgBody>;
-        return reply.send(await patchOrgSettings(orgIdFor(req), body));
+        return reply.send(
+          await dbFor(req).query((tx) => patchOrgSettings(orgIdFor(req), body, tx)),
+        );
       } catch (err) {
         return handleHttpError(reply, err);
       }
@@ -79,7 +89,9 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       try {
         const { id } = req.params as z.infer<typeof IdParam>;
         const { name, description } = req.body as z.infer<typeof UpdateRoleBody>;
-        return reply.send(await updateRole(orgIdFor(req), id, name, description));
+        return reply.send(
+          await dbFor(req).query((tx) => updateRole(orgIdFor(req), id, name, description, tx)),
+        );
       } catch (err) {
         return handleHttpError(reply, err);
       }
@@ -93,7 +105,7 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       try {
         const { id } = req.params as z.infer<typeof IdParam>;
-        await deleteRole(orgIdFor(req), id);
+        await dbFor(req).query((tx) => deleteRole(orgIdFor(req), id, tx));
         return reply.code(204).send();
       } catch (err) {
         return handleHttpError(reply, err);
@@ -109,7 +121,9 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       try {
         const { id } = req.params as z.infer<typeof IdParam>;
         const { name, timezone } = req.body as z.infer<typeof UpdateLocationBody>;
-        return reply.send(await updateLocation(orgIdFor(req), id, name, timezone));
+        return reply.send(
+          await dbFor(req).query((tx) => updateLocation(orgIdFor(req), id, name, timezone, tx)),
+        );
       } catch (err) {
         return handleHttpError(reply, err);
       }
@@ -123,7 +137,7 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       try {
         const { id } = req.params as z.infer<typeof IdParam>;
-        await deleteLocation(orgIdFor(req), id);
+        await dbFor(req).query((tx) => deleteLocation(orgIdFor(req), id, tx));
         return reply.code(204).send();
       } catch (err) {
         return handleHttpError(reply, err);

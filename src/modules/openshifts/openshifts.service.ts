@@ -1,6 +1,7 @@
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { DateTime } from 'luxon';
-import { prisma as defaultPrisma } from '../../db/prisma';
+import { prisma as defaultPrisma, ensureTx } from '../../db/prisma';
+import type { Db } from '../../db/prisma';
 import { LocksService } from '../locks/locks.service';
 import { writeAudit } from '../audit/audit.service';
 import { writeEvent, publishEvent } from '../events/events.service';
@@ -177,9 +178,9 @@ async function applyMetricsDelta(
 
 export async function claimOpenShift(
   input: ClaimInput,
-  prisma: PrismaClient = defaultPrisma,
+  prisma: Db = defaultPrisma,
 ): Promise<ClaimResult> {
-  const committed = await prisma.$transaction(async (tx) => {
+  const committed = await ensureTx(prisma, async (tx) => {
     const shift = await tx.shift.findUnique({
       where: { id: input.shiftId },
       include: { location: true, organization: true },
@@ -293,9 +294,9 @@ export async function claimOpenShift(
 
 export async function approveClaim(
   input: ApproveClaimInput,
-  prisma: PrismaClient = defaultPrisma,
+  prisma: Db = defaultPrisma,
 ): Promise<ApproveClaimResult> {
-  const committed = await prisma.$transaction(async (tx) => {
+  const committed = await ensureTx(prisma, async (tx) => {
     const claim = await tx.openShiftClaim.findUnique({
       where: { id: input.claimId },
     });
@@ -434,9 +435,9 @@ export async function approveClaim(
 
 export async function rejectClaim(
   input: RejectClaimInput,
-  prisma: PrismaClient = defaultPrisma,
+  prisma: Db = defaultPrisma,
 ): Promise<{ status: 'ok'; claim: { id: string; status: string } }> {
-  return prisma.$transaction(async (tx) => {
+  return ensureTx(prisma, async (tx) => {
     const claim = await tx.openShiftClaim.findUnique({
       where: { id: input.claimId },
       include: { shift: true },

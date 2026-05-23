@@ -373,7 +373,7 @@ function ImportFlow() {
                           />
                           {s.employees && s.employees.length > 0 && (
                             <span className="text-xs text-muted-foreground" title={s.employees.join(", ")}>
-                              {s.employees.length} עובד׳
+                              {s.employees.length} עובדים
                             </span>
                           )}
                         </div>

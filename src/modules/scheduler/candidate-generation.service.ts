@@ -1,6 +1,7 @@
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { DateTime } from 'luxon';
-import { prisma as defaultPrisma } from '../../db/prisma';
+import { prisma as defaultPrisma, ensureTx } from '../../db/prisma';
+import type { Db } from '../../db/prisma';
 import { validateAssignment } from '../rules/validator.service';
 import {
   mergeRulesSnapshot,
@@ -30,7 +31,7 @@ const PREFERRED_WEEKLY_MINUTES_DEFAULT = 40 * 60;
  */
 export async function generateCandidates(
   scheduleId: string,
-  prisma: PrismaClient = defaultPrisma,
+  prisma: Db = defaultPrisma,
 ): Promise<Candidate[]> {
   const schedule = await prisma.schedule.findUnique({
     where: { id: scheduleId },
@@ -145,12 +146,14 @@ export async function persistCandidates(
     violationsCount: number;
     warningsCount: number;
   }>,
-  prisma: PrismaClient = defaultPrisma,
+  prisma: Db = defaultPrisma,
 ): Promise<number> {
   if (rows.length === 0) return 0;
-  await prisma.$transaction(
-    rows.map((r) =>
-      prisma.schedulingCandidate.upsert({
+  // Run upserts inside a (possibly outer-managed) transaction so RLS context
+  // and atomicity hold.  ensureTx reuses an existing tx when one is passed in.
+  await ensureTx(prisma, async (tx) => {
+    for (const r of rows) {
+      await tx.schedulingCandidate.upsert({
         where: {
           shiftId_employeeId: { shiftId: r.shiftId, employeeId: r.employeeId },
         },
@@ -161,9 +164,9 @@ export async function persistCandidates(
           warningsCount: r.warningsCount,
           generatedAt: new Date(),
         },
-      }),
-    ),
-  );
+      });
+    }
+  });
   return rows.length;
 }
 

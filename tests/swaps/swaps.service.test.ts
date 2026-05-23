@@ -1,5 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-jest.mock('../../src/db/prisma', () => ({ prisma: {} }));
+jest.mock('../../src/db/prisma', () => ({
+  prisma: {},
+  ensureTx: <T,>(db: any, fn: (tx: any) => Promise<T>): Promise<T> =>
+    db && typeof db.$transaction === 'function' ? db.$transaction(fn) : fn(db),
+}));
 jest.mock('../../src/modules/audit/audit.service', () => ({
   writeAudit: jest.fn().mockResolvedValue(undefined),
 }));
