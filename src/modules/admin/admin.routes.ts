@@ -907,6 +907,96 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // -------------------------------------------------------------------------
+  // POST /v1/admin/sign-in-as — issue a Supabase session for any user via service role.
+  // Body: { email }
+  // Returns: { access_token, refresh_token, user } — caller stores in localStorage
+  // -------------------------------------------------------------------------
+  const SignInAsBody = z.object({ email: z.string().email() });
+
+  app.post(
+    '/sign-in-as',
+    { preHandler: auth, schema: { body: SignInAsBody } },
+    async (req, reply) => {
+      if (!ensureAdmin(req, reply)) return;
+      const { email } = req.body as z.infer<typeof SignInAsBody>;
+      const srk = env.SUPABASE_SERVICE_ROLE_KEY;
+      const sbu = env.SUPABASE_URL;
+      if (!srk || !sbu) {
+        return reply.code(501).send({
+          code: 'NOT_CONFIGURED',
+          message: 'SUPABASE_SERVICE_ROLE_KEY or SUPABASE_URL not set',
+        });
+      }
+      const sbh = {
+        'Content-Type': 'application/json',
+        apikey: srk,
+        Authorization: `Bearer ${srk}`,
+      };
+      try {
+        // generateLink with type=magiclink returns an action_link + the underlying tokens
+        const res = await fetch(`${sbu}/auth/v1/admin/generate_link`, {
+          method: 'POST',
+          headers: sbh,
+          body: JSON.stringify({ type: 'magiclink', email }),
+        });
+        const data = (await res.json()) as Record<string, unknown>;
+        if (!res.ok) {
+          return reply.code(res.status).send({
+            code: 'GEN_LINK_FAILED',
+            message:
+              (data['msg'] || data['error_description'] || data['error']) ??
+              'Unknown',
+          });
+        }
+        // Try verifyOtp using token_hash from generated link
+        const props = (data['properties'] as Record<string, unknown>) || {};
+        const tokenHash = props['hashed_token'] as string | undefined;
+        if (!tokenHash) {
+          return reply.code(500).send({
+            code: 'NO_TOKEN_HASH',
+            message: 'Supabase did not return hashed_token',
+          });
+        }
+        const verifyRes = await fetch(`${sbu}/auth/v1/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: srk },
+          body: JSON.stringify({
+            type: 'magiclink',
+            token: tokenHash,
+            email,
+          }),
+        });
+        const verifyData = (await verifyRes.json()) as Record<string, unknown>;
+        if (!verifyRes.ok || !verifyData['access_token']) {
+          return reply.code(verifyRes.status || 500).send({
+            code: 'VERIFY_FAILED',
+            message:
+              (verifyData['msg'] ||
+                verifyData['error_description'] ||
+                verifyData['error']) ??
+              'Verify did not return access token',
+          });
+        }
+        return reply.send({
+          access_token: verifyData['access_token'],
+          refresh_token: verifyData['refresh_token'],
+          expires_in: verifyData['expires_in'],
+          expires_at:
+            Math.floor(Date.now() / 1000) +
+            (Number(verifyData['expires_in']) || 3600),
+          token_type: verifyData['token_type'] || 'bearer',
+          user: verifyData['user'],
+        });
+      } catch (err) {
+        return reply.code(500).send({
+          code: 'SIGN_IN_AS_FAILED',
+          message: err instanceof Error ? err.message : 'Unknown',
+        });
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
   // POST /v1/admin/create-user — create a Supabase auth user via service role
   // Body: { email, password, fullName?, autoConfirm? }
   // Used for E2E test user provisioning. Returns userId + confirmation status.
