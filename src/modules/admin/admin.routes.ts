@@ -905,6 +905,73 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       });
     },
   );
+
+  // -------------------------------------------------------------------------
+  // POST /v1/admin/create-user — create a Supabase auth user via service role
+  // Body: { email, password, fullName?, autoConfirm? }
+  // Used for E2E test user provisioning. Returns userId + confirmation status.
+  // -------------------------------------------------------------------------
+  const CreateUserBody = z.object({
+    email: z.string().email(),
+    password: z.string().min(6),
+    fullName: z.string().min(1).max(120).optional(),
+    autoConfirm: z.boolean().default(false),
+  });
+
+  app.post(
+    '/create-user',
+    {
+      preHandler: auth,
+      schema: { body: CreateUserBody },
+    },
+    async (req, reply) => {
+      if (!ensureAdmin(req, reply)) return;
+      const body = req.body as z.infer<typeof CreateUserBody>;
+      const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+      const supabaseUrl = env.SUPABASE_URL;
+      if (!serviceRoleKey || !supabaseUrl) {
+        return reply.code(501).send({
+          code: 'NOT_CONFIGURED',
+          message: 'SUPABASE_SERVICE_ROLE_KEY or SUPABASE_URL not set',
+        });
+      }
+      try {
+        const res = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: serviceRoleKey,
+            Authorization: `Bearer ${serviceRoleKey}`,
+          },
+          body: JSON.stringify({
+            email: body.email,
+            password: body.password,
+            email_confirm: body.autoConfirm,
+            user_metadata: body.fullName ? { full_name: body.fullName } : undefined,
+          }),
+        });
+        const data = (await res.json()) as Record<string, unknown>;
+        if (!res.ok) {
+          return reply.code(res.status).send({
+            code: 'SUPABASE_CREATE_FAILED',
+            message: (data['msg'] || data['error_description'] || data['error']) ?? 'Unknown',
+            supabaseStatus: res.status,
+          });
+        }
+        return reply.code(201).send({
+          userId: data['id'],
+          email: data['email'],
+          confirmed: data['email_confirmed_at'] != null,
+          createdAt: data['created_at'],
+        });
+      } catch (err) {
+        return reply.code(500).send({
+          code: 'CREATE_USER_FAILED',
+          message: err instanceof Error ? err.message : 'Unknown',
+        });
+      }
+    },
+  );
 }
 
 // ---------------------------------------------------------------------------
