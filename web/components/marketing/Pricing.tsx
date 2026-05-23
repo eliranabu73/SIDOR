@@ -66,19 +66,21 @@ export function Pricing() {
             <Card
               key={tier.name}
               className={cn(
-                "relative overflow-hidden bg-card transition-all duration-300",
+                "relative bg-card transition-all duration-300",
                 tier.highlight
-                  ? "border-transparent ring-2 ring-indigo-500/70 shadow-[0_0_60px_-12px_rgb(99_102_241/0.55)] hover:-translate-y-1"
-                  : "hover:-translate-y-0.5 hover:shadow-lg",
+                  ? "border-transparent ring-2 ring-indigo-500/70 shadow-[0_0_60px_-12px_rgb(99_102_241/0.55)] hover:-translate-y-1 mt-4 md:mt-0"
+                  : "overflow-hidden hover:-translate-y-0.5 hover:shadow-lg",
               )}
             >
               {tier.highlight ? (
                 <>
                   <div
                     aria-hidden
-                    className="pointer-events-none absolute -inset-px rounded-[inherit] bg-gradient-to-br from-indigo-500/20 via-transparent to-cyan-400/20"
-                  />
-                  <span className="absolute -top-3 right-4 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400 px-3 py-0.5 text-xs font-semibold text-white shadow-lg">
+                    className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]"
+                  >
+                    <div className="absolute -inset-px rounded-[inherit] bg-gradient-to-br from-indigo-500/20 via-transparent to-cyan-400/20" />
+                  </div>
+                  <span className="absolute -top-3 right-4 z-10 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400 px-3 py-1 text-xs font-semibold text-white shadow-lg">
                     <Sparkles className="h-3 w-3" />
                     הכי פופולרי
                   </span>
