@@ -930,12 +930,28 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           WHERE table_schema = 'public' AND table_name = 'memberships'
           ORDER BY ordinal_position`,
       );
-      const usersCount = await prisma.$queryRawUnsafe<Array<{ n: bigint }>>(
-        `SELECT COUNT(*)::bigint AS n FROM auth.users`,
-      );
+      // auth.users may not be visible to prisma_migration role — swallow error
+      let authUsersCount: number | null = null;
+      try {
+        const r = await prisma.$queryRawUnsafe<Array<{ n: bigint }>>(
+          `SELECT COUNT(*)::bigint AS n FROM auth.users`,
+        );
+        authUsersCount = Number(r[0]?.n ?? 0);
+      } catch { /* permission denied or schema missing */ }
       const orgsSample = await prisma.$queryRawUnsafe<
         Array<{ id: string; name: string }>
       >(`SELECT id::text, name FROM organizations ORDER BY "createdAt" LIMIT 3`);
+      // Parse DATABASE_URL hostname (safe to expose — no password)
+      let dbHostname: string | null = null;
+      let dbProjectRef: string | null = null;
+      try {
+        const url = new URL(env.DATABASE_URL.replace(/^postgres(ql)?:/, 'http:'));
+        dbHostname = url.hostname;
+        // Supabase pooler URL embeds project ref in username: postgres.{ref}@...
+        if (url.username && url.username.includes('.')) {
+          dbProjectRef = url.username.split('.').pop() ?? null;
+        }
+      } catch { /* malformed url */ }
       const orgCols = await prisma.$queryRawUnsafe<Array<{ column_name: string }>>(
         `SELECT column_name::text FROM information_schema.columns
           WHERE table_schema = 'public' AND table_name = 'organizations'
@@ -943,9 +959,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       );
       return {
         connection: rows[0],
+        databaseUrl: { hostname: dbHostname, projectRef: dbProjectRef },
         membershipColumns: cols.map((c) => c.column_name),
         organizationColumns: orgCols.map((c) => c.column_name),
-        authUsersCount: Number(usersCount[0]?.n ?? 0),
+        authUsersCount,
         orgs: orgsSample,
       };
     } catch (err) {
