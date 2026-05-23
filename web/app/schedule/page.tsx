@@ -13,7 +13,7 @@ import {
 import { DemoBoundary, useDemoMode } from "@/components/auth/DemoBoundary";
 import { DemoBanner } from "@/components/DemoBanner";
 import { AppShell } from "@/components/layout/AppShell";
-import { Skeleton as BoardSkeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Dynamically load the board (and its dnd-kit deps) to keep them out of the initial bundle.
 const ScheduleBoard = dynamic(
@@ -23,7 +23,7 @@ const ScheduleBoard = dynamic(
     loading: () => (
       <div className="flex flex-col gap-2 sm:grid sm:grid-cols-7">
         {Array.from({ length: 7 }).map((_, i) => (
-          <BoardSkeleton key={i} className="h-24 sm:h-96" />
+          <Skeleton key={i} className="h-24 sm:h-96" />
         ))}
       </div>
     ),
@@ -43,7 +43,6 @@ import { CreateShiftDialog } from "@/components/schedule/CreateShiftDialog";
 import { LaborCostBar } from "@/components/schedule/LaborCostBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   buildMockSchedule,
   mockEmployees,

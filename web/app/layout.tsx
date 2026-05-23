@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Heebo } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { RegisterSW } from "@/components/pwa/register-sw";
 
 const heebo = Heebo({
   variable: "--font-heebo",
@@ -12,10 +13,21 @@ const heebo = Heebo({
 export const metadata: Metadata = {
   title: "סידור4S — סידורי עבודה חכמים",
   description: "ניהול סידורי עבודה, שיבוצים אוטומטיים והחלפות משמרות",
+  manifest: "/manifest.json",
+  applicationName: "סידור4S",
+  appleWebApp: {
+    capable: true,
+    title: "סידור4S",
+    statusBarStyle: "default",
+  },
   icons: {
     icon: "/logo-mark.svg",
-    apple: "/logo-mark.svg",
+    apple: "/icon-192.png",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#6366f1",
 };
 
 // Inline pre-paint script — sets data-theme before first render to avoid FOUC.
@@ -47,6 +59,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full bg-background text-foreground">
         <Providers>{children}</Providers>
+        <RegisterSW />
       </body>
     </html>
   );

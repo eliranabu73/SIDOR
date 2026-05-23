@@ -35,6 +35,7 @@
 
 ### UI/UX
 - 📱 **Mobile-first** — bottom tab bar, sheet drawers, 44px touch targets, full-screen dialogs
+- 📲 **PWA installable** — add to home screen on iOS/Android, works offline (cached shell)
 - 🌙 **Dark mode** — full theme toggle with no-flash inline script
 - 🇮🇱 **RTL Hebrew** — Heebo font, all UI in Hebrew
 - ♿ **WCAG accessible** — Lighthouse a11y ≥ 95, axe 0 critical/serious
@@ -173,6 +174,42 @@ npm run test:cov # with coverage
 ```
 
 Coverage areas: auth, rules, scheduler (greedy + or-tools), templates, settings, share (tokens + routes + export PNG/PDF), employees, onboarding.
+
+### E2E tests (Playwright)
+
+Frontend E2E tests live in `web/e2e/` and use Playwright + Chromium.
+
+**Prerequisites:**
+- Next.js dev server running: `cd web && npm run dev` (port 3001)
+- For auth-gated pages either set `NEXT_PUBLIC_AUTH_DISABLED=true` in `web/.env.local`
+  or leave Supabase env vars unset (AuthGuard falls back to ok-status)
+
+**Run:**
+```bash
+cd web
+
+# Headless (CI-friendly)
+npm run test:e2e
+
+# Interactive UI mode
+npm run test:e2e:ui
+
+# Visible browser
+npm run test:e2e:headed
+```
+
+The backend apply tests inside the Playwright spec gracefully skip when the
+backend isn't running on `:3001`. The pure data-contract tests run in all environments
+without any server.
+
+**Jest integration tests (backend, requires DB):**
+```bash
+# Without DB — only 404 path and data-contract tests run
+npx jest tests/templates/apply-e2e --no-coverage
+
+# With DB — set TEST_DATABASE_URL in .env then:
+SKIP_DB_TESTS=false npx jest tests/templates/apply-e2e --no-coverage
+```
 
 ---
 

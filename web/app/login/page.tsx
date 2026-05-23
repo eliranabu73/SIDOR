@@ -163,12 +163,13 @@ export default function LoginPage() {
   return (
     <main className="mesh-bg flex min-h-screen items-center justify-center p-4">
       <h1 className="sr-only">כניסה לסידור4S</h1>
-      <Card className="glass-card w-full max-w-sm">
+      <section aria-labelledby="login-title" className="w-full max-w-sm">
+      <Card className="glass-card w-full">
         <CardHeader>
           <div className="mb-3 flex justify-center">
             <Logo size={36} />
           </div>
-          <CardTitle className="text-center">ברוכים הבאים</CardTitle>
+          <CardTitle id="login-title" className="text-center">ברוכים הבאים</CardTitle>
           <CardDescription className="text-center">
             התחבר/י כדי להמשיך לסידור העבודה.
           </CardDescription>
@@ -369,6 +370,7 @@ export default function LoginPage() {
           </Tabs>
         </CardContent>
       </Card>
+      </section>
     </main>
   );
 }

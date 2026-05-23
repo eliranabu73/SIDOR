@@ -6,7 +6,29 @@
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
       "Bash(git add *)",
-      "Bash(node -e \"console.log\\(require\\('./package.json'\\).dependencies.next\\)\")"
+      "Bash(node -e \"console.log\\(require\\('./package.json'\\).dependencies.next\\)\")",
+      "Bash(vercel --version)",
+      "Bash(vercel whoami *)",
+      "Bash(cd \"/mnt/c/Users/elira/OneDrive/שולחן העבודה/sidor4S/web\" && npm run build 2>&1)",
+      "Bash(powershell.exe -Command \"Set-Location 'C:\\\\\\\\Users\\\\\\\\elira\\\\\\\\OneDrive\\\\\\\\שולחן העבודה\\\\\\\\sidor4S\\\\\\\\web'; npm run build 2>&1\")",
+      "PowerShell(Get-Process -Name \"node\" -ErrorAction SilentlyContinue)",
+      "Bash(node -e \"const dns = require\\('dns'\\); dns.resolve4\\('aws-0-ap-southeast-2.pooler.supabase.com', \\(e,a\\) => console.log\\('ipv4:', e?.message||JSON.stringify\\(a\\)\\)\\); dns.resolve6\\('aws-0-ap-southeast-2.pooler.supabase.com', \\(e,a\\) => console.log\\('ipv6:', e?.message||JSON.stringify\\(a\\)\\)\\); dns.resolve4\\('db.lpnqyzlfsosdxnykaaer.supabase.co', \\(e,a\\) => console.log\\('db ipv4:', e?.message||JSON.stringify\\(a\\)\\)\\); dns.resolve6\\('db.lpnqyzlfsosdxnykaaer.supabase.co', \\(e,a\\) => console.log\\('db ipv6:', e?.message||JSON.stringify\\(a\\)\\)\\);\")",
+      "Bash(node -e ' *)",
+      "Bash(wait)",
+      "Bash(DATABASE_URL='postgresql://postgres:SIDOR2026!!@db.lpnqyzlfsosdxnykaaer.supabase.co:6543/postgres?pgbouncer=true&connection_limit=1' node -e ' *)",
+      "Bash(DATABASE_URL='postgresql://postgres:SIDOR2026!!@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1' node -e ' *)",
+      "WebFetch(domain:sidor-api.vercel.app)",
+      "Bash(npm install *)",
+      "Bash(set DATABASE_URL=postgres://7e2049841eeb0208ce19366caf3827e3174ef32408652a075a507c8557227187:sk_x78bAb7qFh626sbsoxLoE@db.prisma.io:5432/postgres?sslmode=require)",
+      "Bash(set DIRECT_URL=postgres://7e2049841eeb0208ce19366caf3827e3174ef32408652a075a507c8557227187:sk_x78bAb7qFh626sbsoxLoE@db.prisma.io:5432/postgres?sslmode=require)",
+      "Bash(npx prisma *)",
+      "Bash(cat \"C:/Users/elira/.vercel/auth.json\" 2>/dev/null || echo \"not found\")",
+      "mcp__a781b766-1680-476e-bce2-1d13c1b6bbed__execute_sql",
+      "mcp__a781b766-1680-476e-bce2-1d13c1b6bbed__list_projects",
+      "Bash(curl -sf https://sidor-api.vercel.app/v1/me -H \"authorization: Bearer test123\")",
+      "Bash(kill %bqz1itbxg)",
+      "Bash(Get-Content \"C:\\\\Users\\\\elira\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-elira-OneDrive--------------sidor4S\\\\eab73317-d97d-451d-a981-02219fe38adb\\\\tasks\\\\a02642641b5149469.output\" -Tail 50)",
+      "Bash(Get-Content \"C:\\\\Users\\\\elira\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-elira-OneDrive--------------sidor4S\\\\eab73317-d97d-451d-a981-02219fe38adb\\\\tasks\\\\a7211aa398b0f9359.output\" -Raw)"
     ]
   }
 }

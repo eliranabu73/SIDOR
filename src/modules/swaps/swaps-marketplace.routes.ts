@@ -9,6 +9,15 @@ import {
 } from './swaps-marketplace.service';
 import { verifyEmployeeToken } from '../share/share.service';
 import { prisma } from '../../db/prisma';
+import type { PrismaClient } from '@prisma/client';
+
+/**
+ * Build an org-scoped DB handle. RLS-aware via req.orgPrisma when
+ * authenticated; falls back to direct prisma in AUTH_DISABLED demo mode.
+ */
+function dbFor(req: { orgPrisma?: { query: <T>(fn: (tx: PrismaClient) => Promise<T>) => Promise<T> } }) {
+  return req.orgPrisma ?? { query: <T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> => fn(prisma) };
+}
 
 const DEMO_ORG_ID = '10000000-0000-0000-0000-000000000001';
 function orgIdFor(req: { user?: { orgId: string; id?: string } }): string {
@@ -72,11 +81,13 @@ export async function swapsMarketplaceRoutes(app: FastifyInstance): Promise<void
     { schema: { params: SwapIdParam }, preHandler: authHandlers },
     async (req, reply) => {
       const { id } = req.params as z.infer<typeof SwapIdParam>;
-      // Look up the assignment id from the swap
-      const swap = await prisma.shiftSwapRequest.findFirst({
-        where: { id, organizationId: orgIdFor(req) },
-        select: { sourceAssignmentId: true },
-      });
+      // Look up the assignment id from the swap (RLS-scoped).
+      const swap = await dbFor(req).query((tx) =>
+        tx.shiftSwapRequest.findFirst({
+          where: { id, organizationId: orgIdFor(req) },
+          select: { sourceAssignmentId: true },
+        }),
+      );
       if (!swap) return reply.code(404).send({ code: 'NOT_FOUND' });
       const candidates = await suggestSwapCandidates({
         organizationId: orgIdFor(req),

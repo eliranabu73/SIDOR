@@ -1,6 +1,21 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { prisma, withOrgContext } from '../../db/prisma';
+import { prisma } from '../../db/prisma';
+import type { PrismaClient } from '@prisma/client';
+
+/**
+ * Build an org-scoped DB handle.
+ *
+ * - When the request was authenticated, `req.orgPrisma` is a wrapper that
+ *   opens a transaction and sets `app.current_org_id`, activating the RLS
+ *   policy (WS-5d Task 2).
+ * - When `AUTH_DISABLED=true` (dev/demo) `req.orgPrisma` is undefined because
+ *   `app.authenticate` was skipped; we fall back to direct prisma. The RLS
+ *   policy is NOT enforced in that case — acceptable for dev/demo only.
+ */
+function dbFor(req: { orgPrisma?: { query: <T>(fn: (tx: PrismaClient) => Promise<T>) => Promise<T> } }) {
+  return req.orgPrisma ?? { query: <T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> => fn(prisma) };
+}
 import { HttpError, NotFoundError } from '../../shared/errors';
 
 /**
@@ -127,25 +142,14 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       try {
         const orgId = orgIdFor(req);
-        // When authenticated, req.orgPrisma runs the query inside a transaction
-        // that first sets `app.current_org_id` to activate the RLS policy.
-        // When AUTH_DISABLED is true (dev/demo) req.orgPrisma is undefined because
-        // app.authenticate was skipped — fall back to an ad-hoc withOrgContext or
-        // direct prisma (the RLS policy is not enforced in that case, which is
-        // acceptable for dev-only demo deployments).
-        const employees = req.orgPrisma
-          ? await req.orgPrisma.query((tx) =>
-              tx.employee.findMany({
-                where: { organizationId: orgId, isActive: true },
-                include: { roles: { include: { role: true } } },
-                orderBy: { fullName: 'asc' },
-              }),
-            )
-          : await prisma.employee.findMany({
-              where: { organizationId: orgId, isActive: true },
-              include: { roles: { include: { role: true } } },
-              orderBy: { fullName: 'asc' },
-            });
+        const db = dbFor(req);
+        const employees = await db.query((tx) =>
+          tx.employee.findMany({
+            where: { organizationId: orgId, isActive: true },
+            include: { roles: { include: { role: true } } },
+            orderBy: { fullName: 'asc' },
+          }),
+        );
 
         return reply.send(
           employees.map((e) => ({
@@ -178,6 +182,7 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
       try {
         let schedule;
         const orgId = orgIdFor(req);
+        const db = dbFor(req);
         const includeShifts = {
           shifts: {
             include: { role: true, assignments: true },
@@ -187,32 +192,38 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
 
         if (UUID_RE.test(scheduleId)) {
           // Real UUID — direct lookup, org-scoped.
-          schedule = await prisma.schedule.findFirst({
-            where: { id: scheduleId, organizationId: orgId },
-            include: includeShifts,
-          });
+          schedule = await db.query((tx) =>
+            tx.schedule.findFirst({
+              where: { id: scheduleId, organizationId: orgId },
+              include: includeShifts,
+            }),
+          );
         } else if (weekStart) {
           // Pseudo id like "sched_2026-05-17" or "current" with explicit weekStart.
           const start = new Date(weekStart);
           const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
-          schedule = await prisma.schedule.findFirst({
-            where: {
-              organizationId: orgId,
-              periodStartDate: { gte: start, lt: end },
-            },
-            orderBy: { periodStartDate: 'desc' },
-            include: includeShifts,
-          });
+          schedule = await db.query((tx) =>
+            tx.schedule.findFirst({
+              where: {
+                organizationId: orgId,
+                periodStartDate: { gte: start, lt: end },
+              },
+              orderBy: { periodStartDate: 'desc' },
+              include: includeShifts,
+            }),
+          );
         } else {
           // Fallback — most recent schedule whose period started.
-          schedule = await prisma.schedule.findFirst({
-            where: {
-              organizationId: orgId,
-              periodStartDate: { lte: new Date() },
-            },
-            orderBy: { periodStartDate: 'desc' },
-            include: includeShifts,
-          });
+          schedule = await db.query((tx) =>
+            tx.schedule.findFirst({
+              where: {
+                organizationId: orgId,
+                periodStartDate: { lte: new Date() },
+              },
+              orderBy: { periodStartDate: 'desc' },
+              include: includeShifts,
+            }),
+          );
         }
 
         // No matching schedule but valid week — return empty shell so the
@@ -247,27 +258,32 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const { weekStart } = req.body as { weekStart: string };
       const orgId = orgIdFor(req);
+      const db = dbFor(req);
       try {
         const start = new Date(weekStart);
         const end = new Date(start.getTime() + 7 * 86400000);
-        let schedule = await prisma.schedule.findFirst({
-          where: {
-            organizationId: orgId,
-            periodStartDate: { gte: start, lt: end },
-          },
-        });
-        if (!schedule) {
-          schedule = await prisma.schedule.create({
-            data: {
+        let schedule = await db.query((tx) =>
+          tx.schedule.findFirst({
+            where: {
               organizationId: orgId,
-              name: `שבוע ${start.toISOString().slice(0, 10)}`,
-              periodStartDate: start,
-              periodEndDate: new Date(start.getTime() + 6 * 86400000),
-              timezone: 'Asia/Jerusalem',
-              status: 'DRAFT',
-              createdByUserId: req.user?.id ?? null,
+              periodStartDate: { gte: start, lt: end },
             },
-          });
+          }),
+        );
+        if (!schedule) {
+          schedule = await db.query((tx) =>
+            tx.schedule.create({
+              data: {
+                organizationId: orgId,
+                name: `שבוע ${start.toISOString().slice(0, 10)}`,
+                periodStartDate: start,
+                periodEndDate: new Date(start.getTime() + 6 * 86400000),
+                timezone: 'Asia/Jerusalem',
+                status: 'DRAFT',
+                createdByUserId: req.user?.id ?? null,
+              },
+            }),
+          );
         }
         return reply.send({
           id: schedule.id,

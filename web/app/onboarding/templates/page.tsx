@@ -115,7 +115,7 @@ function TemplatesFlow() {
     <main className="mesh-bg min-h-screen p-4 pb-28">
       <div className="mx-auto max-w-3xl space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between pt-2">
+        <header className="flex items-center justify-between pt-2">
           <Logo size={32} />
           <a
             href="/onboarding"
@@ -123,7 +123,7 @@ function TemplatesFlow() {
           >
             ← חזרה לאשף
           </a>
-        </div>
+        </header>
 
         {/* Progress dots */}
         <div className="flex justify-center gap-1.5" aria-hidden>
@@ -132,8 +132,9 @@ function TemplatesFlow() {
           <span className="h-1.5 w-3 rounded-full bg-border" />
         </div>
 
+        <section aria-labelledby="templates-title">
         <div className="text-center">
-          <h1 className="text-2xl font-bold">בחר טמפלייט סידור</h1>
+          <h1 id="templates-title" className="text-2xl font-bold">בחר טמפלייט סידור</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             נבנה לך תפקידים ומשמרות מיד — אפשר לערוך הכל לאחר מכן בהגדרות.
           </p>
@@ -172,6 +173,7 @@ function TemplatesFlow() {
             דלג וצור משמרות ידנית
           </a>
         </div>
+        </section>
       </div>
 
       {/* Sticky CTA */}

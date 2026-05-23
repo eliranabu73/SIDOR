@@ -174,7 +174,7 @@ function ImportFlow() {
     <main className="mesh-bg min-h-screen p-4">
       <h1 className="sr-only">יבוא סידור מתמונה — סידור4S</h1>
       <div className="mx-auto max-w-5xl space-y-6">
-        <div className="flex items-center justify-between">
+        <header className="flex items-center justify-between">
           <Logo size={36} />
           <a
             href="/onboarding"
@@ -182,12 +182,13 @@ function ImportFlow() {
           >
             ← חזרה לאשף
           </a>
-        </div>
+        </header>
 
         {phase === "upload" && (
+          <section aria-labelledby="import-upload-title">
           <Card className="glass-card">
             <CardHeader>
-              <CardTitle>יבוא סידור מתמונה</CardTitle>
+              <CardTitle id="import-upload-title">יבוא סידור מתמונה</CardTitle>
               <CardDescription>
                 העלה צילום מסך מאקסל, צילום הודעת וואטסאפ או תמונה של סידור על נייר.
                 ה-AI שלנו יזהה עובדים, תפקידים ושעות תוך שניות.
@@ -229,9 +230,11 @@ function ImportFlow() {
               </div>
             </CardContent>
           </Card>
+          </section>
         )}
 
         {phase === "parsing" && (
+          <section aria-label="מנתח את הסידור">
           <Card className="glass-card">
             <CardContent className="flex flex-col items-center gap-3 py-12">
               <div className="size-12 animate-spin rounded-full border-4 border-indigo-500/30 border-t-indigo-500" />
@@ -248,13 +251,15 @@ function ImportFlow() {
               )}
             </CardContent>
           </Card>
+          </section>
         )}
 
         {phase === "preview" && parsed && (
           <>
+            <section aria-labelledby="import-preview-title">
             <Card className="glass-card">
               <CardHeader>
-                <CardTitle>תצוגה מקדימה</CardTitle>
+                <CardTitle id="import-preview-title">תצוגה מקדימה</CardTitle>
                 <CardDescription>
                   ודא את הפרטים, ערוך לפי הצורך, ובטל סימון לכל פריט שאינו רלוונטי.
                   רמת ביטחון של ה-AI: {(parsed.confidence * 100).toFixed(0)}%
@@ -262,11 +267,13 @@ function ImportFlow() {
                 </CardDescription>
               </CardHeader>
             </Card>
+            </section>
 
             <div className="grid gap-6 md:grid-cols-2">
+              <section aria-labelledby="import-employees-title">
               <Card className="glass-card">
                 <CardHeader>
-                  <CardTitle>עובדים ({employees.filter((e) => !e.skip).length})</CardTitle>
+                  <CardTitle id="import-employees-title">עובדים ({employees.filter((e) => !e.skip).length})</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {employees.length === 0 && (
@@ -318,10 +325,12 @@ function ImportFlow() {
                   ))}
                 </CardContent>
               </Card>
+              </section>
 
+              <section aria-labelledby="import-shifts-title">
               <Card className="glass-card">
                 <CardHeader>
-                  <CardTitle>משמרות ({shifts.filter((s) => !s.skip).length})</CardTitle>
+                  <CardTitle id="import-shifts-title">משמרות ({shifts.filter((s) => !s.skip).length})</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {shifts.length === 0 && (
@@ -373,6 +382,7 @@ function ImportFlow() {
                   ))}
                 </CardContent>
               </Card>
+              </section>
             </div>
 
             <div className="flex justify-end gap-2">
@@ -403,12 +413,14 @@ function ImportFlow() {
         )}
 
         {phase === "applying" && (
+          <section aria-label="יוצר את הסידור">
           <Card className="glass-card">
             <CardContent className="flex flex-col items-center gap-3 py-12">
               <div className="size-12 animate-spin rounded-full border-4 border-indigo-500/30 border-t-indigo-500" />
               <div className="text-base font-medium">יוצר את הסידור…</div>
             </CardContent>
           </Card>
+          </section>
         )}
       </div>
     </main>

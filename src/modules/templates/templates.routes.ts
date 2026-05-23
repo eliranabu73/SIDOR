@@ -1,8 +1,17 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../../db/prisma.js';
+import type { PrismaClient } from '@prisma/client';
 import { SCHEDULE_TEMPLATES, getTemplate } from './schedule-templates.js';
 import { startOfWeek, addDays, format, parseISO, isValid } from 'date-fns';
+
+/**
+ * Build an org-scoped DB handle (see reads.routes.ts for rationale).
+ * Falls back to direct prisma when AUTH_DISABLED skipped authenticate.
+ */
+function dbFor(req: { orgPrisma?: { query: <T>(fn: (tx: PrismaClient) => Promise<T>) => Promise<T> } }) {
+  return req.orgPrisma ?? { query: <T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> => fn(prisma) };
+}
 
 const DEMO_ORG_ID = '10000000-0000-0000-0000-000000000001';
 function orgIdFor(req: { user?: { orgId: string } }): string {
@@ -47,6 +56,8 @@ export async function templatesRoutes(app: FastifyInstance): Promise<void> {
       const tpl = getTemplate(id);
       if (!tpl) return reply.code(404).send({ code: 'NOT_FOUND', message: 'Template not found' });
 
+      const db = dbFor(req);
+
       // Resolve week start date
       let weekStartDate: Date;
       if (weekStart) {
@@ -59,41 +70,51 @@ export async function templatesRoutes(app: FastifyInstance): Promise<void> {
       // Upsert roles
       const roleMap = new Map<string, string>(); // name → id
       for (const roleName of tpl.roles) {
-        const role = await prisma.role.upsert({
-          where: { organizationId_name: { organizationId: orgId, name: roleName } },
-          create: { organizationId: orgId, name: roleName },
-          update: {},
-        });
+        const role = await db.query((tx) =>
+          tx.role.upsert({
+            where: { organizationId_name: { organizationId: orgId, name: roleName } },
+            create: { organizationId: orgId, name: roleName },
+            update: {},
+          }),
+        );
         roleMap.set(roleName, role.id);
       }
 
       // Ensure a default location exists
-      let location = await prisma.location.findFirst({ where: { organizationId: orgId } });
+      let location = await db.query((tx) =>
+        tx.location.findFirst({ where: { organizationId: orgId } }),
+      );
       if (!location) {
-        location = await prisma.location.create({
-          data: { organizationId: orgId, name: 'ראשי', timezone: 'Asia/Jerusalem' },
-        });
+        location = await db.query((tx) =>
+          tx.location.create({
+            data: { organizationId: orgId, name: 'ראשי', timezone: 'Asia/Jerusalem' },
+          }),
+        );
       }
 
       // Ensure schedule exists for this week
       const weekKey = format(weekStartDate, 'yyyy-MM-dd');
       const periodStart = new Date(weekKey);
       const periodEnd = addDays(weekStartDate, 6);
-      let schedule = await prisma.schedule.findFirst({
-        where: { organizationId: orgId, periodStartDate: periodStart },
-      });
+      let schedule = await db.query((tx) =>
+        tx.schedule.findFirst({
+          where: { organizationId: orgId, periodStartDate: periodStart },
+        }),
+      );
       if (!schedule) {
-        schedule = await prisma.schedule.create({
-          data: {
-            organizationId: orgId,
-            locationId: location.id,
-            name: tpl.name,
-            periodStartDate: periodStart,
-            periodEndDate: periodEnd,
-            timezone: 'Asia/Jerusalem',
-            status: 'DRAFT',
-          },
-        });
+        schedule = await db.query((tx) =>
+          tx.schedule.create({
+            data: {
+              organizationId: orgId,
+              locationId: location!.id,
+              name: tpl.name,
+              periodStartDate: periodStart,
+              periodEndDate: periodEnd,
+              timezone: 'Asia/Jerusalem',
+              status: 'DRAFT',
+            },
+          }),
+        );
       }
 
       // Create shifts
@@ -116,30 +137,34 @@ export async function templatesRoutes(app: FastifyInstance): Promise<void> {
             : dateStr;
           const endAtUtc = new Date(`${endDateStr}T${shiftDef.endTime}:00`);
 
-          await prisma.shift.create({
-            data: {
-              organizationId: orgId,
-              scheduleId: schedule.id,
-              locationId: location.id,
-              roleId,
-              startAtUtc,
-              endAtUtc,
-              timezone: 'Asia/Jerusalem',
-              localStartDate: shiftDate,
-              localEndDate: isOvernight ? addDays(shiftDate, 1) : shiftDate,
-              status: 'PLANNED',
-              requiredEmployeeCount: 1,
-            },
-          });
+          await db.query((tx) =>
+            tx.shift.create({
+              data: {
+                organizationId: orgId,
+                scheduleId: schedule!.id,
+                locationId: location!.id,
+                roleId,
+                startAtUtc,
+                endAtUtc,
+                timezone: 'Asia/Jerusalem',
+                localStartDate: shiftDate,
+                localEndDate: isOvernight ? addDays(shiftDate, 1) : shiftDate,
+                status: 'PLANNED',
+                requiredEmployeeCount: 1,
+              },
+            }),
+          );
           createdShifts++;
         }
       }
 
       // Update org industry
-      await prisma.organization.update({
-        where: { id: orgId },
-        data: { industry: tpl.industry },
-      });
+      await db.query((tx) =>
+        tx.organization.update({
+          where: { id: orgId },
+          data: { industry: tpl.industry },
+        }),
+      );
 
       return reply.send({
         scheduleId: schedule.id,
