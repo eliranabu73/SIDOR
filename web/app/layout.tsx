@@ -4,6 +4,15 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { RegisterSW } from "@/components/pwa/register-sw";
 import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
+import {
+  SITE_URL,
+  SITE_NAME,
+  SITE_DESCRIPTION,
+  LOCALE,
+  SOCIAL,
+  OG_IMAGE_PATH,
+  TWITTER_HANDLE,
+} from "@/lib/site";
 
 const heebo = Heebo({
   variable: "--font-heebo",
@@ -31,20 +40,77 @@ const appleStartupIcons = APPLE_SPLASHES.map(({ w, h, dw, dh, dpr }) => ({
 }));
 
 export const metadata: Metadata = {
-  title: "סידור4S — סידורי עבודה חכמים",
-  description: "ניהול סידורי עבודה, שיבוצים אוטומטיים והחלפות משמרות",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: `${SITE_NAME} — סידורי עבודה חכמים`,
+    template: `%s | ${SITE_NAME}`,
+  },
+  description: SITE_DESCRIPTION,
   manifest: "/manifest.json",
-  applicationName: "סידור4S",
+  applicationName: SITE_NAME,
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    locale: LOCALE,
+    url: SITE_URL,
+    siteName: SITE_NAME,
+    title: `${SITE_NAME} — סידורי עבודה חכמים`,
+    description: SITE_DESCRIPTION,
+    images: [
+      {
+        url: OG_IMAGE_PATH,
+        width: 1200,
+        height: 630,
+        alt: `${SITE_NAME} — סידור עבודה אוטומטי בעברית`,
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: TWITTER_HANDLE,
+    creator: TWITTER_HANDLE,
+    title: `${SITE_NAME} — סידורי עבודה חכמים`,
+    description: SITE_DESCRIPTION,
+    images: [OG_IMAGE_PATH],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
   appleWebApp: {
     capable: true,
-    title: "סידור4S",
+    title: SITE_NAME,
     statusBarStyle: "black-translucent",
     startupImage: appleStartupIcons.map(({ url, media }) => ({ url, media })),
   },
   icons: {
-    icon: "/logo-mark.svg",
+    icon: [
+      { url: "/logo-mark.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
+};
+
+const organizationJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: SITE_NAME,
+  alternateName: "Sidor4S",
+  url: SITE_URL,
+  logo: `${SITE_URL}/logo.svg`,
+  description: SITE_DESCRIPTION,
+  sameAs: [SOCIAL.twitter, SOCIAL.facebook, SOCIAL.linkedin],
 };
 
 export const viewport: Viewport = {
@@ -77,6 +143,10 @@ export default function RootLayout({
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: noFlashScript }} />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
+        />
       </head>
       <body className="min-h-full bg-background text-foreground">
         <ImpersonationBanner />
