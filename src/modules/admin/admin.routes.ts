@@ -907,6 +907,59 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // -------------------------------------------------------------------------
+  // POST /v1/admin/apply-schema-migrations — idempotent ALTER TABLEs for
+  // admin v2 + RLS. Safe to run multiple times (uses IF NOT EXISTS).
+  // -------------------------------------------------------------------------
+  app.post('/apply-schema-migrations', async (_req, _reply) => {
+    const results: Array<{ stmt: string; ok: boolean; error?: string }> = [];
+    const statements = [
+      // Admin v2 columns
+      `ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "deletedAt" TIMESTAMPTZ NULL`,
+      `ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "featureFlags" JSONB NOT NULL DEFAULT '{}'::jsonb`,
+      `ALTER TABLE "memberships" ADD COLUMN IF NOT EXISTS "deactivatedAt" TIMESTAMPTZ NULL`,
+      `CREATE INDEX IF NOT EXISTS "idx_orgs_deleted_at" ON "organizations"("deletedAt") WHERE "deletedAt" IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS "idx_memberships_deactivated_at" ON "memberships"("deactivatedAt") WHERE "deactivatedAt" IS NOT NULL`,
+      // Add ENTERPRISE to BillingPlan enum if missing (idempotent via DO block)
+      `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'ENTERPRISE' AND enumtypid = 'BillingPlan'::regtype) THEN ALTER TYPE "BillingPlan" ADD VALUE 'ENTERPRISE'; END IF; END $$`,
+      // RLS — enable on org-scoped tables
+      `ALTER TABLE "organizations" ENABLE ROW LEVEL SECURITY`,
+      `DROP POLICY IF EXISTS tenant_isolation ON "organizations"`,
+      `CREATE POLICY tenant_isolation ON "organizations" USING (id::text = current_setting('app.current_org_id', true))`,
+      `ALTER TABLE "memberships" ENABLE ROW LEVEL SECURITY`,
+      `DROP POLICY IF EXISTS tenant_isolation ON "memberships"`,
+      `CREATE POLICY tenant_isolation ON "memberships" USING ("organizationId"::text = current_setting('app.current_org_id', true))`,
+      `ALTER TABLE "locations" ENABLE ROW LEVEL SECURITY`,
+      `DROP POLICY IF EXISTS tenant_isolation ON "locations"`,
+      `CREATE POLICY tenant_isolation ON "locations" USING ("organizationId"::text = current_setting('app.current_org_id', true))`,
+      `ALTER TABLE "roles" ENABLE ROW LEVEL SECURITY`,
+      `DROP POLICY IF EXISTS tenant_isolation ON "roles"`,
+      `CREATE POLICY tenant_isolation ON "roles" USING ("organizationId"::text = current_setting('app.current_org_id', true))`,
+      `ALTER TABLE "employees" ENABLE ROW LEVEL SECURITY`,
+      `DROP POLICY IF EXISTS tenant_isolation ON "employees"`,
+      `CREATE POLICY tenant_isolation ON "employees" USING ("organizationId"::text = current_setting('app.current_org_id', true))`,
+      `ALTER TABLE "schedules" ENABLE ROW LEVEL SECURITY`,
+      `DROP POLICY IF EXISTS tenant_isolation ON "schedules"`,
+      `CREATE POLICY tenant_isolation ON "schedules" USING ("organizationId"::text = current_setting('app.current_org_id', true))`,
+      `ALTER TABLE "shifts" ENABLE ROW LEVEL SECURITY`,
+      `DROP POLICY IF EXISTS tenant_isolation ON "shifts"`,
+      `CREATE POLICY tenant_isolation ON "shifts" USING ("organizationId"::text = current_setting('app.current_org_id', true))`,
+    ];
+    for (const stmt of statements) {
+      try {
+        await prisma.$executeRawUnsafe(stmt);
+        results.push({ stmt: stmt.slice(0, 90), ok: true });
+      } catch (err) {
+        results.push({
+          stmt: stmt.slice(0, 90),
+          ok: false,
+          error: err instanceof Error ? err.message.slice(0, 200) : 'Unknown',
+        });
+      }
+    }
+    return { applied: results.filter((r) => r.ok).length, total: results.length, results };
+  });
+
+  // -------------------------------------------------------------------------
   // GET /v1/admin/db-info — diagnostic (no admin gate) — verify which DB
   // Vercel is connecting to + which columns memberships has. Safe info only.
   // -------------------------------------------------------------------------
