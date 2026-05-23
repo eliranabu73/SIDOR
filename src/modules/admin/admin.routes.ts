@@ -962,18 +962,23 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
             action: 'created',
           });
         }
-        // If user exists — fetch by email, update password + confirm
+        // If user exists — scan paginated list to find by email, then update
         if (createRes.status === 422) {
-          const listRes = await fetch(
-            `${supabaseUrl}/auth/v1/admin/users?filter=email.eq.${encodeURIComponent(body.email)}`,
-            { headers: supabaseHeaders },
-          );
-          const listData = (await listRes.json()) as Record<string, unknown>;
-          const users = (listData['users'] as Array<Record<string, unknown>>) || [];
-          const existing = users.find(
-            (u) =>
-              ((u['email'] as string) || '').toLowerCase() === body.email.toLowerCase(),
-          );
+          let existing: Record<string, unknown> | undefined;
+          for (let page = 1; page <= 20 && !existing; page++) {
+            const listRes = await fetch(
+              `${supabaseUrl}/auth/v1/admin/users?page=${page}&per_page=200`,
+              { headers: supabaseHeaders },
+            );
+            const listData = (await listRes.json()) as Record<string, unknown>;
+            const users = (listData['users'] as Array<Record<string, unknown>>) || [];
+            existing = users.find(
+              (u) =>
+                ((u['email'] as string) || '').toLowerCase() ===
+                body.email.toLowerCase(),
+            );
+            if (users.length < 200) break;
+          }
           if (!existing) {
             return reply.code(404).send({
               code: 'USER_LOOKUP_FAILED',
