@@ -1,4 +1,4 @@
--- ============================================================================
+﻿-- ============================================================================
 -- Migration: enable_rls
 -- Apply manually with `npx prisma migrate deploy` after testing locally.
 --
@@ -32,7 +32,7 @@
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
--- organizations — policy uses `id` (this IS the tenant root)
+-- organizations ג€” policy uses `id` (this IS the tenant root)
 -- ---------------------------------------------------------------------------
 ALTER TABLE "organizations" ENABLE ROW LEVEL SECURITY;
 
@@ -45,7 +45,7 @@ CREATE POLICY tenant_isolation ON "organizations"
 ALTER TABLE "memberships" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON "memberships"
-  USING (organization_id::text = current_setting('app.current_org_id', true));
+  USING ("organizationId"::text = current_setting('app.current_org_id', true));
 
 -- ---------------------------------------------------------------------------
 -- locations
@@ -53,7 +53,7 @@ CREATE POLICY tenant_isolation ON "memberships"
 ALTER TABLE "locations" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON "locations"
-  USING (organization_id::text = current_setting('app.current_org_id', true));
+  USING ("organizationId"::text = current_setting('app.current_org_id', true));
 
 -- ---------------------------------------------------------------------------
 -- departments
@@ -61,7 +61,7 @@ CREATE POLICY tenant_isolation ON "locations"
 ALTER TABLE "departments" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON "departments"
-  USING (organization_id::text = current_setting('app.current_org_id', true));
+  USING ("organizationId"::text = current_setting('app.current_org_id', true));
 
 -- ---------------------------------------------------------------------------
 -- roles
@@ -69,7 +69,7 @@ CREATE POLICY tenant_isolation ON "departments"
 ALTER TABLE "roles" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON "roles"
-  USING (organization_id::text = current_setting('app.current_org_id', true));
+  USING ("organizationId"::text = current_setting('app.current_org_id', true));
 
 -- ---------------------------------------------------------------------------
 -- employees
@@ -77,7 +77,7 @@ CREATE POLICY tenant_isolation ON "roles"
 ALTER TABLE "employees" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON "employees"
-  USING (organization_id::text = current_setting('app.current_org_id', true));
+  USING ("organizationId"::text = current_setting('app.current_org_id', true));
 
 -- ---------------------------------------------------------------------------
 -- schedules
@@ -85,7 +85,7 @@ CREATE POLICY tenant_isolation ON "employees"
 ALTER TABLE "schedules" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON "schedules"
-  USING (organization_id::text = current_setting('app.current_org_id', true));
+  USING ("organizationId"::text = current_setting('app.current_org_id', true));
 
 -- ---------------------------------------------------------------------------
 -- shift_templates
@@ -93,7 +93,7 @@ CREATE POLICY tenant_isolation ON "schedules"
 ALTER TABLE "shift_templates" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON "shift_templates"
-  USING (organization_id::text = current_setting('app.current_org_id', true));
+  USING ("organizationId"::text = current_setting('app.current_org_id', true));
 
 -- ---------------------------------------------------------------------------
 -- shifts
@@ -101,7 +101,7 @@ CREATE POLICY tenant_isolation ON "shift_templates"
 ALTER TABLE "shifts" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON "shifts"
-  USING (organization_id::text = current_setting('app.current_org_id', true));
+  USING ("organizationId"::text = current_setting('app.current_org_id', true));
 
 -- ---------------------------------------------------------------------------
 -- shift_swap_requests
@@ -109,7 +109,7 @@ CREATE POLICY tenant_isolation ON "shifts"
 ALTER TABLE "shift_swap_requests" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON "shift_swap_requests"
-  USING (organization_id::text = current_setting('app.current_org_id', true));
+  USING ("organizationId"::text = current_setting('app.current_org_id', true));
 
 -- ---------------------------------------------------------------------------
 -- custom_rule_definitions
@@ -117,7 +117,7 @@ CREATE POLICY tenant_isolation ON "shift_swap_requests"
 ALTER TABLE "custom_rule_definitions" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON "custom_rule_definitions"
-  USING (organization_id::text = current_setting('app.current_org_id', true));
+  USING ("organizationId"::text = current_setting('app.current_org_id', true));
 
 -- ---------------------------------------------------------------------------
 -- rule_violations
@@ -125,7 +125,7 @@ CREATE POLICY tenant_isolation ON "custom_rule_definitions"
 ALTER TABLE "rule_violations" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON "rule_violations"
-  USING (organization_id::text = current_setting('app.current_org_id', true));
+  USING ("organizationId"::text = current_setting('app.current_org_id', true));
 
 -- ---------------------------------------------------------------------------
 -- schedule_audit_logs
@@ -133,7 +133,7 @@ CREATE POLICY tenant_isolation ON "rule_violations"
 ALTER TABLE "schedule_audit_logs" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON "schedule_audit_logs"
-  USING (organization_id::text = current_setting('app.current_org_id', true));
+  USING ("organizationId"::text = current_setting('app.current_org_id', true));
 
 -- ---------------------------------------------------------------------------
 -- schedule_events
@@ -141,7 +141,7 @@ CREATE POLICY tenant_isolation ON "schedule_audit_logs"
 ALTER TABLE "schedule_events" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON "schedule_events"
-  USING (organization_id::text = current_setting('app.current_org_id', true));
+  USING ("organizationId"::text = current_setting('app.current_org_id', true));
 
 -- ---------------------------------------------------------------------------
 -- employee_schedule_metrics
@@ -149,7 +149,7 @@ CREATE POLICY tenant_isolation ON "schedule_events"
 ALTER TABLE "employee_schedule_metrics" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON "employee_schedule_metrics"
-  USING (organization_id::text = current_setting('app.current_org_id', true));
+  USING ("organizationId"::text = current_setting('app.current_org_id', true));
 
 -- ---------------------------------------------------------------------------
 -- scheduling_candidates
@@ -157,7 +157,7 @@ CREATE POLICY tenant_isolation ON "employee_schedule_metrics"
 ALTER TABLE "scheduling_candidates" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON "scheduling_candidates"
-  USING (organization_id::text = current_setting('app.current_org_id', true));
+  USING ("organizationId"::text = current_setting('app.current_org_id', true));
 
 -- ---------------------------------------------------------------------------
 -- message_deliveries
@@ -165,4 +165,5 @@ CREATE POLICY tenant_isolation ON "scheduling_candidates"
 ALTER TABLE "message_deliveries" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON "message_deliveries"
-  USING (organization_id::text = current_setting('app.current_org_id', true));
+  USING ("organizationId"::text = current_setting('app.current_org_id', true));
+
