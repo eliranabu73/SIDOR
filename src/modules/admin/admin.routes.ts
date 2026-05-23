@@ -930,6 +930,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           WHERE table_schema = 'public' AND table_name = 'memberships'
           ORDER BY ordinal_position`,
       );
+      const usersCount = await prisma.$queryRawUnsafe<Array<{ n: bigint }>>(
+        `SELECT COUNT(*)::bigint AS n FROM auth.users`,
+      );
+      const orgsSample = await prisma.$queryRawUnsafe<
+        Array<{ id: string; name: string }>
+      >(`SELECT id::text, name FROM organizations ORDER BY "createdAt" LIMIT 3`);
       const orgCols = await prisma.$queryRawUnsafe<Array<{ column_name: string }>>(
         `SELECT column_name::text FROM information_schema.columns
           WHERE table_schema = 'public' AND table_name = 'organizations'
@@ -939,6 +945,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         connection: rows[0],
         membershipColumns: cols.map((c) => c.column_name),
         organizationColumns: orgCols.map((c) => c.column_name),
+        authUsersCount: Number(usersCount[0]?.n ?? 0),
+        orgs: orgsSample,
       };
     } catch (err) {
       return {
