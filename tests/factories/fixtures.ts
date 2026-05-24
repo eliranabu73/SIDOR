@@ -114,6 +114,8 @@ export function makeAssignment(
     source: 'MANUAL',
     assignedByUserId: null,
     version: 1,
+    confirmedAt: null,
+    confirmedVia: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...rest,

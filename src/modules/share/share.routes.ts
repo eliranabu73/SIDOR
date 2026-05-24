@@ -6,8 +6,10 @@ import {
   verifyEmployeeToken,
 } from './share.service';
 import {
+  confirmAllShifts,
   confirmShiftAssignment,
   createTimeOffRequest,
+  fetchConfirmationStatus,
   fetchEmployeeActivity,
   getEmployeePortalData,
   replaceAvailability,
@@ -390,6 +392,69 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
         return reply
           .code(status)
           .send({ code: 'NOT_FOUND', message: (err as Error).message });
+      }
+    },
+  );
+
+  // PUBLIC — bulk confirm all upcoming shifts via share token (WhatsApp link or portal).
+  const ConfirmShiftsBody = z.object({
+    shiftIds: z.array(z.string().uuid()).optional(),
+    via: z.enum(['whatsapp_link', 'portal', 'manager']).optional(),
+  });
+  app.post(
+    '/v1/share/token/:token/confirm-shifts',
+    { schema: { params: TokenParam, body: ConfirmShiftsBody } },
+    async (req, reply) => {
+      const { token } = req.params as z.infer<typeof TokenParam>;
+      const body = req.body as z.infer<typeof ConfirmShiftsBody>;
+      const decoded = verifyEmployeeToken(token);
+      if (!decoded) return reply.code(401).send({ code: 'INVALID_TOKEN' });
+      try {
+        const result = await withOrgContext(decoded.organizationId).query((tx) =>
+          confirmAllShifts(
+            {
+              employeeId: decoded.employeeId,
+              organizationId: decoded.organizationId,
+              shiftIds: body.shiftIds,
+              via: body.via ?? 'whatsapp_link',
+            },
+            tx,
+          ),
+        );
+        return reply.code(200).send(result);
+      } catch (err) {
+        const status = (err as { statusCode?: number }).statusCode ?? 500;
+        return reply
+          .code(status)
+          .send({ code: 'CONFIRM_FAILED', message: (err as Error).message });
+      }
+    },
+  );
+
+  // PUBLIC — get confirmation status for all upcoming shifts (employee portal).
+  app.get(
+    '/v1/share/token/:token/confirmation-status',
+    { schema: { params: TokenParam } },
+    async (req, reply) => {
+      const { token } = req.params as z.infer<typeof TokenParam>;
+      const decoded = verifyEmployeeToken(token);
+      if (!decoded) return reply.code(401).send({ code: 'INVALID_TOKEN' });
+      try {
+        const result = await withOrgContext(decoded.organizationId).query((tx) =>
+          fetchConfirmationStatus(
+            {
+              employeeId: decoded.employeeId,
+              organizationId: decoded.organizationId,
+            },
+            tx,
+          ),
+        );
+        return reply.send(result);
+      } catch (err) {
+        const status = (err as { statusCode?: number }).statusCode ?? 500;
+        return reply
+          .code(status)
+          .send({ code: 'STATUS_FAILED', message: (err as Error).message });
       }
     },
   );

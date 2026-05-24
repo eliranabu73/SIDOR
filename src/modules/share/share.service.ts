@@ -210,7 +210,8 @@ export async function buildPublishBundle(
     const url = shareUrlForEmployee(token);
     const personal =
       `שלום ${e.fullName} 👋\n` +
-      `הסידור שלך לשבוע ${weekStart}:\n${url}`;
+      `הסידור שלך לשבוע ${weekStart}:\n${url}\n\n` +
+      `לחץ על הקישור לצפייה ואישור המשמרות שלך ✅`;
     return {
       employeeId: e.id,
       fullName: e.fullName,

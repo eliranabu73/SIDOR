@@ -545,6 +545,10 @@ model ShiftAssignment {
   source           AssignmentSource @default(MANUAL)
   assignedByUserId String?          @db.Uuid
   version          Int              @default(1)
+  /// Set when the employee taps "אישור" in the employee portal or share link.
+  confirmedAt      DateTime?
+  /// How the confirmation was recorded: 'whatsapp_link' | 'portal' | 'manager'
+  confirmedVia     String?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
@@ -555,6 +559,7 @@ model ShiftAssignment {
   @@unique([shiftId, employeeId])
   @@index([shiftId, assignmentStatus])
   @@index([employeeId, assignmentStatus])
+  @@index([employeeId, confirmedAt])
   @@map("shift_assignments")
 }
 

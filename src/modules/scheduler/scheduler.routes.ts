@@ -251,6 +251,93 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
       }
     },
   );
+
+  // MANAGER — per-employee confirmation status for a published schedule.
+  // GET /v1/schedules/:scheduleId/confirmations
+  app.get(
+    '/schedules/:scheduleId/confirmations',
+    {
+      schema: { params: ScheduleIdParam },
+      preHandler: authHandlers,
+    },
+    async (req, reply) => {
+      const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
+      const orgId = orgIdFor(req);
+
+      try {
+        const assignments = await dbFor(req).query((tx) =>
+          tx.shiftAssignment.findMany({
+            where: {
+              shift: { scheduleId, organizationId: orgId, status: { not: 'CANCELLED' } },
+              assignmentStatus: { not: 'CANCELLED' },
+            },
+            select: {
+              id: true,
+              employeeId: true,
+              confirmedAt: true,
+              confirmedVia: true,
+              employee: { select: { fullName: true, phone: true } },
+              shift: { select: { id: true, startAtUtc: true } },
+            },
+            orderBy: { employee: { fullName: 'asc' } },
+          }),
+        );
+
+        // Group by employee
+        type EmployeeEntry = {
+          employeeId: string;
+          fullName: string;
+          phone: string | null;
+          confirmedAt: string | null;
+          confirmedVia: string | null;
+          shiftCount: number;
+          confirmedShiftCount: number;
+        };
+        const byEmployee = new Map<string, EmployeeEntry>();
+
+        for (const a of assignments) {
+          const existing = byEmployee.get(a.employeeId);
+          // earliest confirmedAt wins for the "employee confirmed at" display
+          const confirmedAt = a.confirmedAt
+            ? a.confirmedAt.toISOString()
+            : null;
+          if (!existing) {
+            byEmployee.set(a.employeeId, {
+              employeeId: a.employeeId,
+              fullName: a.employee.fullName,
+              phone: a.employee.phone,
+              confirmedAt,
+              confirmedVia: a.confirmedVia,
+              shiftCount: 1,
+              confirmedShiftCount: a.confirmedAt ? 1 : 0,
+            });
+          } else {
+            existing.shiftCount += 1;
+            if (a.confirmedAt) {
+              existing.confirmedShiftCount += 1;
+              // keep earliest confirmedAt
+              if (!existing.confirmedAt || a.confirmedAt.toISOString() < existing.confirmedAt) {
+                existing.confirmedAt = a.confirmedAt.toISOString();
+                existing.confirmedVia = a.confirmedVia;
+              }
+            }
+          }
+        }
+
+        const employees = Array.from(byEmployee.values());
+        const confirmed = employees.filter((e) => e.confirmedAt !== null).length;
+
+        return reply.send({
+          total: employees.length,
+          confirmed,
+          pending: employees.length - confirmed,
+          employees,
+        });
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
 }
 
 function handleHttpError(reply: FastifyReply, err: unknown) {

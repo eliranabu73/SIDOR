@@ -6,6 +6,7 @@ import { DateTime } from "luxon";
 import {
   Calendar,
   CalendarDays,
+  CheckCircle2,
   Clock,
   Download,
   LogIn,
@@ -44,6 +45,7 @@ type PortalShift = {
   role: string | null;
   location: string | null;
   status: string;
+  confirmedAt: string | null;
 };
 
 type PortalTimeOff = {
@@ -53,6 +55,13 @@ type PortalTimeOff = {
   reason: string | null;
   status: string;
   createdAt: string;
+};
+
+type ConfirmationSummary = {
+  totalShifts: number;
+  confirmedCount: number;
+  pendingCount: number;
+  firstConfirmedAt: string | null;
 };
 
 type PortalData = {
@@ -66,6 +75,7 @@ type PortalData = {
   pastWeekMinutes: number;
   monthSummary: { totalHours: number; totalShifts: number };
   timeOffRequests: PortalTimeOff[];
+  confirmationSummary: ConfirmationSummary;
 };
 
 async function fetchPortalData(token: string): Promise<PortalData> {
@@ -84,6 +94,25 @@ async function fetchPortalData(token: string): Promise<PortalData> {
     throw new Error(msg);
   }
   return body as PortalData;
+}
+
+async function confirmAllShifts(token: string): Promise<{ confirmed: number }> {
+  const res = await fetch(
+    `${API_URL}/v1/share/token/${encodeURIComponent(token)}/confirm-shifts`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ via: "portal" }),
+    },
+  );
+  const body = (await res.json().catch(() => null)) as {
+    confirmed?: number;
+    message?: string;
+  } | null;
+  if (!res.ok) {
+    throw new Error(body?.message ?? `שגיאה ${res.status}`);
+  }
+  return { confirmed: body?.confirmed ?? 0 };
 }
 
 async function submitTimeOff(
@@ -198,6 +227,96 @@ function LoadingSkeleton() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Confirmation Banner
+// ---------------------------------------------------------------------------
+
+function ConfirmationBanner({
+  summary,
+  token,
+  onConfirmed,
+}: {
+  summary: ConfirmationSummary;
+  token: string;
+  onConfirmed: () => void;
+}) {
+  const [busy, setBusy] = React.useState(false);
+
+  const handleConfirmAll = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const result = await confirmAllShifts(token);
+      if (result.confirmed > 0) {
+        toast.success(`אישרת ${result.confirmed} משמרות`);
+        onConfirmed();
+      } else {
+        toast.info("אין משמרות חדשות לאישור");
+      }
+    } catch {
+      toast.error("האישור נכשל, נסה שנית");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const { totalShifts, confirmedCount, pendingCount, firstConfirmedAt } = summary;
+
+  // Nothing to confirm
+  if (totalShifts === 0) return null;
+
+  // Already fully confirmed
+  if (pendingCount === 0 && firstConfirmedAt) {
+    const confirmedTime = DateTime.fromISO(firstConfirmedAt)
+      .setLocale("he")
+      .toFormat("HH:mm · d בMMMM");
+    return (
+      <section className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 shadow-sm">
+        <div className="flex items-center gap-2">
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />
+          <div>
+            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+              אישרת את כל המשמרות שלך
+            </p>
+            <p className="text-xs text-muted-foreground">ב-{confirmedTime}</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // Partial or no confirmation
+  return (
+    <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5 shadow-sm">
+      <div className="mb-3 flex items-start gap-2">
+        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+        <div>
+          <p className="text-sm font-semibold">אשר/י את המשמרות שלך</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {confirmedCount > 0
+              ? `אישרת ${confirmedCount} מתוך ${totalShifts} משמרות · ${pendingCount} ממתינות`
+              : `יש לך ${totalShifts} משמרות — המנהל יראה שאישרת`}
+          </p>
+        </div>
+      </div>
+      <Button
+        onClick={handleConfirmAll}
+        disabled={busy}
+        className="h-12 w-full rounded-xl bg-emerald-500 text-base font-bold hover:bg-emerald-600 active:scale-95 transition-transform disabled:opacity-60"
+      >
+        {busy ? (
+          <span className="animate-pulse">מאשר…</span>
+        ) : (
+          <>
+            <CheckCircle2 className="me-2 h-5 w-5" />
+            אשר/י הכל
+          </>
+        )}
+      </Button>
+    </section>
+  );
+}
+
 function PortalContent({
   data,
   token,
@@ -217,6 +336,15 @@ function PortalContent({
 
   return (
     <div className="space-y-4">
+      {/* Confirmation banner — prominent, above everything */}
+      {data.confirmationSummary && (
+        <ConfirmationBanner
+          summary={data.confirmationSummary}
+          token={token}
+          onConfirmed={onReload}
+        />
+      )}
+
       {/* Clock widget */}
       <ClockWidget token={token} />
 
@@ -268,7 +396,7 @@ function PortalContent({
         ) : (
           <ul className="space-y-2">
             {thisWeekShifts.map((s) => (
-              <ShiftRow key={s.assignmentId} shift={s} />
+              <ShiftRow key={s.assignmentId} shift={s} token={token} onConfirmed={onReload} />
             ))}
           </ul>
         )}
@@ -513,18 +641,61 @@ function StatCard({
   );
 }
 
-function ShiftRow({ shift }: { shift: PortalShift }) {
+function ShiftRow({
+  shift,
+  token,
+  onConfirmed,
+}: {
+  shift: PortalShift;
+  token: string;
+  onConfirmed: () => void;
+}) {
+  const [busy, setBusy] = React.useState(false);
   const start = DateTime.fromISO(shift.startAt).setLocale("he");
   const end = DateTime.fromISO(shift.endAt).setLocale("he");
+  const isConfirmed = shift.confirmedAt !== null;
+
+  const handleConfirm = async () => {
+    if (busy || isConfirmed) return;
+    setBusy(true);
+    try {
+      await confirmAllShifts(token);
+      onConfirmed();
+    } catch {
+      toast.error("האישור נכשל");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <li className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+    <li
+      className={`rounded-2xl border p-4 shadow-sm transition-colors ${
+        isConfirmed
+          ? "border-emerald-500/20 bg-emerald-500/5"
+          : "border-border bg-card"
+      }`}
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="text-sm font-semibold">
           {start.toFormat("EEEE · d בMMMM")}
         </div>
-        <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[11px] font-medium text-indigo-500">
-          {start.toFormat("HH:mm")}–{end.toFormat("HH:mm")}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[11px] font-medium text-indigo-500">
+            {start.toFormat("HH:mm")}–{end.toFormat("HH:mm")}
+          </span>
+          {isConfirmed ? (
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+          ) : (
+            <button
+              onClick={handleConfirm}
+              disabled={busy}
+              className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 transition hover:bg-emerald-500/20 disabled:opacity-50 dark:text-emerald-400"
+            >
+              {busy ? "…" : "אשר"}
+            </button>
+          )}
+        </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
         {shift.role ? (
@@ -543,6 +714,15 @@ function ShiftRow({ shift }: { shift: PortalShift }) {
           <Clock className="h-3.5 w-3.5" />
           {Math.round(end.diff(start, "hours").hours * 10) / 10} ש׳
         </span>
+        {isConfirmed && shift.confirmedAt ? (
+          <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            אושר ב-
+            {DateTime.fromISO(shift.confirmedAt)
+              .setLocale("he")
+              .toFormat("HH:mm")}
+          </span>
+        ) : null}
       </div>
     </li>
   );

@@ -3,16 +3,16 @@ import type { Db } from '../../db/prisma';
 import { verifyEmployeeToken } from './share.service';
 
 /**
- * Token-intent: employee acknowledges a published shift.
- * No dedicated `confirmedAt` column exists on ShiftAssignment, so we persist
- * the ack in MessageDelivery with channel="employee_ack" + status="confirmed".
- * Idempotent: returns the existing row if one is already logged.
+ * Token-intent: employee acknowledges a single published shift.
+ * Writes confirmedAt + confirmedVia directly on ShiftAssignment.
+ * Idempotent: returns the existing confirmation if already set.
  */
 export async function confirmShiftAssignment(
   input: {
     employeeId: string;
     organizationId: string;
     shiftId: string;
+    via?: string;
   },
   db: Db = defaultPrisma,
 ) {
@@ -27,48 +27,145 @@ export async function confirmShiftAssignment(
     throw Object.assign(new Error('Org mismatch'), { statusCode: 403 });
   }
 
-  const existing = await db.messageDelivery.findFirst({
-    where: {
-      organizationId: input.organizationId,
-      employeeId: input.employeeId,
-      channel: 'employee_ack',
-      status: 'confirmed',
-      payload: { path: ['shiftId'], equals: input.shiftId },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-  if (existing) {
+  if (assignment.confirmedAt) {
     return {
-      id: existing.id,
       shiftId: input.shiftId,
       assignmentId: assignment.id,
-      confirmedAt: existing.createdAt.toISOString(),
+      confirmedAt: assignment.confirmedAt.toISOString(),
       alreadyConfirmed: true,
     };
   }
 
-  const row = await db.messageDelivery.create({
-    data: {
-      organizationId: input.organizationId,
-      employeeId: input.employeeId,
-      channel: 'employee_ack',
-      templateName: 'shift_confirm',
-      payload: {
-        shiftId: input.shiftId,
-        assignmentId: assignment.id,
-        startsAt: assignment.shift.startAtUtc.toISOString(),
-        endsAt: assignment.shift.endAtUtc.toISOString(),
-      },
-      status: 'confirmed',
-    },
-    select: { id: true, createdAt: true },
+  const now = new Date();
+  const via = input.via ?? 'whatsapp_link';
+  await db.shiftAssignment.update({
+    where: { id: assignment.id },
+    data: { confirmedAt: now, confirmedVia: via },
   });
+
   return {
-    id: row.id,
     shiftId: input.shiftId,
     assignmentId: assignment.id,
-    confirmedAt: row.createdAt.toISOString(),
+    confirmedAt: now.toISOString(),
     alreadyConfirmed: false,
+  };
+}
+
+/**
+ * Bulk confirm all (or specific) upcoming shifts for an employee.
+ * Called when the employee taps "אשר/י הכל" in their portal/share page.
+ * Skips shifts that are already confirmed or in the past (> 1 day ago).
+ */
+export async function confirmAllShifts(
+  input: {
+    employeeId: string;
+    organizationId: string;
+    shiftIds?: string[]; // if empty/undefined → confirm all upcoming
+    via?: string;
+  },
+  db: Db = defaultPrisma,
+) {
+  const cutoff = new Date(Date.now() - 86400000); // 1 day ago
+  const via = input.via ?? 'whatsapp_link';
+
+  const where = {
+    employeeId: input.employeeId,
+    confirmedAt: null,
+    assignmentStatus: { in: ['CONFIRMED', 'PROPOSED'] as Array<'CONFIRMED' | 'PROPOSED'> },
+    shift: {
+      organizationId: input.organizationId,
+      startAtUtc: { gte: cutoff },
+      status: { not: 'CANCELLED' as const },
+    },
+    ...(input.shiftIds && input.shiftIds.length > 0
+      ? { shiftId: { in: input.shiftIds } }
+      : {}),
+  };
+
+  const assignments = await db.shiftAssignment.findMany({
+    where,
+    select: {
+      id: true,
+      shift: {
+        select: { id: true, startAtUtc: true, role: { select: { name: true } } },
+      },
+    },
+    orderBy: { shift: { startAtUtc: 'asc' } },
+  });
+
+  if (assignments.length === 0) {
+    return { confirmed: 0, shifts: [] };
+  }
+
+  const now = new Date();
+  await db.shiftAssignment.updateMany({
+    where: { id: { in: assignments.map((a) => a.id) } },
+    data: { confirmedAt: now, confirmedVia: via },
+  });
+
+  return {
+    confirmed: assignments.length,
+    shifts: assignments.map((a) => ({
+      id: a.shift.id,
+      assignmentId: a.id,
+      startsAt: a.shift.startAtUtc.toISOString(),
+      role: a.shift.role?.name ?? null,
+    })),
+  };
+}
+
+/**
+ * Return an employee's upcoming shifts with their confirmation status.
+ * Used by the employee portal to show the confirmation banner state.
+ */
+export async function fetchConfirmationStatus(
+  input: {
+    employeeId: string;
+    organizationId: string;
+  },
+  db: Db = defaultPrisma,
+) {
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - 86400000);
+  const horizon = new Date(now.getTime() + 21 * 86400000);
+
+  const assignments = await db.shiftAssignment.findMany({
+    where: {
+      employeeId: input.employeeId,
+      assignmentStatus: { in: ['CONFIRMED', 'PROPOSED', 'COMPLETED'] as Array<'CONFIRMED' | 'PROPOSED' | 'COMPLETED'> },
+      shift: {
+        organizationId: input.organizationId,
+        startAtUtc: { gte: cutoff, lt: horizon },
+        status: { not: 'CANCELLED' as const },
+      },
+    },
+    select: {
+      id: true,
+      confirmedAt: true,
+      confirmedVia: true,
+      shift: { select: { id: true, startAtUtc: true, endAtUtc: true, role: { select: { name: true } } } },
+    },
+    orderBy: { shift: { startAtUtc: 'asc' } },
+  });
+
+  const firstConfirmedAt = assignments
+    .map((a) => a.confirmedAt)
+    .filter(Boolean)
+    .sort()[0];
+
+  return {
+    totalShifts: assignments.length,
+    confirmedCount: assignments.filter((a) => a.confirmedAt !== null).length,
+    firstConfirmedAt: firstConfirmedAt?.toISOString() ?? null,
+    shifts: assignments.map((a) => ({
+      id: a.shift.id,
+      assignmentId: a.id,
+      startsAt: a.shift.startAtUtc.toISOString(),
+      endsAt: a.shift.endAtUtc.toISOString(),
+      role: a.shift.role?.name ?? null,
+      confirmedAt: a.confirmedAt?.toISOString() ?? null,
+      confirmedVia: a.confirmedVia,
+    })),
   };
 }
 
@@ -343,6 +440,12 @@ export async function getEmployeePortalData(input: { token: string }) {
       0,
     );
 
+    const confirmedCount = upcoming.filter((a) => a.confirmedAt !== null).length;
+    const firstConfirmedAt = upcoming
+      .map((a) => a.confirmedAt)
+      .filter(Boolean)
+      .sort()[0];
+
     return {
       employee: {
         id: employee.id,
@@ -358,6 +461,7 @@ export async function getEmployeePortalData(input: { token: string }) {
         role: a.shift.role?.name ?? null,
         location: a.shift.location?.name ?? null,
         status: a.assignmentStatus.toLowerCase(),
+        confirmedAt: a.confirmedAt?.toISOString() ?? null,
       })),
       pastWeekMinutes,
       monthSummary: {
@@ -372,6 +476,12 @@ export async function getEmployeePortalData(input: { token: string }) {
         status: t.status.toLowerCase(),
         createdAt: t.createdAt.toISOString(),
       })),
+      confirmationSummary: {
+        totalShifts: upcoming.length,
+        confirmedCount,
+        pendingCount: upcoming.length - confirmedCount,
+        firstConfirmedAt: firstConfirmedAt?.toISOString() ?? null,
+      },
     };
   });
 }

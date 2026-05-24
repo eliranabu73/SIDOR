@@ -47,6 +47,7 @@ import {
 import { AutoScheduleDialog } from "@/components/schedule/AutoScheduleDialog";
 import { ProposalOverlay } from "@/components/schedule/ProposalOverlay";
 import { PublishWhatsAppDialog } from "@/components/schedule/PublishWhatsAppDialog";
+import { ConfirmationStatus } from "@/components/schedule/ConfirmationStatus";
 import { ExportDialog } from "@/components/schedule/ExportDialog";
 import { CreateShiftDialog } from "@/components/schedule/CreateShiftDialog";
 import { LaborCostBar } from "@/components/schedule/LaborCostBar";
@@ -293,6 +294,17 @@ function ScheduleInner() {
 
       {/* WS-E: IL labor-compliance status above the grid */}
       <ComplianceBanner scheduleId={scheduleQuery.data?.id ?? null} />
+
+      {/* Confirmation status — visible only when schedule is published */}
+      {scheduleQuery.data?.status === "published" && scheduleQuery.data.id && (
+        <div className="px-3 sm:px-4 pt-2 pb-1 max-w-md">
+          <ConfirmationStatus
+            scheduleId={scheduleQuery.data.id}
+            isPublished
+            weekLabel={weekStart.toISODate() ?? ""}
+          />
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row flex-1 min-h-0">
         {/* Left rail — filters (desktop only) */}
