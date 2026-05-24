@@ -108,7 +108,7 @@ const organizationJsonLd = {
   name: SITE_NAME,
   alternateName: "Sidor4S",
   url: SITE_URL,
-  logo: `${SITE_URL}/logo.svg`,
+  logo: `${SITE_URL}/logo-full.png`,
   description: SITE_DESCRIPTION,
   sameAs: [SOCIAL.twitter, SOCIAL.facebook, SOCIAL.linkedin],
 };
