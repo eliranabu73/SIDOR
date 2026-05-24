@@ -38,7 +38,7 @@ function makePrisma(): PrismaClient {
   const base = new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
   });
-  if (process.env.DATABASE_URL?.startsWith('prisma://')) {
+  if (process.env.DATABASE_URL?.startsWith('prisma://') || process.env.DATABASE_URL?.startsWith('prisma+postgres://')) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { withAccelerate } = require('@prisma/extension-accelerate') as typeof import('@prisma/extension-accelerate');
     return base.$extends(withAccelerate()) as unknown as PrismaClient;
