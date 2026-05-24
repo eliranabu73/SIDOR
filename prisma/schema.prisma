@@ -313,6 +313,10 @@ model Employee {
   weeklyRestDay     WeeklyRestDay  @default(SATURDAY)
   /// Israeli national ID number (תעודת זהות) — optional, used for Hilan payroll export.
   israeliId         String?        @db.VarChar(20)
+  /// Pregnancy flag for night-work restriction (חוק עבודת נשים). Set by manager.
+  isPregnant        Boolean        @default(false)
+  /// Pregnancy week (1–42). Restriction kicks in at week 20 (month ~5).
+  pregnancyWeeks    Int?
   isActive          Boolean        @default(true)
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt

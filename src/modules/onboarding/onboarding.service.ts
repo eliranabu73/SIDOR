@@ -27,7 +27,7 @@ export interface CreateOrgResult {
 export interface MeMembershipRow {
   orgId: string;
   orgName: string;
-  role: 'OWNER' | 'MANAGER';
+  role: 'OWNER' | 'MANAGER' | 'BRANCH_MANAGER';
 }
 
 /** Return Sunday-start week boundaries in UTC for the current instant. */

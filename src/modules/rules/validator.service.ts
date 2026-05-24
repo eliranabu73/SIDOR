@@ -17,6 +17,10 @@ import { youthMaxHoursRule } from './rules/youth-max-hours.rule';
 import { weeklyRest36hRule } from './rules/weekly-rest-36h.rule';
 import { break45MinRule } from './rules/break-45min.rule';
 import { overtimeTiersRule } from './rules/overtime-tiers.rule';
+import { consecutiveDaysMaxRule } from './rules/consecutive-days-max.rule';
+import { minWageCheckRule } from './rules/min-wage-check.rule';
+import { pregnancyNightRule } from './rules/pregnancy-night.rule';
+import { holidayEveMaxHoursRule } from './rules/holiday-eve-max-hours.rule';
 
 export const FAST_RULES: ReadonlyArray<{ name: string; fn: RuleFn }> = [
   { name: 'employeeActive', fn: employeeActiveRule },
@@ -33,6 +37,11 @@ export const FAST_RULES: ReadonlyArray<{ name: string; fn: RuleFn }> = [
   { name: 'weeklyRest36h', fn: weeklyRest36hRule },
   { name: 'break45Min', fn: break45MinRule },
   { name: 'overtimeTiers', fn: overtimeTiersRule },
+  // IL compliance additions (research-backed, 2026)
+  { name: 'consecutiveDaysMax', fn: consecutiveDaysMaxRule },
+  { name: 'minWageCheck', fn: minWageCheckRule },
+  { name: 'pregnancyNight', fn: pregnancyNightRule },
+  { name: 'holidayEveMaxHours', fn: holidayEveMaxHoursRule },
 ];
 
 export async function validateAssignment(
