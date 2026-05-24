@@ -97,7 +97,7 @@ export function Pricing() {
               type="button"
               onClick={() => setYearly(false)}
               className={cn(
-                "rounded-full px-4 py-1.5 font-medium transition-colors",
+                "rounded-full px-4 py-2.5 font-medium transition-colors min-h-[44px] flex items-center",
                 !yearly
                   ? "bg-[#0F172A] text-white shadow"
                   : "text-[#64748B] hover:text-[#0F172A]",
@@ -110,7 +110,7 @@ export function Pricing() {
               type="button"
               onClick={() => setYearly(true)}
               className={cn(
-                "rounded-full px-4 py-1.5 font-medium transition-colors",
+                "rounded-full px-4 py-2.5 font-medium transition-colors min-h-[44px] flex items-center",
                 yearly
                   ? "bg-[#0F172A] text-white shadow"
                   : "text-[#64748B] hover:text-[#0F172A]",
@@ -140,7 +140,7 @@ export function Pricing() {
                   >
                     <div className="absolute -inset-px rounded-[inherit] bg-gradient-to-br from-indigo-500/20 via-transparent to-cyan-400/20" />
                   </div>
-                  <span className="absolute -top-3 right-4 z-10 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400 px-3 py-1 text-xs font-semibold text-white shadow-lg">
+                  <span className="absolute -top-3 end-4 z-10 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400 px-3 py-1 text-xs font-semibold text-white shadow-lg">
                     <Sparkles className="h-3 w-3" />
                     הכי פופולרי
                   </span>

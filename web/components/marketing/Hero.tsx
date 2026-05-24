@@ -75,13 +75,13 @@ function DashboardMockup() {
         {/* Day headers */}
         <div
           className="grid mb-3"
-          style={{ gridTemplateColumns: "120px repeat(5,1fr)", gap: "6px" }}
+          style={{ gridTemplateColumns: "100px repeat(5,1fr)", gap: "6px" }}
         >
           <div />
           {days.map((d) => (
             <div
               key={d}
-              className="text-center text-[11px] font-semibold text-[#94A3B8] tracking-wide"
+              className="text-center text-[11px] font-semibold text-[#64748B] tracking-wide"
             >
               {d}
             </div>
@@ -94,7 +94,7 @@ function DashboardMockup() {
             <div
               key={i}
               className="grid items-center"
-              style={{ gridTemplateColumns: "120px repeat(5,1fr)", gap: "6px" }}
+              style={{ gridTemplateColumns: "100px repeat(5,1fr)", gap: "6px" }}
             >
               <div className="flex items-center gap-2 justify-end pe-2">
                 <span className="text-[12px] font-medium text-[#334155]">{emp.name}</span>
@@ -131,7 +131,7 @@ function DashboardMockup() {
         initial={{ opacity: 0, scale: 0.8, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ delay: 0.5, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="absolute -top-5 -start-8 rounded-2xl px-4 py-3"
+        className="hidden sm:flex absolute -top-5 -start-8 rounded-2xl px-4 py-3"
         style={{
           background: "linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%)",
           boxShadow: "0 8px 24px rgba(109,40,217,0.3), 0 2px 8px rgba(109,40,217,0.2)",
@@ -175,9 +175,9 @@ function DashboardMockup() {
             <div>
               <div className="text-base font-black leading-none" style={{ color }}>
                 {value}
-                <span className="text-[10px] font-semibold ms-0.5 opacity-70">{unit}</span>
+                <span className="text-[11px] font-semibold ms-0.5 opacity-70">{unit}</span>
               </div>
-              <div className="text-[9px] text-[#94A3B8] mt-0.5 leading-tight">{label}</div>
+              <div className="text-[11px] text-[#475569] mt-0.5 leading-tight">{label}</div>
             </div>
           </div>
         ))}
@@ -263,7 +263,7 @@ export function Hero() {
       </div>
 
       <div className="relative mx-auto max-w-[1400px] px-6 w-full py-20 lg:py-0">
-        <div className="flex flex-col lg:flex-row items-center gap-16 lg:gap-12 lg:min-h-[calc(100vh-72px)]">
+        <div className="flex flex-col lg:flex-row items-center gap-16 lg:gap-12 lg:min-h-[calc(100dvh-72px)]">
 
           {/* RIGHT: Copy (first in RTL DOM = right visually) */}
           <div className="flex-1 text-center lg:text-start lg:py-24">

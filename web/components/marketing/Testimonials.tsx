@@ -47,7 +47,7 @@ export function Testimonials() {
   return (
     <section
       id="testimonials"
-      className="py-20 px-4 bg-[#F8FAFC] border-b border-[#E2E8F0]"
+      className="py-20 px-4 bg-white border-b border-[#E2E8F0]"
     >
       <div className="mx-auto max-w-6xl">
         <div className="mx-auto max-w-2xl text-center">

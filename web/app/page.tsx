@@ -42,12 +42,12 @@ export default function LandingPage() {
           >
             התחל ניסיון חינם 14 יום
           </Link>
-          <p className="text-center text-[11px] text-[#94A3B8]">ללא כרטיס אשראי · ביטול בכל עת</p>
+          <p className="text-center text-xs text-[#64748B]">ללא כרטיס אשראי · ביטול בכל עת</p>
         </div>
       </div>
 
       {/* Bottom padding so content isn't hidden behind sticky CTA on mobile */}
-      <div className="md:hidden h-[96px]" aria-hidden />
+      <div className="md:hidden" style={{ height: "calc(100px + env(safe-area-inset-bottom))" }} aria-hidden />
     </main>
   );
 }

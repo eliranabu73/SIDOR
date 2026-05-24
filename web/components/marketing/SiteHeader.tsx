@@ -26,6 +26,14 @@ export function SiteHeader() {
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <>
       <header
@@ -68,7 +76,7 @@ export function SiteHeader() {
             <button
               type="button"
               onClick={() => setOpen(!open)}
-              className="md:hidden w-10 h-10 flex items-center justify-center rounded-xl text-[#334155] transition-colors hover:bg-[#F1F5F9]"
+              className="md:hidden w-11 h-11 flex items-center justify-center rounded-xl text-[#334155] transition-colors hover:bg-[#F1F5F9]"
               aria-label={open ? "סגור תפריט" : "פתח תפריט"}
               aria-expanded={open}
             >
@@ -88,7 +96,7 @@ export function SiteHeader() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm md:hidden"
+              className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm md:hidden"
               onClick={() => setOpen(false)}
             />
 
@@ -98,7 +106,7 @@ export function SiteHeader() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-              className="fixed top-[72px] inset-x-0 z-40 md:hidden mx-3 rounded-3xl overflow-hidden"
+              className="fixed top-[72px] inset-x-0 z-50 md:hidden mx-3 rounded-3xl overflow-hidden"
               style={{
                 background: "rgba(255,255,255,0.97)",
                 backdropFilter: "blur(24px)",

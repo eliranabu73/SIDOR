@@ -17,7 +17,7 @@ function ScheduleRows() {
     <div className="mt-4 flex flex-col gap-1.5 opacity-30 select-none" aria-hidden>
       {rows.map((r) => (
         <div key={r.label} className="flex items-center gap-2">
-          <span className="text-[9px] text-white/70 w-8 shrink-0">{r.label}</span>
+          <span className="text-[11px] text-white/70 w-8 shrink-0">{r.label}</span>
           <div className="flex-1 h-2 rounded-full bg-white/20 overflow-hidden">
             <div
               className="h-full rounded-full bg-white/70"

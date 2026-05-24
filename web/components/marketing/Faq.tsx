@@ -35,7 +35,7 @@ const FAQS: QA[] = [
 
 export function Faq() {
   return (
-    <section id="faq" className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
+    <section id="faq" className="border-b border-[#E2E8F0] bg-white">
       <div className="mx-auto max-w-3xl px-6 py-20">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold text-[#0F172A] sm:text-4xl">

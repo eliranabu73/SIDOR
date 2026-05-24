@@ -28,7 +28,20 @@
       "Bash(curl -sf https://sidor-api.vercel.app/v1/me -H \"authorization: Bearer test123\")",
       "Bash(kill %bqz1itbxg)",
       "Bash(Get-Content \"C:\\\\Users\\\\elira\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-elira-OneDrive--------------sidor4S\\\\eab73317-d97d-451d-a981-02219fe38adb\\\\tasks\\\\a02642641b5149469.output\" -Tail 50)",
-      "Bash(Get-Content \"C:\\\\Users\\\\elira\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-elira-OneDrive--------------sidor4S\\\\eab73317-d97d-451d-a981-02219fe38adb\\\\tasks\\\\a7211aa398b0f9359.output\" -Raw)"
+      "Bash(Get-Content \"C:\\\\Users\\\\elira\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-elira-OneDrive--------------sidor4S\\\\eab73317-d97d-451d-a981-02219fe38adb\\\\tasks\\\\a7211aa398b0f9359.output\" -Raw)",
+      "Bash(npx jest *)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('jest',{}\\), indent=2\\)\\); print\\('scripts:', json.dumps\\(d.get\\('scripts',{}\\), indent=2\\)\\)\")",
+      "Bash(node --experimental-vm-modules node_modules/jest/bin/jest.js --passWithNoTests)",
+      "Bash(grep -n \"makeEmployee\" \"C:\\\\Users\\\\elira\\\\OneDrive\\\\שולחן העבודה\\\\sidor4S\\\\tests\\\\rules\\\\fixtures.ts\" 2>/dev/null | head -5; grep -n \"israeliId\" \"C:\\\\Users\\\\elira\\\\OneDrive\\\\ש��לחן העבודה\\\\sidor4S\\\\tests\\\\rules\\\\fixtures.ts\" 2>/dev/null)",
+      "Bash(dir \"C:\\\\Users\\\\elira\\\\OneDrive\\\\שולחן העבודה\\\\sidor4S\\\\web\\\\public\\\\icon-192.png\")",
+      "Bash(Select-String \"Length\")",
+      "Bash(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\elira\\\\OneDrive\\\\שולחן העבודה\\\\sidor4S\\\\prisma\\\\migrations\\\\20260524230000_tip_law_2022\")",
+      "Bash(Out-Null)",
+      "Bash(Write-Output \"done\")",
+      "Bash(npx vitest *)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(k,':',v\\) for k,v in d.get\\('scripts',{}\\).items\\(\\)]\")",
+      "Bash(npm test *)",
+      "WebSearch"
     ]
   }
 }
