@@ -26,6 +26,8 @@ export interface GeneratePayrollExportInput {
   periodStart: Date;
   periodEnd: Date;
   format: PayrollFormat;
+  /** Optional: when set, only include employees whose defaultLocationId matches. */
+  locationId?: string;
 }
 
 export interface PayrollExportResult {
@@ -101,6 +103,7 @@ interface ShiftLite {
 interface AggregateAccumulator {
   employeeId: string;
   fullName: string;
+  israeliId: string | null;
   hourlyRate: number;
   regularMin: number;
   ot125Min: number;
@@ -125,7 +128,7 @@ export async function generatePayrollExport(
   input: GeneratePayrollExportInput,
   db: Db = defaultPrisma,
 ): Promise<PayrollExportResult> {
-  const { orgId, periodStart, periodEnd, format } = input;
+  const { orgId, periodStart, periodEnd, format, locationId } = input;
 
   const assignments = await db.shiftAssignment.findMany({
     where: {
@@ -134,6 +137,10 @@ export async function generatePayrollExport(
         organizationId: orgId,
         startAtUtc: { gte: periodStart, lt: periodEnd },
       },
+      // When locationId is provided, restrict to employees at that location.
+      ...(locationId
+        ? { employee: { defaultLocationId: locationId } }
+        : {}),
     },
     include: {
       employee: {
@@ -143,6 +150,7 @@ export async function generatePayrollExport(
           email: true,
           hourlyRate: true,
           defaultTimezone: true,
+          israeliId: true,
         },
       },
       shift: {
@@ -187,6 +195,7 @@ export async function generatePayrollExport(
       acc = {
         employeeId: emp.id,
         fullName: emp.fullName,
+        israeliId: emp.israeliId ?? null,
         hourlyRate:
           emp.hourlyRate != null
             ? Number(emp.hourlyRate)
@@ -224,7 +233,7 @@ export async function generatePayrollExport(
         fullName: acc.fullName,
         firstName: firstName ?? acc.fullName,
         lastName: rest.join(' '),
-        idNumber: '',
+        idNumber: acc.israeliId ?? '',
         totalHours: round2(totalH),
         regularHours: round2(regularH),
         ot125Hours: round2(ot125H),

@@ -26,6 +26,8 @@ const ExportQuery = z.object({
   periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   format: z.enum(['standard', 'hilan']).default('standard'),
+  /** Optional: filter payroll export to a single location (UUID). */
+  locationId: z.string().uuid().optional(),
 });
 
 export async function payrollRoutes(app: FastifyInstance): Promise<void> {
@@ -35,7 +37,7 @@ export async function payrollRoutes(app: FastifyInstance): Promise<void> {
     '/payroll/export.csv',
     { schema: { querystring: ExportQuery }, preHandler: authHandlers },
     async (req, reply) => {
-      const { periodStart, periodEnd, format } = req.query as z.infer<
+      const { periodStart, periodEnd, format, locationId } = req.query as z.infer<
         typeof ExportQuery
       >;
       // periodEnd is treated as exclusive end-of-day → add 1 day so a request
@@ -51,6 +53,7 @@ export async function payrollRoutes(app: FastifyInstance): Promise<void> {
             periodStart: start,
             periodEnd: end,
             format: format as PayrollFormat,
+            locationId,
           },
           tx,
         ),

@@ -52,10 +52,10 @@ export function SocialProof() {
   }, []);
 
   const metrics = [
-    { value: 200, label: "משמרות בשבוע" },
+    { value: 200, label: "משמרות שובצו השבוע" },
     { value: 8, label: "שעות חיסכון בשבוע", suffix: "h" },
-    { value: 0, label: "כפילויות בשיבוץ" },
-    { value: 100, label: "תאימות לחוק", suffix: "%" },
+    { value: 97, label: "עמידה בחוקי עבודה", suffix: "%" },
+    { value: 14, label: "ימי ניסיון חינמי" },
   ];
 
   return (

@@ -11,7 +11,13 @@ import {
 function happyPathCtx() {
   const employee = makeEmployee({});
   employee.roles = [makeEmployeeRole({ roleId: IDS.ROLE_ID })];
+  // Use a 6-hour shift (≤ 360 min) so the break-45min rule never fires a warning.
+  const shift = makeShift({
+    startAtUtc: new Date('2026-05-25T06:00:00Z'),
+    endAtUtc: new Date('2026-05-25T12:00:00Z'), // 6h exactly
+  });
   return makeContext({
+    shift,
     employee,
     availabilityRules: [
       makeAvailability({

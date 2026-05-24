@@ -13,6 +13,7 @@ import {
   createRole,
   deleteEmployee,
   fetchEmployees,
+  fetchEmployeesSummary,
   fetchLocations,
   fetchRoles,
   fetchSchedule,
@@ -24,6 +25,7 @@ import {
   type CreateEmployeeBody,
   type CreateLocationBody,
   type CreateRoleBody,
+  type EmployeeSummary,
   type LocationItem,
   type RoleItem,
   type UpdateEmployeeBody,
@@ -48,6 +50,7 @@ export const queryKeys = {
   schedule: (id: ID, weekStart?: string) =>
     ["schedule", id, weekStart] as const,
   employees: () => ["employees"] as const,
+  employeesSummary: () => ["employees-summary"] as const,
   metrics: () => ["metrics"] as const,
   locations: () => ["locations"] as const,
   roles: () => ["roles"] as const,
@@ -68,6 +71,15 @@ export function useEmployees() {
   return useQuery<Employee[]>({
     queryKey: queryKeys.employees(),
     queryFn: () => fetchEmployees(),
+    staleTime: 60_000,
+  });
+}
+
+/** Fetches employees with pre-aggregated constraint counts (1 request vs N+1). */
+export function useEmployeesSummary() {
+  return useQuery<EmployeeSummary[]>({
+    queryKey: queryKeys.employeesSummary(),
+    queryFn: () => fetchEmployeesSummary(),
     staleTime: 60_000,
   });
 }
@@ -94,6 +106,7 @@ export function useCreateEmployee() {
     mutationFn: (body) => createEmployee(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.employees() });
+      qc.invalidateQueries({ queryKey: queryKeys.employeesSummary() });
     },
     onError: (err) => {
       console.error("useCreateEmployee failed", err);
@@ -107,6 +120,7 @@ export function useUpdateEmployee() {
     mutationFn: ({ id, body }) => updateEmployee(id, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.employees() });
+      qc.invalidateQueries({ queryKey: queryKeys.employeesSummary() });
     },
     onError: (err) => {
       console.error("useUpdateEmployee failed", err);
@@ -120,6 +134,7 @@ export function useDeleteEmployee() {
     mutationFn: (id) => deleteEmployee(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.employees() });
+      qc.invalidateQueries({ queryKey: queryKeys.employeesSummary() });
     },
     onError: (err) => {
       console.error("useDeleteEmployee failed", err);

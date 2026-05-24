@@ -57,6 +57,12 @@ export const env = cleanEnv(process.env, {
   /** Anthropic API key — enables Vision AI schedule import. When empty the
    *  /v1/import/parse route returns 503 (configured-but-not-ready). */
   ANTHROPIC_API_KEY: str({ default: '' }),
+
+  /** Admin secret — used to protect /v1/admin/apply-schema-migrations and
+   *  /v1/admin/db-info from unauthenticated callers. Require
+   *  `Authorization: Bearer <ADMIN_SECRET>` header. When empty in production
+   *  these endpoints return 503 to fail safe. */
+  ADMIN_SECRET: str({ default: '' }),
 });
 
 // ---------------------------------------------------------------------------

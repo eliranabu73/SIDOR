@@ -94,6 +94,16 @@ export function fetchEmployees(): Promise<Employee[]> {
   return request<Employee[]>(`/v1/employees`);
 }
 
+/** Employee with pre-aggregated constraint count — avoids N+1 availability+preferences calls. */
+export interface EmployeeSummary extends Employee {
+  constraintCount: number;
+}
+
+/** Fetch all employees with their constraint counts in a single request. */
+export function fetchEmployeesSummary(): Promise<EmployeeSummary[]> {
+  return request<EmployeeSummary[]>(`/v1/employees/summary`);
+}
+
 // --------- Employees CRUD ---------
 
 export type EmploymentType =

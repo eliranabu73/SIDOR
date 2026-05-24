@@ -25,16 +25,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useQueries, useQueryClient } from "@tanstack/react-query";
-import {
-  fetchEmployeeAvailability,
-  fetchEmployeePreferences,
-} from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   queryKeys,
   useCreateEmployee,
   useDeleteEmployee,
-  useEmployees,
+  useEmployeesSummary,
   useRoles,
   useUpdateEmployee,
 } from "@/lib/queries";
@@ -117,7 +113,7 @@ function errorMessage(e: unknown): string {
 }
 
 function EmployeesInner() {
-  const employeesQuery = useEmployees();
+  const employeesQuery = useEmployeesSummary();
   const rolesQuery = useRoles();
   const createMut = useCreateEmployee();
   const updateMut = useUpdateEmployee();
@@ -180,47 +176,15 @@ function EmployeesInner() {
     }
   };
 
-  const employeeIds = React.useMemo(
-    () => (employeesQuery.data ?? []).map((e) => e.id),
-    [employeesQuery.data],
-  );
-
-  // Per-employee constraint snapshot. Computes (availability rules + non-trivial
-  // preference fields) so the row chip can show "🔒 N אילוצים" vs "🟢 גמיש".
-  const availabilityResults = useQueries({
-    queries: employeeIds.map((id) => ({
-      queryKey: ["employee-availability", id] as const,
-      queryFn: () => fetchEmployeeAvailability(id),
-      staleTime: 60_000,
-    })),
-  });
-  const preferencesResults = useQueries({
-    queries: employeeIds.map((id) => ({
-      queryKey: ["employee-preferences", id] as const,
-      queryFn: () => fetchEmployeePreferences(id),
-      staleTime: 60_000,
-    })),
-  });
-
+  // Constraint counts are now pre-aggregated server-side in the summary endpoint
+  // (replaces the 201-request N+1 pattern: 1 list + 100 availability + 100 preferences).
   const constraintCounts = React.useMemo(() => {
     const map: Record<string, number> = {};
-    employeeIds.forEach((id, i) => {
-      const avail = availabilityResults[i]?.data?.rules?.length ?? 0;
-      const prefs = preferencesResults[i]?.data;
-      let prefCount = 0;
-      if (prefs) {
-        if (prefs.maxHoursPerWeek != null) prefCount += 1;
-        if (prefs.preferredShiftLength != null) prefCount += 1;
-        if (prefs.noWorkAfter) prefCount += 1;
-        if (prefs.noWorkBefore) prefCount += 1;
-        if (prefs.avoidWeekends) prefCount += 1;
-        if (prefs.avoidNightShifts) prefCount += 1;
-        if (prefs.notes && prefs.notes.trim() !== "") prefCount += 1;
-      }
-      map[id] = avail + prefCount;
-    });
+    for (const e of employeesQuery.data ?? []) {
+      map[e.id] = e.constraintCount ?? 0;
+    }
     return map;
-  }, [employeeIds, availabilityResults, preferencesResults]);
+  }, [employeesQuery.data]);
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();

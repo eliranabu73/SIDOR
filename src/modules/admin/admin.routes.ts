@@ -23,6 +23,33 @@ function forbidden(reply: FastifyReply): FastifyReply {
   });
 }
 
+/**
+ * Checks that the incoming request carries a valid `Authorization: Bearer <ADMIN_SECRET>`
+ * header for the raw admin endpoints that don't go through the Supabase JWT flow.
+ * Returns true when the caller is allowed to proceed, false (+ sends a reply) otherwise.
+ */
+function checkAdminSecret(req: FastifyRequest, reply: FastifyReply): boolean {
+  const secret = env.ADMIN_SECRET;
+  if (!secret) {
+    // Fail safe: if ADMIN_SECRET is not configured refuse the call entirely.
+    reply.code(503).send({
+      code: 'ADMIN_SECRET_NOT_CONFIGURED',
+      message: 'ADMIN_SECRET env var is not set — endpoint disabled.',
+    });
+    return false;
+  }
+  const authHeader = req.headers['authorization'] ?? '';
+  const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  if (!provided || provided !== secret) {
+    reply.code(401).send({
+      code: 'UNAUTHORIZED',
+      message: 'Missing or invalid Authorization header. Require: Authorization: Bearer <ADMIN_SECRET>',
+    });
+    return false;
+  }
+  return true;
+}
+
 function ensureAdmin(
   req: FastifyRequest,
   reply: FastifyReply,
@@ -1120,8 +1147,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // -------------------------------------------------------------------------
   // POST /v1/admin/apply-schema-migrations — idempotent ALTER TABLEs for
   // admin v2 + RLS. Safe to run multiple times (uses IF NOT EXISTS).
+  // Protected by ADMIN_SECRET bearer token.
   // -------------------------------------------------------------------------
-  app.post('/apply-schema-migrations', async (_req, _reply) => {
+  app.post('/apply-schema-migrations', async (req, reply) => {
+    if (!checkAdminSecret(req, reply)) return;
     const results: Array<{ stmt: string; ok: boolean; error?: string }> = [];
     const statements = [
       // Admin v2 columns
@@ -1183,10 +1212,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // -------------------------------------------------------------------------
-  // GET /v1/admin/db-info — diagnostic (no admin gate) — verify which DB
-  // Vercel is connecting to + which columns memberships has. Safe info only.
+  // GET /v1/admin/db-info — diagnostic — verify which DB Vercel is connecting
+  // to + which columns memberships has.
+  // Protected by ADMIN_SECRET bearer token.
   // -------------------------------------------------------------------------
-  app.get('/db-info', async (_req, _reply) => {
+  app.get('/db-info', async (req, reply) => {
+    if (!checkAdminSecret(req, reply)) return;
     try {
       const rows = await prisma.$queryRawUnsafe<
         Array<{

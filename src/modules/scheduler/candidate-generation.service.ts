@@ -79,53 +79,46 @@ export async function generateCandidates(
 
   const candidates: Candidate[] = [];
 
-  for (const shift of shifts) {
-    for (const employee of employees) {
-      const weekStartDate = DateTime.fromJSDate(shift.startAtUtc)
-        .setZone(shift.timezone)
-        .startOf('week')
-        .toJSDate();
-      const metrics =
-        allMetrics.find(
-          (m) =>
-            m.employeeId === employee.id &&
-            sameDay(m.weekStartDate, weekStartDate),
-        ) ?? null;
+  // Guard against O(n²) explosion at scale. When shifts × employees > 5000
+  // pairs, run the inner validation in parallel batches of 500 instead of
+  // sequential to avoid Vercel/Lambda timeouts.
+  const BATCH_THRESHOLD = 5000;
+  const BATCH_SIZE = 500;
+  const totalPairs = shifts.length * employees.length;
 
-      const ctx: ValidationContext = {
-        shift,
-        employee,
-        availabilityRules: availByEmp.get(employee.id) ?? [],
-        existingAssignments: assignsByEmp.get(employee.id) ?? [],
-        rulesSnapshot,
-        metrics,
-        activeLockUserId: null,
-        actingUserId: 'scheduler',
-      };
-
-      const validation = await validateAssignment(ctx);
-      const eligible = validation.outcome !== 'blocked';
-
-      const signals = computeSignals({
-        shift,
-        availabilityRules: ctx.availabilityRules,
-        metrics,
-        shiftPrefs: prefsByEmp.get(employee.id) ?? [],
-        preferredWeeklyMinutes:
-          employee.preferences?.preferredHoursPerWeek != null
-            ? employee.preferences.preferredHoursPerWeek * 60
-            : PREFERRED_WEEKLY_MINUTES_DEFAULT,
-      });
-
-      candidates.push({
-        shiftId: shift.id,
-        shift,
-        employee,
-        signals,
-        eligible,
-        warnings: validation.warnings,
-        violations: validation.blocking,
-      });
+  if (totalPairs <= BATCH_THRESHOLD) {
+    // Standard sequential path — fine for small orgs (< ~70 employees + ~70 shifts)
+    for (const shift of shifts) {
+      for (const employee of employees) {
+        const result = await evaluatePair(
+          shift,
+          employee,
+          allMetrics,
+          availByEmp,
+          assignsByEmp,
+          prefsByEmp,
+          rulesSnapshot,
+        );
+        candidates.push(result);
+      }
+    }
+  } else {
+    // Batched parallel path — prevents serverless timeout at enterprise scale.
+    // Build the flat pair list, then run in Promise.all batches of BATCH_SIZE.
+    const pairs: Array<{ shift: (typeof shifts)[0]; employee: (typeof employees)[0] }> = [];
+    for (const shift of shifts) {
+      for (const employee of employees) {
+        pairs.push({ shift, employee });
+      }
+    }
+    for (let i = 0; i < pairs.length; i += BATCH_SIZE) {
+      const batch = pairs.slice(i, i + BATCH_SIZE);
+      const results = await Promise.all(
+        batch.map(({ shift, employee }) =>
+          evaluatePair(shift, employee, allMetrics, availByEmp, assignsByEmp, prefsByEmp, rulesSnapshot),
+        ),
+      );
+      candidates.push(...results);
     }
   }
 
@@ -173,6 +166,64 @@ export async function persistCandidates(
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
+
+/** Evaluate a single (shift, employee) pair — extracted so the batched path
+ * can call it via Promise.all without code duplication. */
+async function evaluatePair(
+  shift: Prisma.ShiftGetPayload<{}>,
+  employee: Prisma.EmployeeGetPayload<{ include: { roles: true; preferences: true } }>,
+  allMetrics: Prisma.EmployeeScheduleMetricsGetPayload<{}>[],
+  availByEmp: Map<string, Prisma.EmployeeAvailabilityRuleGetPayload<{}>[]>,
+  assignsByEmp: Map<string, Prisma.ShiftAssignmentGetPayload<{ include: { shift: true } }>[]>,
+  prefsByEmp: Map<string, Prisma.EmployeeShiftPreferenceGetPayload<{}>[]>,
+  rulesSnapshot: ReturnType<typeof mergeRulesSnapshot>,
+): Promise<Candidate> {
+  const weekStartDate = DateTime.fromJSDate(shift.startAtUtc)
+    .setZone(shift.timezone)
+    .startOf('week')
+    .toJSDate();
+  const metrics =
+    allMetrics.find(
+      (m) =>
+        m.employeeId === employee.id &&
+        sameDay(m.weekStartDate, weekStartDate),
+    ) ?? null;
+
+  const ctx: ValidationContext = {
+    shift,
+    employee,
+    availabilityRules: availByEmp.get(employee.id) ?? [],
+    existingAssignments: assignsByEmp.get(employee.id) ?? [],
+    rulesSnapshot,
+    metrics,
+    activeLockUserId: null,
+    actingUserId: 'scheduler',
+  };
+
+  const validation = await validateAssignment(ctx);
+  const eligible = validation.outcome !== 'blocked';
+
+  const signals = computeSignals({
+    shift,
+    availabilityRules: ctx.availabilityRules,
+    metrics,
+    shiftPrefs: prefsByEmp.get(employee.id) ?? [],
+    preferredWeeklyMinutes:
+      employee.preferences?.preferredHoursPerWeek != null
+        ? employee.preferences.preferredHoursPerWeek * 60
+        : PREFERRED_WEEKLY_MINUTES_DEFAULT,
+  });
+
+  return {
+    shiftId: shift.id,
+    shift,
+    employee,
+    signals,
+    eligible,
+    warnings: validation.warnings,
+    violations: validation.blocking,
+  };
+}
 
 function computeSignals(args: {
   shift: Prisma.ShiftGetPayload<{}>;

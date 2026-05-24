@@ -3,13 +3,22 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { DateTime } from "luxon";
-import { Filter, MessageCircle, Printer, Search, Sparkles, Upload, Users as UsersIcon } from "lucide-react";
+import { ArrowLeft, Filter, MessageCircle, Printer, Search, Sparkles, Upload, Users as UsersIcon } from "lucide-react";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import Link from "next/link";
 import { DemoBoundary, useDemoMode } from "@/components/auth/DemoBoundary";
 import { DemoBanner } from "@/components/DemoBanner";
 import { AppShell } from "@/components/layout/AppShell";
@@ -89,6 +98,7 @@ function ScheduleInner() {
   const [publishOpen, setPublishOpen] = React.useState(false);
   const [exportOpen, setExportOpen] = React.useState(false);
   const [createShiftOpen, setCreateShiftOpen] = React.useState(false);
+  const [signupPromptOpen, setSignupPromptOpen] = React.useState(false);
   const [pendingProposals, setPendingProposals] = React.useState<
     AssignmentProposal[] | null
   >(null);
@@ -130,7 +140,7 @@ function ScheduleInner() {
   /** Mutating-action guard for demo mode. Returns true if action was blocked. */
   const blockIfDemo = React.useCallback((): boolean => {
     if (!isDemo) return false;
-    toast.info("התחבר כדי לערוך");
+    setSignupPromptOpen(true);
     return true;
   }, [isDemo]);
 
@@ -561,6 +571,32 @@ function ScheduleInner() {
         weekStart={weekStart}
         scheduleId={scheduleQuery.data?.id ?? null}
       />
+
+      {/* Signup prompt — replaces the old toast for demo-mode blocks */}
+      <Dialog open={signupPromptOpen} onOpenChange={setSignupPromptOpen}>
+        <DialogContent className="max-w-sm text-center">
+          <DialogHeader>
+            <DialogTitle className="text-xl">רוצה להמשיך?</DialogTitle>
+            <DialogDescription className="mt-2 text-base">
+              זהו מצב הדגמה בלבד.
+              <br />
+              צור חשבון חינמי תוך 2 דקות כדי לשבץ, לפרסם ולשתף בוואטסאפ.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button asChild variant="glow" size="lg" className="w-full" onClick={() => setSignupPromptOpen(false)}>
+              <Link href="/login">
+                <Sparkles className="h-4 w-4" />
+                הירשם חינם — ללא כרטיס אשראי
+                <ArrowLeft className="h-4 w-4" />
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSignupPromptOpen(false)}>
+              המשך לצפות בהדגמה
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

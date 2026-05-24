@@ -303,6 +303,8 @@ model Employee {
   dateOfBirth       DateTime?      @db.Date
   /// Religious weekly rest day. Drives 36h-weekly-rest rule and Shabbat premium.
   weeklyRestDay     WeeklyRestDay  @default(SATURDAY)
+  /// Israeli national ID number (תעודת זהות) — optional, used for Hilan payroll export.
+  israeliId         String?        @db.VarChar(20)
   isActive          Boolean        @default(true)
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt

@@ -17,8 +17,10 @@ import {
   upsertPreferences,
   type PreferencesPayload,
 } from './availability.service.js';
+import { issueEmployeePortalToken } from '../share/share.service.js';
 import { prisma } from '../../db/prisma.js';
 import type { PrismaClient } from '@prisma/client';
+import { env } from '../../env.js';
 
 const DEMO_ORG_ID = '10000000-0000-0000-0000-000000000001';
 
@@ -285,6 +287,104 @@ export async function employeesRoutes(app: FastifyInstance): Promise<void> {
           createLocation(orgIdFor(req), body.name, body.timezone, tx),
         );
         return reply.code(201).send(row);
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
+
+  // ---- Employee Summary (replaces N+1 availability+preferences calls) ----
+  // GET /v1/employees/summary
+  // Returns employees with their availability rule count and active preference
+  // count pre-aggregated in a single query, replacing the 200-request N+1
+  // pattern on the employees page.
+  app.get('/employees/summary', { preHandler: authHandlers }, async (req, reply) => {
+    const orgId = orgIdFor(req);
+    try {
+      const employees = await dbFor(req).query((tx) =>
+        tx.employee.findMany({
+          where: { organizationId: orgId, isActive: true },
+          include: {
+            roles: { include: { role: true } },
+            _count: {
+              select: { availabilityRules: true },
+            },
+            preferences: {
+              select: {
+                maxHoursPerWeek: true,
+                preferredShiftLength: true,
+                noWorkAfter: true,
+                noWorkBefore: true,
+                avoidWeekends: true,
+                avoidNightShifts: true,
+                notes: true,
+              },
+            },
+          },
+          orderBy: { fullName: 'asc' },
+        }),
+      );
+
+      return reply.send(
+        employees.map((e) => {
+          const prefs = e.preferences;
+          let prefCount = 0;
+          if (prefs) {
+            if (prefs.maxHoursPerWeek != null) prefCount += 1;
+            if (prefs.preferredShiftLength != null) prefCount += 1;
+            if (prefs.noWorkAfter) prefCount += 1;
+            if (prefs.noWorkBefore) prefCount += 1;
+            if (prefs.avoidWeekends) prefCount += 1;
+            if (prefs.avoidNightShifts) prefCount += 1;
+            if (prefs.notes && prefs.notes.trim() !== '') prefCount += 1;
+          }
+          return {
+            id: e.id,
+            orgId: e.organizationId,
+            fullName: e.fullName,
+            email: e.email,
+            phone: e.phone,
+            roles: e.roles.map((er) => er.role.name),
+            primaryLocationId: e.defaultLocationId,
+            active: e.isActive,
+            constraintCount: e._count.availabilityRules + prefCount,
+          };
+        }),
+      );
+    } catch (err) {
+      return handleHttpError(reply, err);
+    }
+  });
+
+  // ---- Employee Portal Share-Token (WhatsApp deep link) ----
+  // Returns a signed 90-day token so the manager can build a WhatsApp link
+  // pointing the employee to their personal mini-app portal.
+  app.get(
+    '/employees/:id/share-token',
+    { schema: { params: IdParam }, preHandler: authHandlers },
+    async (req, reply) => {
+      const { id } = req.params as z.infer<typeof IdParam>;
+      const orgId = orgIdFor(req);
+      try {
+        // Verify employee belongs to this org before minting a token.
+        const employee = await dbFor(req).query((tx) =>
+          tx.employee.findFirst({
+            where: { id, organizationId: orgId, isActive: true },
+            select: { id: true, fullName: true, phone: true },
+          }),
+        );
+        if (!employee) {
+          return reply.code(404).send({ code: 'EMPLOYEE_NOT_FOUND', message: 'עובד לא נמצא' });
+        }
+        const token = issueEmployeePortalToken({ orgId, employeeId: id });
+        const portalUrl = `${env.PUBLIC_WEB_URL}/me/${token}`;
+        return reply.send({
+          token,
+          url: portalUrl,
+          employeeId: employee.id,
+          employeeName: employee.fullName,
+          phone: employee.phone,
+        });
       } catch (err) {
         return handleHttpError(reply, err);
       }

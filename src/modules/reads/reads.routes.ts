@@ -123,9 +123,14 @@ export function mapSchedule(sched: {
 export async function readsRoutes(app: FastifyInstance): Promise<void> {
   const authHandlers = devAllowed() ? [] : [app.authenticate];
 
+  const EmployeesQuery = z.object({
+    page: z.coerce.number().int().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(500).optional(),
+  });
+
   app.get(
     '/employees',
-    { preHandler: authHandlers },
+    { schema: { querystring: EmployeesQuery }, preHandler: authHandlers },
     /**
      * RLS POC (WS-5d Task 2): uses req.orgPrisma (withOrgContext wrapper) when
      * the user has been authenticated, so the query runs inside a transaction
@@ -134,20 +139,26 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
      * When AUTH_DISABLED is true (dev/demo mode), req.orgPrisma is undefined
      * because app.authenticate was skipped; we fall back to direct prisma.
      *
-     * Migration path for all other reads.routes endpoints:
-     *   Replace `prisma.foo.findMany({ where: { organizationId: orgId } })`
-     *   with `req.orgPrisma.query(tx => tx.foo.findMany(...))` — the RLS
-     *   policy itself then enforces the org scope at the DB level.
+     * Pagination: optional `page` and `limit` query params. Default limit is
+     * 500 (backwards-compatible — existing callers get all employees when no
+     * params are provided). When `page` is given, limit defaults to 50.
      */
     async (req, reply) => {
       try {
         const orgId = orgIdFor(req);
         const db = dbFor(req);
+        const { page, limit: limitParam } = req.query as z.infer<typeof EmployeesQuery>;
+        const paginated = page != null;
+        const limit = paginated ? (limitParam ?? 50) : (limitParam ?? 500);
+        const skip = paginated ? (page - 1) * limit : 0;
+
         const employees = await db.query((tx) =>
           tx.employee.findMany({
             where: { organizationId: orgId, isActive: true },
             include: { roles: { include: { role: true } } },
             orderBy: { fullName: 'asc' },
+            take: limit,
+            skip,
           }),
         );
 

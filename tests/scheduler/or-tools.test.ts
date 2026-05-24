@@ -67,6 +67,7 @@ function makeEmployee(id: string): Candidate['employee'] {
     weeklyBudgetHours: null,
     dateOfBirth: null,
     weeklyRestDay: 'SATURDAY' as const,
+    israeliId: null,
     isActive: true,
     createdAt: new Date(),
     updatedAt: new Date(),
