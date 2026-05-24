@@ -35,13 +35,13 @@ const FAQS: QA[] = [
 
 export function Faq() {
   return (
-    <section id="faq" className="border-b border-border bg-background">
+    <section id="faq" className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
       <div className="mx-auto max-w-3xl px-6 py-20">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold text-foreground sm:text-4xl">
+          <h2 className="text-3xl font-bold text-[#0F172A] sm:text-4xl">
             שאלות נפוצות
           </h2>
-          <p className="mt-3 text-muted-foreground">
+          <p className="mt-3 text-[#64748B]">
             לא מצאת תשובה? כתוב לנו ב-WhatsApp ונחזור תוך שעה.
           </p>
         </div>
@@ -50,17 +50,17 @@ export function Faq() {
           {FAQS.map((item, idx) => (
             <details
               key={item.q}
-              className="group rounded-xl border border-border bg-card transition-all open:shadow-md"
+              className="group rounded-xl border border-[#E2E8F0] bg-white transition-all open:shadow-md"
               {...(idx === 0 ? { open: true } : {})}
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 text-base font-semibold text-foreground hover:bg-accent/40 rounded-xl">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 text-base font-semibold text-[#0F172A] hover:bg-[#F1F5F9] rounded-xl">
                 <span>{item.q}</span>
                 <ChevronDown
-                  className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+                  className="h-5 w-5 shrink-0 text-[#64748B] transition-transform group-open:rotate-180"
                   aria-hidden
                 />
               </summary>
-              <div className="border-t border-border px-5 py-4 text-sm leading-relaxed text-muted-foreground">
+              <div className="border-t border-[#F1F5F9] px-5 py-4 text-sm leading-relaxed text-[#64748B]">
                 {item.a}
               </div>
             </details>

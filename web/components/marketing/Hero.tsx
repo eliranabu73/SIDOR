@@ -39,10 +39,9 @@ function DashboardMockup() {
       {/* Soft glow ring behind card */}
       <div
         aria-hidden
-        className="absolute inset-0 rounded-[40px]"
+        className="dashboard-glow absolute inset-0 rounded-[40px]"
         style={{
           background: "radial-gradient(ellipse at 60% 40%, rgba(37,99,235,0.09) 0%, transparent 70%)",
-          transform: "scale(1.18) perspective(1400px) rotateY(-8deg) rotateX(3deg)",
           filter: "blur(24px)",
         }}
       />
@@ -52,14 +51,11 @@ function DashboardMockup() {
         initial={{ opacity: 0, y: 28 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-        className="relative bg-white rounded-[32px] p-7"
+        className="dashboard-card relative bg-white rounded-[28px] lg:rounded-[32px] p-5 lg:p-7 w-full"
         style={{
-          width: "520px",
           boxShadow:
             "0 40px 100px rgba(15,23,42,0.10), 0 12px 32px rgba(15,23,42,0.06), inset 0 1px 0 rgba(255,255,255,0.9)",
-          transform: "perspective(1400px) rotateY(-8deg) rotateX(3deg)",
           border: "1px solid rgba(226,232,240,0.8)",
-          willChange: "transform",
         }}
       >
         {/* Live header */}
@@ -206,7 +202,7 @@ export function Hero() {
       className="relative overflow-hidden"
       style={{
         background: "linear-gradient(160deg, #EEF2FF 0%, #F0F9FF 45%, #F8FAFC 100%)",
-        minHeight: "calc(100vh - 72px)",
+        minHeight: "calc(100dvh - 72px)",
         display: "flex",
         alignItems: "center",
       }}
@@ -396,7 +392,7 @@ export function Hero() {
             initial={{ opacity: 0, x: reduceMotion ? 0 : -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2, duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-            className="hidden lg:flex shrink-0 items-center justify-center lg:py-24"
+            className="flex w-full lg:w-auto shrink-0 items-center justify-center mt-10 lg:mt-0 lg:py-24"
             aria-hidden
           >
             <DashboardMockup />
@@ -406,6 +402,19 @@ export function Hero() {
       </div>
 
       <VideoModal open={videoOpen} onOpenChange={setVideoOpen} />
+
+      <style>{`
+        @media (min-width: 1024px) {
+          .dashboard-card {
+            width: 520px;
+            transform: perspective(1400px) rotateY(-8deg) rotateX(3deg);
+            will-change: transform;
+          }
+          .dashboard-glow {
+            transform: scale(1.18) perspective(1400px) rotateY(-8deg) rotateX(3deg);
+          }
+        }
+      `}</style>
     </section>
   );
 }

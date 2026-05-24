@@ -5,13 +5,6 @@ import Link from "next/link";
 import { Check, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 type Tier = {
@@ -89,25 +82,25 @@ export function Pricing() {
   const [yearly, setYearly] = useState(false);
 
   return (
-    <section id="pricing" className="border-b border-border bg-background">
+    <section id="pricing" className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
       <div className="mx-auto max-w-6xl px-6 py-20">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold text-foreground sm:text-4xl">
+          <h2 className="text-3xl font-bold text-[#0F172A] sm:text-4xl">
             מחירים שמתאימים לעסק ישראלי
           </h2>
-          <p className="mt-3 text-muted-foreground">
+          <p className="mt-3 text-[#64748B]">
             ללא התחייבות. ניתן לבטל בכל רגע. כל המחירים בשקלים, לא כולל מע״מ.
           </p>
 
-          <div className="mt-8 inline-flex items-center rounded-full border border-border bg-card p-1 text-sm">
+          <div className="mt-8 inline-flex items-center rounded-full border border-[#E2E8F0] bg-white p-1 text-sm">
             <button
               type="button"
               onClick={() => setYearly(false)}
               className={cn(
                 "rounded-full px-4 py-1.5 font-medium transition-colors",
                 !yearly
-                  ? "bg-foreground text-background shadow"
-                  : "text-muted-foreground hover:text-foreground",
+                  ? "bg-[#0F172A] text-white shadow"
+                  : "text-[#64748B] hover:text-[#0F172A]",
               )}
               aria-pressed={!yearly}
             >
@@ -119,8 +112,8 @@ export function Pricing() {
               className={cn(
                 "rounded-full px-4 py-1.5 font-medium transition-colors",
                 yearly
-                  ? "bg-foreground text-background shadow"
-                  : "text-muted-foreground hover:text-foreground",
+                  ? "bg-[#0F172A] text-white shadow"
+                  : "text-[#64748B] hover:text-[#0F172A]",
               )}
               aria-pressed={yearly}
             >
@@ -131,13 +124,12 @@ export function Pricing() {
 
         <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {TIERS.map((tier) => (
-            <Card
+            <div
               key={tier.name}
               className={cn(
-                "relative bg-card transition-all duration-300",
                 tier.highlight
-                  ? "border-transparent ring-2 ring-indigo-500/70 shadow-[0_0_60px_-12px_rgb(99_102_241/0.55)] hover:-translate-y-1 lg:-mt-4"
-                  : "overflow-hidden hover:-translate-y-0.5 hover:shadow-lg",
+                  ? "rounded-2xl bg-white border-transparent ring-2 ring-indigo-500/70 shadow-[0_0_60px_-12px_rgb(99_102_241/0.55)] p-6 relative transition-all duration-300 hover:-translate-y-1 lg:-mt-4"
+                  : "rounded-2xl bg-white border border-[#E2E8F0] p-6 relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg",
               )}
             >
               {tier.highlight ? (
@@ -155,9 +147,9 @@ export function Pricing() {
                 </>
               ) : null}
 
-              <CardHeader className="relative">
+              <div className="relative">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-xl">{tier.name}</CardTitle>
+                  <h3 className="text-xl font-bold text-[#0F172A]">{tier.name}</h3>
                   {yearly && tier.monthly > 0 ? (
                     <Badge variant="success">2 חודשים חינם</Badge>
                   ) : null}
@@ -168,34 +160,34 @@ export function Pricing() {
                       "text-4xl font-extrabold",
                       tier.highlight
                         ? "text-gradient-brand"
-                        : "text-foreground",
+                        : "text-[#0F172A]",
                     )}
                   >
                     {formatPrice(tier.monthly, yearly)}
                   </span>
                   {tier.monthly > 0 ? (
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-sm text-[#64748B]">
                       / חודש
                     </span>
                   ) : null}
                 </div>
-                <CardDescription>{tier.tagline}</CardDescription>
+                <p className="text-sm text-[#64748B]">{tier.tagline}</p>
                 <p
                   className={cn(
                     "mt-2 text-xs font-medium",
-                    tier.highlight ? "text-indigo-500" : "text-emerald-600 dark:text-emerald-400",
+                    tier.highlight ? "text-indigo-500" : "text-emerald-600",
                   )}
                 >
                   {tier.roi}
                 </p>
-              </CardHeader>
+              </div>
 
-              <CardContent className="relative">
+              <div className="relative mt-6">
                 <ul className="space-y-2.5 text-sm">
                   {tier.features.map((f) => (
                     <li
                       key={f}
-                      className="flex items-start gap-2 text-foreground"
+                      className="flex items-start gap-2 text-[#0F172A]"
                     >
                       <span
                         className={cn(
@@ -211,8 +203,8 @@ export function Pricing() {
                     </li>
                   ))}
                 </ul>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))}
         </div>
 
@@ -220,7 +212,7 @@ export function Pricing() {
           <Button asChild size="lg" variant="glow">
             <Link href="/login">התחל ניסיון 14 יום — בלי כרטיס אשראי</Link>
           </Button>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-[#64748B]">
             כל המחירים אינם כוללים מע״מ.
           </p>
         </div>

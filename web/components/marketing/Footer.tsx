@@ -39,13 +39,12 @@ export function Footer() {
   }
 
   return (
-    <footer className="border-t border-border bg-slate-50 px-4 py-16 dark:bg-slate-900">
+    <footer className="border-t border-[#E2E8F0] bg-[#F8FAFC] px-4 py-16">
       <div className="mx-auto max-w-6xl">
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Brand */}
           <div>
             <Logo size={32} />
-            <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
+            <p className="mt-4 text-sm text-[#64748B] leading-relaxed">
               סידור משמרות חכם לעסקים ישראלים — תואם חוק, שולח בוואטסאפ, חוסך
               שעות.
             </p>
@@ -57,7 +56,7 @@ export function Footer() {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={label}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition hover:text-foreground hover:border-foreground/30"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#E2E8F0] bg-white text-[#64748B] transition hover:text-[#0F172A] hover:border-[#94A3B8]"
                 >
                   <Icon className="h-4 w-4" />
                 </a>
@@ -65,15 +64,14 @@ export function Footer() {
             </div>
           </div>
 
-          {/* Product */}
           <div>
-            <h4 className="mb-3 text-sm font-semibold text-foreground">מוצר</h4>
+            <h4 className="mb-3 text-sm font-semibold text-[#0F172A]">מוצר</h4>
             <ul className="space-y-2 text-sm">
               {productLinks.map((link) => (
                 <li key={link.label}>
                   <Link
                     href={link.href}
-                    className="text-muted-foreground transition-colors hover:text-foreground"
+                    className="text-[#64748B] transition-colors hover:text-[#0F172A]"
                   >
                     {link.label}
                   </Link>
@@ -82,15 +80,14 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Resources */}
           <div>
-            <h4 className="mb-3 text-sm font-semibold text-foreground">מקורות</h4>
+            <h4 className="mb-3 text-sm font-semibold text-[#0F172A]">מקורות</h4>
             <ul className="space-y-2 text-sm">
               {resourceLinks.map((link) => (
                 <li key={link.label}>
                   <Link
                     href={link.href}
-                    className="text-muted-foreground transition-colors hover:text-foreground"
+                    className="text-[#64748B] transition-colors hover:text-[#0F172A]"
                   >
                     {link.label}
                   </Link>
@@ -99,12 +96,11 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Newsletter */}
           <div>
-            <h4 className="mb-3 text-sm font-semibold text-foreground">
+            <h4 className="mb-3 text-sm font-semibold text-[#0F172A]">
               ניוזלטר חודשי
             </h4>
-            <p className="mb-3 text-sm text-muted-foreground">
+            <p className="mb-3 text-sm text-[#64748B]">
               טיפים על ניהול צוות, חוק עבודה, ועדכוני מוצר.
             </p>
             <form
@@ -130,35 +126,33 @@ export function Footer() {
           </div>
         </div>
 
-        {/* Trust badges */}
-        <div className="mt-12 flex flex-wrap items-center justify-center gap-3 border-t border-border/60 pt-8">
-          <Badge variant="outline" className="gap-1 border-border">
+        <div className="mt-12 flex flex-wrap items-center justify-center gap-3 border-t border-[#E2E8F0] pt-8">
+          <Badge variant="outline" className="gap-1 border-[#E2E8F0]">
             <ShieldCheck className="h-3 w-3" />
             SOC2 Ready
           </Badge>
-          <Badge variant="outline" className="gap-1 border-border">
+          <Badge variant="outline" className="gap-1 border-[#E2E8F0]">
             <ShieldCheck className="h-3 w-3" />
             GDPR Ready
           </Badge>
-          <Badge variant="outline" className="gap-1 border-border">
+          <Badge variant="outline" className="gap-1 border-[#E2E8F0]">
             <ShieldCheck className="h-3 w-3" />
             תואם חוק עבודה ומנוחה
           </Badge>
         </div>
 
-        {/* Bottom row */}
-        <div className="mt-8 flex flex-col items-center justify-between gap-4 border-t border-border/60 pt-6 text-xs text-muted-foreground sm:flex-row">
+        <div className="mt-8 flex flex-col items-center justify-between gap-4 border-t border-[#E2E8F0] pt-6 text-xs text-[#64748B] sm:flex-row">
           <p>
             © {new Date().getFullYear()} כל הזכויות שמורות לסידור4S בע״מ
           </p>
           <nav className="flex flex-wrap items-center justify-center gap-4">
-            <Link href="/terms" className="hover:text-foreground">
+            <Link href="/terms" className="hover:text-[#0F172A]">
               תקנון
             </Link>
-            <Link href="/privacy" className="hover:text-foreground">
+            <Link href="/privacy" className="hover:text-[#0F172A]">
               פרטיות
             </Link>
-            <Link href="/contact" className="hover:text-foreground">
+            <Link href="/contact" className="hover:text-[#0F172A]">
               צור קשר
             </Link>
           </nav>
