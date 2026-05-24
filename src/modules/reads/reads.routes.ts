@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../../db/prisma';
 import type { PrismaClient } from '@prisma/client';
+import { locationScope, employeeLocationScope } from '../../shared/location-scope';
 
 /**
  * Build an org-scoped DB handle.
@@ -152,9 +153,10 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
         const limit = paginated ? (limitParam ?? 50) : (limitParam ?? 500);
         const skip = paginated ? (page - 1) * limit : 0;
 
+        const empScope = employeeLocationScope(req.user ?? { role: '' });
         const employees = await db.query((tx) =>
           tx.employee.findMany({
-            where: { organizationId: orgId, isActive: true },
+            where: { organizationId: orgId, isActive: true, ...empScope },
             include: { roles: { include: { role: true } } },
             orderBy: { fullName: 'asc' },
             take: limit,
@@ -194,6 +196,7 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
         let schedule;
         const orgId = orgIdFor(req);
         const db = dbFor(req);
+        const schedScope = locationScope(req.user ?? { role: '' });
         const includeShifts = {
           shifts: {
             include: { role: true, assignments: true },
@@ -205,7 +208,7 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
           // Real UUID — direct lookup, org-scoped.
           schedule = await db.query((tx) =>
             tx.schedule.findFirst({
-              where: { id: scheduleId, organizationId: orgId },
+              where: { id: scheduleId, organizationId: orgId, ...schedScope },
               include: includeShifts,
             }),
           );
@@ -218,6 +221,7 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
               where: {
                 organizationId: orgId,
                 periodStartDate: { gte: start, lt: end },
+                ...schedScope,
               },
               orderBy: { periodStartDate: 'desc' },
               include: includeShifts,
@@ -230,6 +234,7 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
               where: {
                 organizationId: orgId,
                 periodStartDate: { lte: new Date() },
+                ...schedScope,
               },
               orderBy: { periodStartDate: 'desc' },
               include: includeShifts,

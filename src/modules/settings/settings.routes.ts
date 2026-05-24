@@ -11,6 +11,7 @@ import {
 } from './settings.service.js';
 import { prisma } from '../../db/prisma.js';
 import type { PrismaClient } from '@prisma/client';
+import type { MembershipRole } from '@prisma/client';
 
 const DEMO_ORG_ID = '10000000-0000-0000-0000-000000000001';
 function orgIdFor(req: { user?: { orgId: string } }): string {
@@ -22,6 +23,12 @@ function dbFor(req: { orgPrisma?: { query: <T>(fn: (tx: PrismaClient) => Promise
 }
 
 const IdParam = z.object({ id: z.string().uuid() });
+const UserIdParam = z.object({ userId: z.string().uuid() });
+
+const PatchMemberRoleBody = z.object({
+  role: z.enum(['MANAGER', 'BRANCH_MANAGER']),
+  locationId: z.string().uuid().optional(),
+});
 
 const LaborRulesSchema = z.object({
   maxHoursDay: z.number().min(1).max(24).optional(),
@@ -139,6 +146,83 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
         const { id } = req.params as z.infer<typeof IdParam>;
         await dbFor(req).query((tx) => deleteLocation(orgIdFor(req), id, tx));
         return reply.code(204).send();
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
+
+  // GET /v1/settings/members — list all memberships for this org (OWNER only).
+  app.get('/settings/members', { preHandler: authHandlers }, async (req, reply) => {
+    if (req.user?.role !== 'owner' && req.user?.role !== 'OWNER') {
+      return reply.code(403).send({
+        code: 'FORBIDDEN',
+        message: 'Only the owner can view team members',
+      });
+    }
+    try {
+      const orgId = orgIdFor(req);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const members = await (prisma.membership as any).findMany({
+        where: { organizationId: orgId, deactivatedAt: null },
+        select: {
+          id: true,
+          userId: true,
+          role: true,
+          locationId: true,
+          createdAt: true,
+          location: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      return reply.send(members);
+    } catch (err) {
+      return handleHttpError(reply, err);
+    }
+  });
+
+  // PATCH /v1/settings/members/:userId/role — change a member's role (OWNER only).
+  app.patch(
+    '/settings/members/:userId/role',
+    { schema: { params: UserIdParam, body: PatchMemberRoleBody }, preHandler: authHandlers },
+    async (req, reply) => {
+      // Only the OWNER can change roles.
+      if (req.user?.role !== 'owner' && req.user?.role !== 'OWNER') {
+        return reply.code(403).send({
+          code: 'FORBIDDEN',
+          message: 'Only the owner can change member roles',
+        });
+      }
+      const { userId } = req.params as z.infer<typeof UserIdParam>;
+      const { role, locationId } = req.body as z.infer<typeof PatchMemberRoleBody>;
+      const orgId = orgIdFor(req);
+
+      // Prevent owner from demoting themselves.
+      if (userId === req.user.id) {
+        return reply.code(400).send({
+          code: 'CANNOT_CHANGE_OWN_ROLE',
+          message: 'You cannot change your own role',
+        });
+      }
+
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const updated = await (prisma.membership as any).update({
+          where: { userId_organizationId: { userId, organizationId: orgId } },
+          data: {
+            role: role as MembershipRole,
+            // Clear locationId when switching to MANAGER; set it for BRANCH_MANAGER.
+            locationId: role === 'BRANCH_MANAGER' ? (locationId ?? null) : null,
+          },
+          select: {
+            id: true,
+            userId: true,
+            role: true,
+            locationId: true,
+            location: { select: { id: true, name: true } },
+          },
+        });
+        return reply.send(updated);
       } catch (err) {
         return handleHttpError(reply, err);
       }

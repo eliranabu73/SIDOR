@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { HttpError } from '../../shared/errors.js';
+import { employeeLocationScope } from '../../shared/location-scope.js';
 import {
   createEmployee,
   createLocation,
@@ -300,10 +301,11 @@ export async function employeesRoutes(app: FastifyInstance): Promise<void> {
   // pattern on the employees page.
   app.get('/employees/summary', { preHandler: authHandlers }, async (req, reply) => {
     const orgId = orgIdFor(req);
+    const empScope = employeeLocationScope(req.user ?? { role: '' });
     try {
       const employees = await dbFor(req).query((tx) =>
         tx.employee.findMany({
-          where: { organizationId: orgId, isActive: true },
+          where: { organizationId: orgId, isActive: true, ...empScope },
           include: {
             roles: { include: { role: true } },
             _count: {

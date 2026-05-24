@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   ArrowLeftRight,
   CalendarDays,
+  CircleDollarSign,
   Scale,
   Settings,
   ShieldCheck,
@@ -20,6 +21,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { getSupabase } from "@/lib/supabase";
 import { adminApi } from "@/lib/api";
 import { toast } from "sonner";
+import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 
 interface NavItem {
   href: string;
@@ -45,6 +47,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { href: "/employees", label: "עובדים", icon: <Users className="h-5 w-5" /> },
     { href: "/swaps", label: "החלפות", icon: <ArrowLeftRight className="h-5 w-5" /> },
     { href: "/fairness", label: "הוגנות", icon: <Scale className="h-5 w-5" /> },
+    { href: "/tips", label: "חלוקת טיפים", icon: <CircleDollarSign className="h-5 w-5" /> },
     { href: "/settings", label: "הגדרות", icon: <Settings className="h-5 w-5" /> },
   ];
 
@@ -113,13 +116,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <main className="flex-1 min-h-0 pb-16 sm:pb-0">{children}</main>
 
+      <PwaInstallBanner />
+
       {/* Mobile bottom tab bar */}
       <nav
         className="sm:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-card/95 backdrop-blur-md"
         aria-label="ניווט תחתון"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <ul className="grid grid-cols-5">
+        <ul className="grid grid-cols-6">
           {nav.map((item) => {
             const active = pathname?.startsWith(item.href);
             return (

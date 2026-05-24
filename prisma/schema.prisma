@@ -23,6 +23,7 @@ datasource db {
 enum MembershipRole {
   OWNER
   MANAGER
+  BRANCH_MANAGER
 }
 
 enum EmploymentType {
@@ -204,6 +205,7 @@ model Organization {
   candidates     SchedulingCandidate[]
   memberships    Membership[]
   messageDeliveries MessageDelivery[]
+  tipPools       TipPool[]
 
   @@map("organizations")
 }
@@ -213,11 +215,14 @@ model Membership {
   userId         String         @db.Uuid // = auth.users.id (Supabase)
   organizationId String         @db.Uuid
   role           MembershipRole @default(MANAGER)
+  /// Only set when role = BRANCH_MANAGER — restricts the user to a single location.
+  locationId     String?        @db.Uuid
   /// Admin deactivation marker — when set, app routes should treat the user as disabled for this org.
   deactivatedAt  DateTime?
   createdAt      DateTime       @default(now())
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location       Location?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
 
   @@unique([userId, organizationId])
   @@index([userId])
@@ -242,6 +247,8 @@ model Location {
   shiftTemplates ShiftTemplate[]
   shifts         Shift[]
   defaultedBy    Employee[]      @relation("EmployeeDefaultLocation")
+  memberships    Membership[]
+  tipPools       TipPool[]
 
   @@index([organizationId])
   @@map("locations")
@@ -325,6 +332,7 @@ model Employee {
   metrics           EmployeeScheduleMetrics[]
   candidates        SchedulingCandidate[]
   messageDeliveries MessageDelivery[]
+  tipDistributions  TipDistribution[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -799,4 +807,44 @@ model MessageDelivery {
   @@index([employeeId, createdAt])
   @@index([wabaMessageId])
   @@map("message_deliveries")
+}
+
+// =========================================================
+// Tips (חוק הטיפים 2022 — Israeli Tip Law, Amendment 19)
+// =========================================================
+
+/// A single tip-pool event: total tips collected on a given date at a location.
+/// Employer records this; system distributes proportionally to service staff.
+model TipPool {
+  id              String    @id @default(uuid()) @db.Uuid
+  organizationId  String    @db.Uuid
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  shiftDate       DateTime  @db.Date
+  locationId      String?   @db.Uuid
+  location        Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  totalAgorot     Int       // total tips in agorot (integer — no floating-point money)
+  note            String?
+  createdAt       DateTime  @default(now())
+  createdByUserId String?   @db.Uuid
+
+  distributions TipDistribution[]
+
+  @@index([organizationId, shiftDate])
+  @@index([locationId, shiftDate])
+  @@map("tip_pools")
+}
+
+/// One row per employee per tip pool — calculated share of tips.
+model TipDistribution {
+  id           String   @id @default(uuid()) @db.Uuid
+  tipPoolId    String   @db.Uuid
+  tipPool      TipPool  @relation(fields: [tipPoolId], references: [id], onDelete: Cascade)
+  employeeId   String   @db.Uuid
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shiftMinutes Int      // minutes worked that contributed to the proportional calculation
+  amountAgorot Int      // calculated tip share in agorot
+
+  @@unique([tipPoolId, employeeId])
+  @@index([employeeId])
+  @@map("tip_distributions")
 }

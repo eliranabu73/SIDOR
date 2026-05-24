@@ -22,6 +22,8 @@ export interface VerifiedUser {
   orgId: string;
   role: string;
   email?: string;
+  /** Only set for BRANCH_MANAGER users — loaded from DB in auth.plugin. */
+  locationId?: string | null;
 }
 
 /** Shape of Supabase JWT payload fields we care about. */

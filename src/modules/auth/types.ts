@@ -21,6 +21,11 @@ declare module 'fastify' {
       role: string;
       /** Email from JWT `email` claim — used for platform-admin allowlist. */
       email?: string;
+      /**
+       * Location UUID — only set when role === 'branch_manager'.
+       * Populated from the Membership record in the DB fallback path.
+       */
+      locationId?: string | null;
     };
   }
 }

@@ -32,6 +32,7 @@ import { templatesRoutes } from './modules/templates/templates.routes';
 import { adminRoutes } from './modules/admin/admin.routes';
 import { payrollRoutes } from './modules/payroll/payroll.routes';
 import { timeoffRoutes } from './modules/timeoff/timeoff.routes';
+import { tipsRoutes } from './modules/tips/tips.routes';
 
 export async function buildApp(): Promise<FastifyInstance> {
   // Initialise Sentry first so errors during boot get captured.
@@ -60,7 +61,13 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.setSerializerCompiler(serializerCompiler);
 
   await app.register(sensible);
-  await app.register(cors, { origin: true });
+  // In development/test allow all origins; in production restrict to the
+  // canonical web origin to prevent cross-site request abuse.
+  const allowedOrigin =
+    env.NODE_ENV === 'production'
+      ? [env.PUBLIC_WEB_URL, 'https://sidor-eta.vercel.app']
+      : true;
+  await app.register(cors, { origin: allowedOrigin, credentials: true });
 
   // Auth plugin first — exposes `app.authenticate` to subsequent route plugins.
   await app.register(authPlugin);
@@ -129,6 +136,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(adminRoutes, { prefix: '/v1/admin' });
   await app.register(payrollRoutes, { prefix: '/v1' });
   await app.register(timeoffRoutes, { prefix: '/v1' });
+  await app.register(tipsRoutes, { prefix: '/v1' });
   await app.register(realtimeRoutes);
 
   return app;

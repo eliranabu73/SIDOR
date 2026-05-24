@@ -22,6 +22,8 @@ export interface PayrollRow {
   ot150Hours: number;
   weekendHours: number;
   totalGrossILS: number;
+  /** Sum of tip distributions for this employee in the payroll period (agorot → ILS in export). */
+  tipsAgorot: number;
 }
 
 export const HILAN_HEADERS = [
@@ -33,6 +35,7 @@ export const HILAN_HEADERS = [
   'שעות נוספות 150%',
   'שעות שבת/חג',
   'סה״כ ברוטו (ש״ח)',
+  'טיפים (ש״ח)',
 ] as const;
 
 export const STANDARD_HEADERS = [
@@ -44,6 +47,7 @@ export const STANDARD_HEADERS = [
   'שעות נוספות 150%',
   'שעות שבת',
   'סה״כ ברוטו (ש״ח)',
+  'טיפים (ש״ח)',
 ] as const;
 
 /** Convert an internal PayrollRow into a Hilan-style column dictionary. */
@@ -57,6 +61,7 @@ export function toHilanRow(row: PayrollRow): Record<string, string> {
     'שעות נוספות 150%': row.ot150Hours.toFixed(2),
     'שעות שבת/חג': row.weekendHours.toFixed(2),
     'סה״כ ברוטו (ש״ח)': row.totalGrossILS.toFixed(2),
+    'טיפים (ש״ח)': (row.tipsAgorot / 100).toFixed(2),
   };
 }
 
@@ -71,5 +76,6 @@ export function toStandardRow(row: PayrollRow): Record<string, string> {
     'שעות נוספות 150%': row.ot150Hours.toFixed(2),
     'שעות שבת': row.weekendHours.toFixed(2),
     'סה״כ ברוטו (ש״ח)': row.totalGrossILS.toFixed(2),
+    'טיפים (ש״ח)': (row.tipsAgorot / 100).toFixed(2),
   };
 }

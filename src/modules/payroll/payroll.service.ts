@@ -109,6 +109,7 @@ interface AggregateAccumulator {
   ot125Min: number;
   ot150Min: number;
   weekendMin: number;
+  tipsAgorot: number;
 }
 
 /**
@@ -204,6 +205,7 @@ export async function generatePayrollExport(
         ot125Min: 0,
         ot150Min: 0,
         weekendMin: 0,
+        tipsAgorot: 0,
       };
       byEmp.set(emp.id, acc);
     }
@@ -211,6 +213,29 @@ export async function generatePayrollExport(
     acc.ot125Min += ot125;
     acc.ot150Min += ot150;
     acc.weekendMin += weekend;
+  }
+
+  // Fetch tip distributions for all employees in the period (Israeli Tip Law 2022).
+  // tipPool.shiftDate is stored at noon UTC; query the full period range.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tipDists = await (db as any).tipDistribution.findMany({
+    where: {
+      tipPool: {
+        organizationId: orgId,
+        shiftDate: { gte: periodStart, lte: periodEnd },
+      },
+    },
+    select: {
+      employeeId: true,
+      amountAgorot: true,
+    },
+  });
+
+  for (const dist of tipDists) {
+    const acc = byEmp.get(dist.employeeId);
+    if (acc) {
+      acc.tipsAgorot += dist.amountAgorot;
+    }
   }
 
   const rawRows: PayrollRow[] = Array.from(byEmp.values())
@@ -240,6 +265,7 @@ export async function generatePayrollExport(
         ot150Hours: round2(ot150H),
         weekendHours: round2(weekendH),
         totalGrossILS: round2(gross),
+        tipsAgorot: acc.tipsAgorot,
       };
     });
 

@@ -122,16 +122,33 @@ const authPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
       // add `requireMembership` as an additional preHandler — onboarding routes
       // intentionally only use `authenticate` so new users can create their org.
       if (!user.orgId) {
-        const membership = await prisma.membership.findFirst({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const membership = await (prisma.membership as any).findFirst({
           where: { userId: user.id },
           orderBy: { createdAt: 'asc' },
-          select: { organizationId: true, role: true },
-        });
+          select: { organizationId: true, role: true, locationId: true },
+        }) as { organizationId: string; role: string; locationId: string | null } | null;
         if (membership) {
           user.orgId = membership.organizationId;
           user.role = membership.role.toLowerCase();
+          user.locationId = membership.locationId ?? null;
         }
         // No membership → orgId stays ''; onboarding routes handle this case.
+      } else {
+        // Even when the JWT already carries orgId, we still need to load
+        // locationId for BRANCH_MANAGER users (not available in the JWT).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const membership = await (prisma.membership as any).findFirst({
+          where: { userId: user.id, organizationId: user.orgId },
+          select: { locationId: true, role: true },
+        }) as { locationId: string | null; role: string } | null;
+        if (membership) {
+          user.locationId = membership.locationId ?? null;
+          // Update role from DB in case it was recently changed but JWT hasn't refreshed.
+          if (membership.role) {
+            user.role = membership.role.toLowerCase();
+          }
+        }
       }
 
       req.user = user;

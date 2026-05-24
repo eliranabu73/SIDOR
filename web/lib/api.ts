@@ -840,6 +840,34 @@ export function deleteOrgLocation(id: ID): Promise<void> {
   return request<void>(`/v1/locations/${id}`, { method: "DELETE" });
 }
 
+// --------- Team Members / Roles ---------
+
+export type MembershipRole = "OWNER" | "MANAGER" | "BRANCH_MANAGER";
+
+export interface OrgMember {
+  id: ID;
+  userId: ID;
+  role: MembershipRole;
+  locationId: ID | null;
+  createdAt: string;
+  location: { id: ID; name: string } | null;
+}
+
+export function fetchOrgMembers(): Promise<OrgMember[]> {
+  return request<OrgMember[]>(`/v1/settings/members`);
+}
+
+export function patchMemberRole(
+  userId: ID,
+  role: "MANAGER" | "BRANCH_MANAGER",
+  locationId?: ID,
+): Promise<OrgMember> {
+  return request<OrgMember>(`/v1/settings/members/${userId}/role`, {
+    method: "PATCH",
+    body: JSON.stringify({ role, locationId }),
+  });
+}
+
 // --------- Platform Admin (cross-tenant, owner-only) ---------
 
 export interface AdminStats {
@@ -1278,4 +1306,77 @@ export async function fetchTimeOffForEmployee(
     if (err instanceof ApiError && err.status === 404) return [];
     throw err;
   }
+}
+
+// --------- Tips (חוק הטיפים 2022) ---------
+
+export interface TipDistributionItem {
+  id: string;
+  employeeId: string;
+  employee: { id: string; fullName: string };
+  shiftMinutes: number;
+  amountAgorot: number;
+}
+
+export interface TipPoolItem {
+  id: string;
+  organizationId: string;
+  shiftDate: string;
+  locationId: string | null;
+  location: { id: string; name: string } | null;
+  totalAgorot: number;
+  note: string | null;
+  createdAt: string;
+  distributions: TipDistributionItem[];
+}
+
+export interface TipDistributionPreview {
+  employeeId: string;
+  employeeName: string;
+  shiftMinutes: number;
+  amountAgorot: number;
+}
+
+export interface TipPreviewResponse {
+  shiftDate: string;
+  totalAgorot: number;
+  distributions: TipDistributionPreview[];
+}
+
+export interface RecordTipBody {
+  shiftDate: string;
+  locationId?: string;
+  totalAgorot: number;
+  note?: string;
+}
+
+export function previewTipDistribution(
+  shiftDate: string,
+  totalAgorot: number,
+  locationId?: string,
+): Promise<TipPreviewResponse> {
+  const params = new URLSearchParams({ shiftDate, totalAgorot: String(totalAgorot) });
+  if (locationId) params.set("locationId", locationId);
+  return request<TipPreviewResponse>(`/v1/tips/preview?${params.toString()}`);
+}
+
+export function fetchTipPools(
+  periodStart: string,
+  periodEnd: string,
+  locationId?: string,
+): Promise<TipPoolItem[]> {
+  const params = new URLSearchParams({ periodStart, periodEnd });
+  if (locationId) params.set("locationId", locationId);
+  return request<TipPoolItem[]>(`/v1/tips?${params.toString()}`);
+}
+
+export function recordTipPool(body: RecordTipBody): Promise<TipPoolItem> {
+  return request<TipPoolItem>(`/v1/tips`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteTipPool(id: string): Promise<void> {
+  return request<void>(`/v1/tips/${id}`, { method: "DELETE" });
 }

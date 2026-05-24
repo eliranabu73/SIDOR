@@ -5,6 +5,25 @@ import { computeWeeklyCost } from './labor-cost.service';
 import { HttpError } from '../../shared/errors';
 import { prisma } from '../../db/prisma';
 import type { PrismaClient } from '@prisma/client';
+import { locationScope } from '../../shared/location-scope';
+
+// ---------------------------------------------------------------------------
+// In-memory rate limiter for expensive auto-schedule endpoint.
+// Limit: 3 calls per 60 seconds per organization.
+// ---------------------------------------------------------------------------
+const RATE_LIMIT_MAX = 3;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const autoScheduleCallLog = new Map<string, number[]>();
+
+function checkAutoScheduleRateLimit(orgId: string): boolean {
+  const now = Date.now();
+  const cutoff = now - RATE_LIMIT_WINDOW_MS;
+  const calls = (autoScheduleCallLog.get(orgId) ?? []).filter((t) => t > cutoff);
+  if (calls.length >= RATE_LIMIT_MAX) return false;
+  calls.push(now);
+  autoScheduleCallLog.set(orgId, calls);
+  return true;
+}
 
 const DEMO_ORG_ID = '10000000-0000-0000-0000-000000000001';
 function orgIdFor(req: { user?: { orgId?: string } }): string {
@@ -49,8 +68,48 @@ function devAllowed(): boolean {
   return process.env['AUTH_DISABLED'] === 'true';
 }
 
+const SchedulesListQuery = z.object({
+  status: z.string().optional(),
+});
+
 export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
   const authHandlers = devAllowed() ? [] : [app.authenticate];
+
+  // GET /v1/schedules — list schedules for this org, scoped to location for BRANCH_MANAGER.
+  app.get(
+    '/schedules',
+    { schema: { querystring: SchedulesListQuery }, preHandler: authHandlers },
+    async (req, reply) => {
+      const { status } = req.query as z.infer<typeof SchedulesListQuery>;
+      const orgId = orgIdFor(req);
+      const scope = locationScope(req.user ?? { role: '' });
+      try {
+        const rows = await dbFor(req).query((tx) =>
+          tx.schedule.findMany({
+            where: {
+              organizationId: orgId,
+              ...(status ? { status: status.toUpperCase() as never } : {}),
+              ...scope,
+            },
+            orderBy: { periodStartDate: 'desc' },
+            select: {
+              id: true,
+              name: true,
+              locationId: true,
+              periodStartDate: true,
+              periodEndDate: true,
+              status: true,
+              publishedAt: true,
+              createdAt: true,
+            },
+          }),
+        );
+        return reply.send(rows);
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
 
   app.post(
     '/schedules/:scheduleId/apply-proposals',
@@ -163,6 +222,15 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
       const body = req.body as z.infer<typeof AutoScheduleBody>;
+      const orgId = orgIdFor(req);
+
+      // Rate-limit: max 3 auto-schedule calls per minute per org.
+      if (!checkAutoScheduleRateLimit(orgId)) {
+        return reply.code(429).send({
+          code: 'RATE_LIMITED',
+          message: 'חרגת ממגבלת הקצב — ניתן להפעיל שיבוץ אוטומטי עד 3 פעמים בדקה. נסה שוב בעוד רגע.',
+        });
+      }
 
       try {
         const result = await dbFor(req).query((tx) => {
@@ -174,7 +242,7 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
               weights: body.weights,
             },
             body.provider as ProviderName,
-            orgIdFor(req),
+            orgId,
           );
         });
         return reply.send(result);

@@ -3,7 +3,7 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { Building2, MapPin, Shield, Tag } from "lucide-react";
+import { Building2, MapPin, Shield, Tag, Users } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import {
@@ -13,13 +13,14 @@ import {
   type LaborRules,
 } from "@/lib/api";
 
-type Tab = "general" | "roles" | "locations" | "compliance";
+type Tab = "general" | "roles" | "locations" | "compliance" | "members";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "general", label: "כללי", icon: <Building2 className="h-4 w-4" /> },
   { id: "roles", label: "תפקידים", icon: <Tag className="h-4 w-4" /> },
   { id: "locations", label: "סניפים", icon: <MapPin className="h-4 w-4" /> },
   { id: "compliance", label: "כללי עבודה", icon: <Shield className="h-4 w-4" /> },
+  { id: "members", label: "הרשאות צוות", icon: <Users className="h-4 w-4" /> },
 ];
 
 function TabSkeleton() {
@@ -42,6 +43,10 @@ const LocationsTab = dynamic(() => import("./LocationsTab"), {
   loading: () => <TabSkeleton />,
 });
 const ComplianceTab = dynamic(() => import("./ComplianceTab"), {
+  ssr: false,
+  loading: () => <TabSkeleton />,
+});
+const MembersTab = dynamic(() => import("./MembersTab"), {
   ssr: false,
   loading: () => <TabSkeleton />,
 });
@@ -267,6 +272,12 @@ function SettingsContent() {
             saving={saving}
             onSave={saveCompliance}
           />
+        </div>
+      )}
+
+      {tab === "members" && (
+        <div role="tabpanel" id="tabpanel-members" aria-labelledby="tab-members">
+          <MembersTab />
         </div>
       )}
     </div>

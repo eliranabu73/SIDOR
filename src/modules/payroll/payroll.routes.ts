@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { generatePayrollExport, toCsv, type PayrollFormat } from './payroll.service';
 import { prisma } from '../../db/prisma';
 import type { PrismaClient } from '@prisma/client';
+import { isBranchManager } from '../../shared/location-scope';
 
 const DEMO_ORG_ID = '10000000-0000-0000-0000-000000000001';
 
@@ -37,9 +38,14 @@ export async function payrollRoutes(app: FastifyInstance): Promise<void> {
     '/payroll/export.csv',
     { schema: { querystring: ExportQuery }, preHandler: authHandlers },
     async (req, reply) => {
-      const { periodStart, periodEnd, format, locationId } = req.query as z.infer<
+      const { periodStart, periodEnd, format, locationId: queryLocationId } = req.query as z.infer<
         typeof ExportQuery
       >;
+      // BRANCH_MANAGER users are always restricted to their own location —
+      // override any locationId they might pass in the query string.
+      const locationId = isBranchManager(req.user ?? { role: '' })
+        ? (req.user?.locationId ?? undefined) ?? undefined
+        : (queryLocationId ?? undefined);
       // periodEnd is treated as exclusive end-of-day → add 1 day so a request
       // for 2026-01-01..2026-01-31 includes shifts that start on the 31st.
       const start = new Date(`${periodStart}T00:00:00.000Z`);
