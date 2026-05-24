@@ -2,112 +2,186 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { motion } from "framer-motion";
-import { ArrowLeft, Sparkles, CheckCircle2, Play, Clock, Users, Shield } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
+import { ArrowLeft, CheckCircle2, Play, Clock, Users, Shield, Zap } from "lucide-react";
 import { VideoModal } from "./VideoModal";
+
+const AVATAR_COLORS = [
+  { bg: "#EDE9FE", text: "#7C3AED" },
+  { bg: "#DBEAFE", text: "#2563EB" },
+  { bg: "#DCFCE7", text: "#16A34A" },
+  { bg: "#FEF3C7", text: "#D97706" },
+  { bg: "#FCE7F3", text: "#DB2777" },
+];
 
 function DashboardMockup() {
   const days = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳"];
 
-  // Color classes for shift blocks — pastel fill style
   const C = {
-    cyan:   "bg-[#BAE6FD]",
-    green:  "bg-[#BBF7D0]",
-    purple: "bg-[#DDD6FE]",
-    orange: "bg-[#FED7AA]",
-    empty:  "bg-[#F1F5F9]",
+    cyan:   { bg: "#BAE6FD", border: "#7DD3FC" },
+    green:  { bg: "#BBF7D0", border: "#86EFAC" },
+    purple: { bg: "#DDD6FE", border: "#C4B5FD" },
+    orange: { bg: "#FED7AA", border: "#FDBA74" },
+    empty:  { bg: "#F8FAFC", border: "#E2E8F0" },
   } as const;
   type Color = keyof typeof C;
 
-  const employees: { name: string; shifts: Color[] }[] = [
-    { name: "יעל לוי",   shifts: ["purple","purple","empty","cyan","cyan"] },
-    { name: "מיה כהן",   shifts: ["cyan","green","cyan","empty","empty"] },
-    { name: "דן אברמי",  shifts: ["empty","purple","purple","orange","empty"] },
-    { name: "רותם שחר",  shifts: ["green","orange","empty","green","green"] },
-    { name: "יובל גולן", shifts: ["cyan","cyan","green","empty","orange"] },
+  const employees: { name: string; initial: string; shifts: Color[] }[] = [
+    { name: "יעל לוי",   initial: "י", shifts: ["purple","purple","empty","cyan","cyan"] },
+    { name: "מיה כהן",   initial: "מ", shifts: ["cyan","green","cyan","empty","empty"] },
+    { name: "דן אברמי",  initial: "ד", shifts: ["empty","purple","purple","orange","empty"] },
+    { name: "רותם שחר",  initial: "ר", shifts: ["green","orange","empty","green","green"] },
+    { name: "יובל גולן", initial: "י", shifts: ["cyan","cyan","green","empty","orange"] },
   ];
 
   return (
-    <div className="relative" style={{ paddingBottom: "80px" }}>
+    <div className="relative" style={{ paddingBottom: "88px" }}>
+      {/* Soft glow ring behind card */}
+      <div
+        aria-hidden
+        className="absolute inset-0 rounded-[40px]"
+        style={{
+          background: "radial-gradient(ellipse at 60% 40%, rgba(37,99,235,0.09) 0%, transparent 70%)",
+          transform: "scale(1.18) perspective(1400px) rotateY(-8deg) rotateX(3deg)",
+          filter: "blur(24px)",
+        }}
+      />
+
       {/* Main card */}
       <motion.div
-        initial={{ opacity: 0, y: 24 }}
+        initial={{ opacity: 0, y: 28 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-        className="relative bg-white rounded-[32px] p-6 w-[500px]"
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+        className="relative bg-white rounded-[32px] p-7"
         style={{
-          boxShadow: "0 32px 80px rgba(15,23,42,0.12), 0 8px 24px rgba(15,23,42,0.06)",
-          transform: "perspective(1200px) rotateY(-6deg) rotateX(2deg)",
+          width: "520px",
+          boxShadow:
+            "0 40px 100px rgba(15,23,42,0.10), 0 12px 32px rgba(15,23,42,0.06), inset 0 1px 0 rgba(255,255,255,0.9)",
+          transform: "perspective(1400px) rotateY(-8deg) rotateX(3deg)",
+          border: "1px solid rgba(226,232,240,0.8)",
           willChange: "transform",
         }}
       >
-        {/* Card header row */}
-        <div className="flex items-center justify-between mb-5">
-          <span className="text-[11px] text-[#94A3B8]">13 סמני גיעה</span>
-          <span className="text-sm font-bold text-[#0F172A]">סידור שבועי — שבוע 22</span>
+        {/* Live header */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            <span className="text-[11px] font-medium text-[#64748B]">עדכון חי</span>
+          </div>
+          <span className="text-[13px] font-bold text-[#0F172A] tracking-tight">
+            סידור שבועי — שבוע 22
+          </span>
         </div>
 
         {/* Day headers */}
-        <div className="grid mb-2" style={{ gridTemplateColumns: "108px repeat(5,1fr)", gap: "8px" }}>
+        <div
+          className="grid mb-3"
+          style={{ gridTemplateColumns: "120px repeat(5,1fr)", gap: "6px" }}
+        >
           <div />
           {days.map((d) => (
-            <div key={d} className="text-center text-[11px] font-semibold text-[#64748B]">{d}</div>
+            <div
+              key={d}
+              className="text-center text-[11px] font-semibold text-[#94A3B8] tracking-wide"
+            >
+              {d}
+            </div>
           ))}
         </div>
 
         {/* Employee rows */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           {employees.map((emp, i) => (
-            <div key={i} className="grid items-center" style={{ gridTemplateColumns: "108px repeat(5,1fr)", gap: "8px" }}>
-              <span className="text-[12px] font-medium text-[#0F172A] text-end pe-3">{emp.name}</span>
+            <div
+              key={i}
+              className="grid items-center"
+              style={{ gridTemplateColumns: "120px repeat(5,1fr)", gap: "6px" }}
+            >
+              <div className="flex items-center gap-2 justify-end pe-2">
+                <span className="text-[12px] font-medium text-[#334155]">{emp.name}</span>
+                <div
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
+                  style={{
+                    background: AVATAR_COLORS[i % AVATAR_COLORS.length].bg,
+                    color: AVATAR_COLORS[i % AVATAR_COLORS.length].text,
+                  }}
+                >
+                  {emp.initial}
+                </div>
+              </div>
               {emp.shifts.map((color, j) => (
-                <div key={j} className={`h-10 rounded-xl ${C[color]}`} />
+                <motion.div
+                  key={j}
+                  initial={{ opacity: 0, scale: 0.88 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.5 + i * 0.06 + j * 0.03, duration: 0.32 }}
+                  className="h-10 rounded-xl"
+                  style={{
+                    background: C[color].bg,
+                    border: `1px solid ${C[color].border}`,
+                  }}
+                />
               ))}
             </div>
           ))}
         </div>
       </motion.div>
 
-      {/* Floating badge — top-right corner of card (start in RTL = right visually) */}
+      {/* Floating badge — top inline-start (= top-right visually in RTL) */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.4, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="absolute -top-4 -start-6 bg-gradient-to-br from-[#8B5CF6] to-[#6D28D9] rounded-2xl px-4 py-3 shadow-[0_8px_24px_rgba(109,40,217,0.35)]"
+        initial={{ opacity: 0, scale: 0.8, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ delay: 0.5, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        className="absolute -top-5 -start-8 rounded-2xl px-4 py-3"
+        style={{
+          background: "linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%)",
+          boxShadow: "0 8px 24px rgba(109,40,217,0.3), 0 2px 8px rgba(109,40,217,0.2)",
+        }}
       >
         <div className="flex items-center gap-2.5">
-          <Sparkles className="h-4 w-4 text-white/90 shrink-0" />
+          <Zap className="h-4 w-4 text-yellow-300 shrink-0" />
           <div>
             <div className="text-[12px] font-bold text-white leading-none">שיבוץ אוטומטי</div>
-            <div className="text-[10px] text-white/70 mt-0.5">חכם ומדויק</div>
+            <div className="text-[10px] text-white/60 mt-0.5">חכם ומדויק</div>
           </div>
         </div>
       </motion.div>
 
-      {/* Floating stat cards — bottom */}
+      {/* Bottom stat cards */}
       <motion.div
-        initial={{ opacity: 0, y: 16 }}
+        initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.6, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="absolute bottom-0 start-0 end-0 flex gap-3"
-        style={{ paddingInline: "12px" }}
+        transition={{ delay: 0.7, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        className="absolute bottom-0 start-4 end-4 flex gap-3"
       >
         {[
-          { icon: Clock,   color: "#2563EB", bg: "#DBEAFE", value: "4.2", label: "שעות נחסכו\nהשבוע" },
-          { icon: Users,   color: "#10B981", bg: "#DCFCE7", value: "12",  label: "משמרות\nשובצו" },
-          { icon: Shield,  color: "#8B5CF6", bg: "#EDE9FE", value: "100%",label: "עמידה בחוקי\nעבודה" },
-        ].map(({ icon: Icon, color, bg, value, label }) => (
+          { icon: Clock,  color: "#2563EB", bg: "#DBEAFE", value: "4.2", unit: "שע׳", label: "נחסכו השבוע" },
+          { icon: Users,  color: "#10B981", bg: "#DCFCE7", value: "12",  unit: "",    label: "משמרות שובצו" },
+          { icon: Shield, color: "#8B5CF6", bg: "#EDE9FE", value: "100%",unit: "",    label: "עמידה בחוק" },
+        ].map(({ icon: Icon, color, bg, value, unit, label }) => (
           <div
-            key={value}
-            className="flex-1 bg-white rounded-2xl p-3 flex items-center gap-3"
-            style={{ boxShadow: "0 8px 24px rgba(15,23,42,0.10)" }}
+            key={label}
+            className="flex-1 bg-white rounded-2xl px-3 py-3 flex items-center gap-2.5"
+            style={{
+              boxShadow: "0 8px 24px rgba(15,23,42,0.08), 0 2px 8px rgba(15,23,42,0.04)",
+              border: "1px solid rgba(226,232,240,0.6)",
+            }}
           >
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: bg }}>
+            <div
+              className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+              style={{ background: bg }}
+            >
               <Icon className="h-4 w-4" style={{ color }} />
             </div>
             <div>
-              <div className="text-lg font-black leading-none" style={{ color }}>{value}</div>
-              <div className="text-[9px] text-[#94A3B8] mt-0.5 whitespace-pre-line leading-tight">{label}</div>
+              <div className="text-base font-black leading-none" style={{ color }}>
+                {value}
+                <span className="text-[10px] font-semibold ms-0.5 opacity-70">{unit}</span>
+              </div>
+              <div className="text-[9px] text-[#94A3B8] mt-0.5 leading-tight">{label}</div>
             </div>
           </div>
         ))}
@@ -118,6 +192,7 @@ function DashboardMockup() {
 
 export function Hero() {
   const [videoOpen, setVideoOpen] = useState(false);
+  const reduceMotion = useReducedMotion();
 
   const trustItems = [
     "ללא כרטיס אשראי",
@@ -130,66 +205,108 @@ export function Hero() {
     <section
       className="relative overflow-hidden"
       style={{
-        background:
-          "radial-gradient(ellipse 80% 60% at 75% 10%, rgba(37,99,235,0.07) 0%, transparent 60%)," +
-          "radial-gradient(ellipse 60% 50% at 20% 90%, rgba(6,182,212,0.06) 0%, transparent 55%)," +
-          "#F0F4FF",
+        background: "linear-gradient(160deg, #EEF2FF 0%, #F0F9FF 45%, #F8FAFC 100%)",
+        minHeight: "calc(100vh - 72px)",
+        display: "flex",
+        alignItems: "center",
       }}
     >
-      {/* Subtle dotted pattern */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          backgroundImage: "radial-gradient(circle, rgba(148,163,184,0.4) 1px, transparent 1px)",
-          backgroundSize: "28px 28px",
-          opacity: 0.5,
-        }}
-      />
+      {/* Layered background */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        {/* Mesh orbs */}
+        <div
+          style={{
+            position: "absolute", top: "-10%", right: "-5%",
+            width: "700px", height: "700px", borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(37,99,235,0.06) 0%, transparent 65%)",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute", bottom: "0", left: "10%",
+            width: "500px", height: "500px", borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(6,182,212,0.07) 0%, transparent 65%)",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute", top: "30%", left: "25%",
+            width: "400px", height: "400px", borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(139,92,246,0.04) 0%, transparent 65%)",
+          }}
+        />
 
-      {/* Decorative arc lines */}
-      <svg
-        aria-hidden
-        className="pointer-events-none absolute end-0 top-0 h-full"
-        style={{ width: "55%", opacity: 0.07 }}
-        viewBox="0 0 900 800"
-        fill="none"
-        preserveAspectRatio="xMidYMid slice"
-      >
-        <path d="M 900 0 Q 450 200 700 400 Q 950 600 450 800" stroke="#2563EB" strokeWidth="2.5" />
-        <path d="M 950 80 Q 550 280 750 480 Q 950 680 550 880" stroke="#06B6D4" strokeWidth="2" />
-        <path d="M 800 -50 Q 350 150 600 350 Q 850 550 350 750" stroke="#8B5CF6" strokeWidth="1.5" />
-      </svg>
+        {/* Refined dot grid */}
+        <div
+          style={{
+            position: "absolute", inset: 0,
+            backgroundImage: "radial-gradient(circle, rgba(148,163,184,0.35) 1px, transparent 1px)",
+            backgroundSize: "32px 32px",
+          }}
+        />
 
-      <div className="relative mx-auto max-w-[1400px] px-6 pt-[120px] pb-[160px]">
-        <div className="flex flex-col lg:flex-row items-center gap-16 lg:gap-20">
+        {/* Decorative arcs — echo the schedule grid concept */}
+        <svg
+          className="absolute end-0 top-0 h-full"
+          style={{ width: "52%", opacity: 0.06 }}
+          viewBox="0 0 800 900"
+          fill="none"
+          preserveAspectRatio="xMidYMid slice"
+        >
+          <path
+            d="M800 0 C600 100 700 300 500 400 C300 500 400 700 200 800"
+            stroke="#2563EB" strokeWidth="2.5" fill="none"
+          />
+          <path
+            d="M900 100 C700 200 800 400 600 500 C400 600 500 800 300 900"
+            stroke="#06B6D4" strokeWidth="1.5" fill="none"
+          />
+          <ellipse cx="750" cy="300" rx="200" ry="200" stroke="#8B5CF6" strokeWidth="1" fill="none" opacity="0.5" />
+          <ellipse cx="700" cy="300" rx="320" ry="320" stroke="#2563EB" strokeWidth="0.5" fill="none" opacity="0.4" />
+        </svg>
+      </div>
 
-          {/* RIGHT column — copy (first in RTL DOM = right visually) */}
-          <div className="flex-1 text-center lg:text-start">
+      <div className="relative mx-auto max-w-[1400px] px-6 w-full py-20 lg:py-0">
+        <div className="flex flex-col lg:flex-row items-center gap-16 lg:gap-12 lg:min-h-[calc(100vh-72px)]">
+
+          {/* RIGHT: Copy (first in RTL DOM = right visually) */}
+          <div className="flex-1 text-center lg:text-start lg:py-24">
 
             {/* Israel badge */}
             <motion.div
-              initial={{ opacity: 0, y: -8 }}
+              initial={{ opacity: 0, y: -12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="inline-flex items-center gap-2.5 bg-white border border-[#E2E8F0] rounded-full px-4 py-2 text-sm font-medium text-[#0F172A] shadow-sm"
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="inline-flex items-center gap-2.5 rounded-full px-4 py-2 text-sm font-medium text-[#334155] mb-6"
+              style={{
+                background: "rgba(255,255,255,0.8)",
+                backdropFilter: "blur(12px)",
+                border: "1px solid rgba(226,232,240,0.8)",
+                boxShadow: "0 2px 12px rgba(37,99,235,0.08), inset 0 1px 0 rgba(255,255,255,0.9)",
+              }}
             >
               <span className="text-base" role="img" aria-label="דגל ישראל">🇮🇱</span>
               <span>נבנה במיוחד לעסקים בישראל</span>
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"
+                style={{ boxShadow: "0 0 6px rgba(52,211,153,0.8)" }}
+              />
             </motion.div>
 
             {/* Headline */}
             <motion.h1
-              initial={{ opacity: 0, y: 12 }}
+              initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1, duration: 0.6 }}
-              className="mt-6 font-black text-[#0F172A] leading-[0.95]"
-              style={{ fontSize: "clamp(2.8rem, 5vw, 4.5rem)", maxWidth: "700px" }}
+              transition={{ delay: 0.1, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+              className="font-black text-[#0F172A] leading-[0.92] tracking-tight"
+              style={{ fontSize: "clamp(3rem, 5.5vw, 5rem)", maxWidth: "680px" }}
             >
               סידורי עבודה{" "}
               <span
                 className="bg-clip-text text-transparent"
-                style={{ backgroundImage: "linear-gradient(to left, #2563EB, #06B6D4)" }}
+                style={{
+                  backgroundImage: "linear-gradient(90deg, #2563EB 0%, #06B6D4 100%)",
+                }}
               >
                 חכמים
               </span>
@@ -199,45 +316,60 @@ export function Hero() {
 
             {/* Subtitle */}
             <motion.p
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2, duration: 0.6 }}
-              className="mt-6 text-lg text-[#64748B] leading-relaxed"
-              style={{ maxWidth: "640px" }}
+              className="mt-6 text-lg text-[#64748B] leading-[1.75]"
+              style={{ maxWidth: "560px" }}
             >
-              סידור4S חוסך למנהלים 4–6 שעות בשבוע עם שיבוץ אוטומטי שמתחשב בזמינות עובדים,
-              חוקי עבודה, העדפות ומשמרות פתוחות.
+              סידור4S חוסך למנהלים{" "}
+              <span className="font-semibold text-[#0F172A]">4–6 שעות בשבוע</span>{" "}
+              עם שיבוץ אוטומטי שמתחשב בזמינות עובדים, חוקי עבודה, העדפות ומשמרות פתוחות.
             </motion.p>
 
             {/* CTAs */}
             <motion.div
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3, duration: 0.6 }}
               className="mt-8 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3"
             >
               <Link
                 href="/login"
-                className="inline-flex items-center gap-2 h-14 px-8 rounded-2xl text-white font-semibold text-base transition-all hover:-translate-y-0.5"
+                className="group relative inline-flex items-center gap-2.5 h-14 px-8 rounded-2xl text-white font-bold text-base overflow-hidden transition-all hover:-translate-y-0.5"
                 style={{
-                  background: "linear-gradient(to left, #2563EB, #06B6D4)",
-                  boxShadow: "0 8px 24px rgba(37,99,235,0.35)",
+                  background: "linear-gradient(135deg, #2563EB 0%, #06B6D4 100%)",
+                  boxShadow: "0 8px 28px rgba(37,99,235,0.38), 0 2px 8px rgba(37,99,235,0.2)",
                 }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "0 12px 32px rgba(37,99,235,0.45)"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 24px rgba(37,99,235,0.35)"; }}
               >
-                <span>התחל חינם</span>
-                <ArrowLeft className="h-4 w-4" />
+                {/* Shimmer sweep on hover */}
+                <span
+                  className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                  style={{
+                    background:
+                      "linear-gradient(105deg, transparent 35%, rgba(255,255,255,0.28) 50%, transparent 65%)",
+                  }}
+                />
+                <span className="relative">התחל חינם</span>
+                <ArrowLeft className="h-4 w-4 relative transition-transform group-hover:-translate-x-0.5" />
               </Link>
 
               <button
                 type="button"
                 onClick={() => setVideoOpen(true)}
-                className="inline-flex items-center gap-3 h-14 px-8 rounded-2xl bg-white border border-[#E2E8F0] text-[#0F172A] font-medium text-base transition-all hover:-translate-y-0.5 hover:shadow-md"
-                style={{ boxShadow: "0 2px 8px rgba(15,23,42,0.06)" }}
+                className="inline-flex items-center gap-3 h-14 px-7 rounded-2xl text-[#334155] font-medium text-base transition-all hover:-translate-y-0.5 hover:shadow-lg"
+                style={{
+                  background: "rgba(255,255,255,0.8)",
+                  backdropFilter: "blur(12px)",
+                  border: "1px solid rgba(226,232,240,0.8)",
+                  boxShadow: "0 2px 10px rgba(15,23,42,0.06)",
+                }}
               >
-                <div className="w-7 h-7 bg-[#F1F5F9] rounded-full flex items-center justify-center">
-                  <Play className="h-3.5 w-3.5 text-[#0F172A] fill-current" />
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center"
+                  style={{ background: "linear-gradient(135deg, #F1F5F9, #E2E8F0)" }}
+                >
+                  <Play className="h-3.5 w-3.5 text-[#334155] fill-current" />
                 </div>
                 <span>צפה בדמו (60 שניות)</span>
               </button>
@@ -247,8 +379,8 @@ export function Hero() {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.45, duration: 0.6 }}
-              className="mt-6 flex flex-wrap items-center justify-center lg:justify-start gap-x-6 gap-y-3"
+              transition={{ delay: 0.45, duration: 0.7 }}
+              className="mt-7 flex flex-wrap items-center justify-center lg:justify-start gap-x-6 gap-y-2.5"
             >
               {trustItems.map((item) => (
                 <div key={item} className="flex items-center gap-2">
@@ -259,10 +391,16 @@ export function Hero() {
             </motion.div>
           </div>
 
-          {/* LEFT column — dashboard (second in RTL DOM = left visually) */}
-          <div className="hidden lg:flex shrink-0 items-center justify-center" aria-hidden>
+          {/* LEFT: Dashboard (second in RTL DOM = left visually) */}
+          <motion.div
+            initial={{ opacity: 0, x: reduceMotion ? 0 : -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2, duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+            className="hidden lg:flex shrink-0 items-center justify-center lg:py-24"
+            aria-hidden
+          >
             <DashboardMockup />
-          </div>
+          </motion.div>
 
         </div>
       </div>

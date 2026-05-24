@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
 import { Hero } from "@/components/marketing/Hero";
-import { CustomerLogos } from "@/components/marketing/CustomerLogos";
 import { Features } from "@/components/marketing/Features";
 import { SocialProof } from "@/components/marketing/SocialProof";
 import { Testimonials } from "@/components/marketing/Testimonials";
@@ -67,7 +66,6 @@ export default function LandingPage() {
         </div>
       </header>
       <Hero />
-      <CustomerLogos />
       <Features />
       <SocialProof />
       <Testimonials />
