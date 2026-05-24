@@ -93,6 +93,10 @@ export async function quickBootstrap(
         },
       });
 
+      // Set RLS context so all subsequent inserts in this transaction pass
+      // the tenant_isolation policies (organizationId = current_setting(...)).
+      await tx.$executeRawUnsafe(`SET LOCAL app.current_org_id = '${org.id}'`);
+
       await tx.membership.create({
         data: { userId, organizationId: org.id, role: 'OWNER' },
       });
