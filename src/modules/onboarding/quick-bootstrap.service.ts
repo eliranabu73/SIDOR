@@ -185,7 +185,7 @@ export async function quickBootstrap(
 
       return { organizationId: org.id, scheduleId: schedule.id };
     },
-    { timeout: 30_000 },
+    { timeout: 14_000 },
   );
 
   // Best-effort auto-schedule outside the bootstrap transaction. Failure here
