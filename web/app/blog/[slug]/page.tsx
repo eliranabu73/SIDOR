@@ -54,7 +54,7 @@ export default async function BlogPostPage({ params }: PageProps) {
     publisher: {
       "@type": "Organization",
       name: "סידור4S",
-      logo: { "@type": "ImageObject", url: "/logo-full.png" },
+      logo: { "@type": "ImageObject", url: "/logo2.png" },
     },
     mainEntityOfPage: {
       "@type": "WebPage",

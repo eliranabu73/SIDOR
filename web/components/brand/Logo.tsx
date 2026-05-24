@@ -26,7 +26,7 @@ export function Logo({ size = 28, withWordmark = true, className }: LogoProps) {
   return (
     <span className={`inline-flex items-center ${className ?? ""}`}>
       <Image
-        src="/logo-full.png"
+        src="/logo2.png"
         alt="sidor4S"
         width={w}
         height={h}
