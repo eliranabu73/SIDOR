@@ -117,7 +117,7 @@ export function Footer() {
                 placeholder="you@email.co.il"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="flex-1"
+                className="flex-1 bg-white border-[#E2E8F0] text-[#0F172A] placeholder:text-[#94A3B8]"
               />
               <Button type="submit" size="sm">
                 הירשם

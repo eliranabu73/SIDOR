@@ -35,7 +35,7 @@ function DashboardMockup() {
   ];
 
   return (
-    <div className="relative" style={{ paddingBottom: "88px" }}>
+    <div className="relative">
       {/* Soft glow ring behind card */}
       <div
         aria-hidden
@@ -124,6 +124,38 @@ function DashboardMockup() {
             </div>
           ))}
         </div>
+
+        {/* Stat cards — inside card, full-width, no overflow */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="mt-4 pt-4 border-t border-[#F1F5F9] grid grid-cols-3 gap-2"
+        >
+          {[
+            { icon: Clock,  color: "#2563EB", bg: "#DBEAFE", value: "4.2", unit: "שע׳", label: "נחסכו השבוע" },
+            { icon: Users,  color: "#10B981", bg: "#DCFCE7", value: "12",  unit: "",    label: "משמרות שובצו" },
+            { icon: Shield, color: "#8B5CF6", bg: "#EDE9FE", value: "100%",unit: "",    label: "עמידה בחוק" },
+          ].map(({ icon: Icon, color, bg, value, unit, label }) => (
+            <div
+              key={label}
+              className="bg-[#F8FAFC] rounded-xl p-2.5 flex flex-col items-center text-center gap-1"
+              style={{ border: "1px solid rgba(226,232,240,0.6)" }}
+            >
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center"
+                style={{ background: bg }}
+              >
+                <Icon className="h-3.5 w-3.5" style={{ color }} />
+              </div>
+              <div className="text-[13px] font-black leading-none" style={{ color }}>
+                {value}
+                {unit && <span className="text-[10px] font-semibold ms-0.5 opacity-70">{unit}</span>}
+              </div>
+              <div className="text-[10px] text-[#64748B] leading-tight">{label}</div>
+            </div>
+          ))}
+        </motion.div>
       </motion.div>
 
       {/* Floating badge — top inline-start (= top-right visually in RTL) */}
@@ -144,43 +176,6 @@ function DashboardMockup() {
             <div className="text-[10px] text-white/60 mt-0.5">חכם ומדויק</div>
           </div>
         </div>
-      </motion.div>
-
-      {/* Bottom stat cards */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.7, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="absolute bottom-0 start-4 end-4 flex gap-3"
-      >
-        {[
-          { icon: Clock,  color: "#2563EB", bg: "#DBEAFE", value: "4.2", unit: "שע׳", label: "נחסכו השבוע" },
-          { icon: Users,  color: "#10B981", bg: "#DCFCE7", value: "12",  unit: "",    label: "משמרות שובצו" },
-          { icon: Shield, color: "#8B5CF6", bg: "#EDE9FE", value: "100%",unit: "",    label: "עמידה בחוק" },
-        ].map(({ icon: Icon, color, bg, value, unit, label }) => (
-          <div
-            key={label}
-            className="flex-1 bg-white rounded-2xl px-3 py-3 flex items-center gap-2.5"
-            style={{
-              boxShadow: "0 8px 24px rgba(15,23,42,0.08), 0 2px 8px rgba(15,23,42,0.04)",
-              border: "1px solid rgba(226,232,240,0.6)",
-            }}
-          >
-            <div
-              className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: bg }}
-            >
-              <Icon className="h-4 w-4" style={{ color }} />
-            </div>
-            <div>
-              <div className="text-base font-black leading-none" style={{ color }}>
-                {value}
-                <span className="text-[11px] font-semibold ms-0.5 opacity-70">{unit}</span>
-              </div>
-              <div className="text-[11px] text-[#475569] mt-0.5 leading-tight">{label}</div>
-            </div>
-          </div>
-        ))}
       </motion.div>
     </div>
   );
