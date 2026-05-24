@@ -206,6 +206,7 @@ model Organization {
   memberships    Membership[]
   messageDeliveries MessageDelivery[]
   tipPools       TipPool[]
+  timeEntries    TimeEntry[]
 
   @@map("organizations")
 }
@@ -333,6 +334,7 @@ model Employee {
   candidates        SchedulingCandidate[]
   messageDeliveries MessageDelivery[]
   tipDistributions  TipDistribution[]
+  timeEntries       TimeEntry[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -847,4 +849,35 @@ model TipDistribution {
   @@unique([tipPoolId, employeeId])
   @@index([employeeId])
   @@map("tip_distributions")
+}
+
+// =========================================================
+// Time Tracking (שעון נוכחות)
+// =========================================================
+
+/// One row per clock-in event. clockOutAt = NULL means the employee is
+/// currently clocked in. source = 'employee' for self-service; 'manager_edit'
+/// when a manager corrects a record.
+model TimeEntry {
+  id                String    @id @default(uuid()) @db.Uuid
+  organizationId    String    @db.Uuid
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId        String    @db.Uuid
+  employee          Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  /// Optional link back to the ShiftAssignment this punch corresponds to.
+  shiftAssignmentId String?   @db.Uuid
+  clockInAt         DateTime
+  clockOutAt        DateTime?
+  clockInLat        Float?
+  clockInLng        Float?
+  clockOutLat       Float?
+  clockOutLng       Float?
+  note              String?
+  /// 'employee' = self-service punch; 'manager_edit' = manager correction.
+  source            String    @default("employee")
+  createdAt         DateTime  @default(now())
+
+  @@index([organizationId, employeeId])
+  @@index([organizationId, clockInAt])
+  @@map("time_entries")
 }

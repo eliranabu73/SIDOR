@@ -33,6 +33,7 @@ import { adminRoutes } from './modules/admin/admin.routes';
 import { payrollRoutes } from './modules/payroll/payroll.routes';
 import { timeoffRoutes } from './modules/timeoff/timeoff.routes';
 import { tipsRoutes } from './modules/tips/tips.routes';
+import { timetrackingRoutes } from './modules/timetracking/timetracking.routes';
 
 export async function buildApp(): Promise<FastifyInstance> {
   // Initialise Sentry first so errors during boot get captured.
@@ -137,6 +138,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(payrollRoutes, { prefix: '/v1' });
   await app.register(timeoffRoutes, { prefix: '/v1' });
   await app.register(tipsRoutes, { prefix: '/v1' });
+  await app.register(timetrackingRoutes, { prefix: '/v1' });
   await app.register(realtimeRoutes);
 
   return app;

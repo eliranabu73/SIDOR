@@ -24,12 +24,18 @@ export interface PayrollRow {
   totalGrossILS: number;
   /** Sum of tip distributions for this employee in the payroll period (agorot → ILS in export). */
   tipsAgorot: number;
+  /** Actual minutes worked according to time-tracking punches (0 = no punches recorded). */
+  actualMinutes: number;
+  /** Scheduled minutes derived from confirmed shift assignments. */
+  scheduledMinutes: number;
 }
 
 export const HILAN_HEADERS = [
   'מספר עובד',
   'שם פרטי',
   'שם משפחה',
+  'שעות בפועל',
+  'שעות מתוכננות',
   'סה״כ שעות רגילות',
   'שעות נוספות 125%',
   'שעות נוספות 150%',
@@ -41,6 +47,8 @@ export const HILAN_HEADERS = [
 export const STANDARD_HEADERS = [
   'שם מלא',
   'תעודת זהות',
+  'שעות בפועל',
+  'שעות מתוכננות',
   'סה״כ שעות',
   'שעות רגילות',
   'שעות נוספות 125%',
@@ -56,6 +64,8 @@ export function toHilanRow(row: PayrollRow): Record<string, string> {
     'מספר עובד': row.idNumber,
     'שם פרטי': row.firstName,
     'שם משפחה': row.lastName,
+    'שעות בפועל': (row.actualMinutes / 60).toFixed(2),
+    'שעות מתוכננות': (row.scheduledMinutes / 60).toFixed(2),
     'סה״כ שעות רגילות': row.regularHours.toFixed(2),
     'שעות נוספות 125%': row.ot125Hours.toFixed(2),
     'שעות נוספות 150%': row.ot150Hours.toFixed(2),
@@ -70,6 +80,8 @@ export function toStandardRow(row: PayrollRow): Record<string, string> {
   return {
     'שם מלא': row.fullName,
     'תעודת זהות': row.idNumber,
+    'שעות בפועל': (row.actualMinutes / 60).toFixed(2),
+    'שעות מתוכננות': (row.scheduledMinutes / 60).toFixed(2),
     'סה״כ שעות': row.totalHours.toFixed(2),
     'שעות רגילות': row.regularHours.toFixed(2),
     'שעות נוספות 125%': row.ot125Hours.toFixed(2),

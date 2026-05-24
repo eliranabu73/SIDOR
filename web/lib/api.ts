@@ -1308,6 +1308,119 @@ export async function fetchTimeOffForEmployee(
   }
 }
 
+// --------- Time Tracking (שעון נוכחות) ---------
+
+export interface TimetrackingStatusResponse {
+  clockedIn: boolean;
+  clockInAt: string | null;
+  employeeId?: string | null;
+  employeeName?: string | null;
+  shiftAssignmentId?: string | null;
+}
+
+export interface TimetrackingClockResponse {
+  id: string;
+  clockedIn: boolean;
+  clockInAt: string | null;
+  clockOutAt: string | null;
+}
+
+export interface TimeEntry {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  clockInAt: string;
+  clockOutAt: string | null;
+  durationMinutes: number | null;
+  shiftAssignmentId: string | null;
+  scheduledStartAt: string | null;
+  scheduledEndAt: string | null;
+  scheduledMinutes: number | null;
+  note: string | null;
+}
+
+export interface LiveClockStatus {
+  employeeId: string;
+  employeeName: string;
+  clockInAt: string;
+}
+
+export interface TimetrackingLiveResponse {
+  count: number;
+  employees: LiveClockStatus[];
+}
+
+export function clockIn(body: {
+  shiftAssignmentId?: string;
+  note?: string;
+}): Promise<TimetrackingClockResponse> {
+  return request<TimetrackingClockResponse>(`/v1/timetracking/clock-in`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function clockOut(): Promise<TimetrackingClockResponse> {
+  return request<TimetrackingClockResponse>(`/v1/timetracking/clock-out`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export function fetchTimetrackingStatus(): Promise<TimetrackingStatusResponse> {
+  return request<TimetrackingStatusResponse>(`/v1/timetracking/status`);
+}
+
+export function fetchTimeEntries(
+  from: string,
+  to: string,
+  employeeId?: string,
+): Promise<TimeEntry[]> {
+  const params = new URLSearchParams({
+    from,
+    to,
+    ...(employeeId ? { employeeId } : {}),
+  });
+  return request<TimeEntry[]>(`/v1/timetracking/entries?${params}`);
+}
+
+export function fetchTimetrackingLive(): Promise<TimetrackingLiveResponse> {
+  return request<TimetrackingLiveResponse>(`/v1/timetracking/live`);
+}
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
+
+export interface TokenClockStatus {
+  clockedIn: boolean;
+  clockInAt: string | null;
+}
+
+export async function tokenClockIn(token: string): Promise<TokenClockStatus> {
+  const r = await fetch(
+    `${API_BASE}/v1/timetracking/token/${encodeURIComponent(token)}/clock-in`,
+    { method: "POST" },
+  );
+  return r.json() as Promise<TokenClockStatus>;
+}
+
+export async function tokenClockOut(token: string): Promise<TokenClockStatus> {
+  const r = await fetch(
+    `${API_BASE}/v1/timetracking/token/${encodeURIComponent(token)}/clock-out`,
+    { method: "POST" },
+  );
+  return r.json() as Promise<TokenClockStatus>;
+}
+
+export async function fetchTokenClockStatus(
+  token: string,
+): Promise<TokenClockStatus> {
+  const r = await fetch(
+    `${API_BASE}/v1/timetracking/token/${encodeURIComponent(token)}/status`,
+  );
+  return r.json() as Promise<TokenClockStatus>;
+}
+
 // --------- Tips (חוק הטיפים 2022) ---------
 
 export interface TipDistributionItem {

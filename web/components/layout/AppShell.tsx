@@ -7,6 +7,7 @@ import {
   ArrowLeftRight,
   CalendarDays,
   CircleDollarSign,
+  Clock,
   Scale,
   Settings,
   ShieldCheck,
@@ -48,6 +49,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { href: "/swaps", label: "החלפות", icon: <ArrowLeftRight className="h-5 w-5" /> },
     { href: "/fairness", label: "הוגנות", icon: <Scale className="h-5 w-5" /> },
     { href: "/tips", label: "חלוקת טיפים", icon: <CircleDollarSign className="h-5 w-5" /> },
+    { href: "/timetracking", label: "נוכחות", icon: <Clock className="h-5 w-5" /> },
     { href: "/settings", label: "הגדרות", icon: <Settings className="h-5 w-5" /> },
   ];
 

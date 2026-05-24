@@ -7,6 +7,7 @@ import {
   toStandardRow,
   type PayrollRow,
 } from './hilan-adapter.service';
+import { computeActualMinutes } from '../timetracking/timetracking.service';
 
 /**
  * Israeli minimum wage (gross) — used as fallback when an employee has no
@@ -110,6 +111,8 @@ interface AggregateAccumulator {
   ot150Min: number;
   weekendMin: number;
   tipsAgorot: number;
+  /** Total scheduled minutes (from shift assignments). */
+  scheduledMinutes: number;
 }
 
 /**
@@ -206,6 +209,7 @@ export async function generatePayrollExport(
         ot150Min: 0,
         weekendMin: 0,
         tipsAgorot: 0,
+        scheduledMinutes: 0,
       };
       byEmp.set(emp.id, acc);
     }
@@ -213,6 +217,7 @@ export async function generatePayrollExport(
     acc.ot125Min += ot125;
     acc.ot150Min += ot150;
     acc.weekendMin += weekend;
+    acc.scheduledMinutes += shiftMin;
   }
 
   // Fetch tip distributions for all employees in the period (Israeli Tip Law 2022).
@@ -238,12 +243,50 @@ export async function generatePayrollExport(
     }
   }
 
+  // Fetch actual worked minutes from time-tracking punches for every employee
+  // who has scheduled shifts in this period.
+  const employeeIds = Array.from(byEmp.keys());
+  const actualMinutesMap = new Map<string, number>();
+
+  if (employeeIds.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const timeEntries = await (db as any).timeEntry.findMany({
+      where: {
+        organizationId: orgId,
+        employeeId: { in: employeeIds },
+        clockInAt: { gte: periodStart, lte: periodEnd },
+        clockOutAt: { not: null },
+      },
+      select: {
+        employeeId: true,
+        clockInAt: true,
+        clockOutAt: true,
+      },
+    }) as Array<{ employeeId: string; clockInAt: Date; clockOutAt: Date | null }>;
+
+    for (const empId of employeeIds) {
+      const empEntries = timeEntries.filter((e) => e.employeeId === empId);
+      actualMinutesMap.set(empId, computeActualMinutes(empEntries));
+    }
+  }
+
   const rawRows: PayrollRow[] = Array.from(byEmp.values())
     .sort((a, b) => a.fullName.localeCompare(b.fullName, 'he'))
     .map((acc) => {
-      const regularH = acc.regularMin / 60;
-      const ot125H = acc.ot125Min / 60;
-      const ot150H = acc.ot150Min / 60;
+      const actualMinutes = actualMinutesMap.get(acc.employeeId) ?? 0;
+
+      // Use actual punched minutes when available; fall back to scheduled minutes.
+      const billableMinutes = actualMinutes > 0 ? actualMinutes : acc.scheduledMinutes;
+
+      // Re-compute overtime tiers from billable minutes so the CSV reflects
+      // the actual (punched) hours rather than the scheduled plan.
+      const regularMin = Math.min(billableMinutes, REGULAR_MINUTES_PER_DAY);
+      const ot125Min = Math.max(0, Math.min(billableMinutes, TIER_125_CAP_MINUTES) - REGULAR_MINUTES_PER_DAY);
+      const ot150Min = Math.max(0, billableMinutes - TIER_125_CAP_MINUTES);
+
+      const regularH = regularMin / 60;
+      const ot125H = ot125Min / 60;
+      const ot150H = ot150Min / 60;
       const weekendH = acc.weekendMin / 60;
       const totalH = regularH + ot125H + ot150H;
       const gross =
@@ -266,6 +309,8 @@ export async function generatePayrollExport(
         weekendHours: round2(weekendH),
         totalGrossILS: round2(gross),
         tipsAgorot: acc.tipsAgorot,
+        actualMinutes,
+        scheduledMinutes: acc.scheduledMinutes,
       };
     });
 

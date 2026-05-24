@@ -8,6 +8,8 @@ import {
   CalendarDays,
   Clock,
   Download,
+  LogIn,
+  LogOut as LogOutIcon,
   MapPin,
   Plane,
   ShieldAlert,
@@ -24,6 +26,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import {
+  fetchTokenClockStatus,
+  tokenClockIn,
+  tokenClockOut,
+  type TokenClockStatus,
+} from "@/lib/api";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
@@ -209,6 +217,9 @@ function PortalContent({
 
   return (
     <div className="space-y-4">
+      {/* Clock widget */}
+      <ClockWidget token={token} />
+
       {/* Header card */}
       <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
         <div className="text-xs text-muted-foreground">שלום</div>
@@ -316,6 +327,167 @@ function PortalContent({
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Clock Widget
+// ---------------------------------------------------------------------------
+
+function formatElapsed(clockInAt: string): string {
+  const start = new Date(clockInAt).getTime();
+  const elapsed = Math.max(0, Math.floor((Date.now() - start) / 1000));
+  const h = Math.floor(elapsed / 3600);
+  const m = Math.floor((elapsed % 3600) / 60);
+  const s = elapsed % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function ClockWidget({ token }: { token: string }) {
+  const [status, setStatus] = React.useState<TokenClockStatus | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [mutating, setMutating] = React.useState(false);
+  const [elapsed, setElapsed] = React.useState("00:00:00");
+
+  // Load initial status
+  React.useEffect(() => {
+    let cancelled = false;
+    fetchTokenClockStatus(token)
+      .then((s) => {
+        if (!cancelled) setStatus(s);
+      })
+      .catch(() => {
+        /* silent — widget stays hidden */
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  // Elapsed timer
+  React.useEffect(() => {
+    if (!status?.clockedIn || !status.clockInAt) return;
+    setElapsed(formatElapsed(status.clockInAt));
+    const id = setInterval(() => {
+      setElapsed(formatElapsed(status.clockInAt!));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [status?.clockedIn, status?.clockInAt]);
+
+  const handleClockIn = async () => {
+    if (mutating) return;
+    setMutating(true);
+    try {
+      const updated = await tokenClockIn(token);
+      setStatus(updated);
+    } catch {
+      toast.error("שגיאה בדיווח כניסה");
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  const handleClockOut = async () => {
+    if (mutating) return;
+    setMutating(true);
+    try {
+      const updated = await tokenClockOut(token);
+      setStatus(updated);
+    } catch {
+      toast.error("שגיאה בדיווח יציאה");
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  if (loading) {
+    return <Skeleton className="h-36 rounded-2xl" />;
+  }
+
+  // If API not available (status null) — hide widget gracefully
+  if (!status) return null;
+
+  const clockedIn = status.clockedIn;
+  const clockInAt = status.clockInAt
+    ? DateTime.fromISO(status.clockInAt).setLocale("he").toFormat("HH:mm")
+    : null;
+
+  return (
+    <section
+      className={`rounded-2xl border p-5 shadow-sm transition-colors ${
+        clockedIn
+          ? "border-emerald-500/30 bg-emerald-500/5"
+          : "border-border bg-card"
+      }`}
+    >
+      <div className="mb-4 flex items-center gap-2">
+        <Clock
+          className={`h-5 w-5 ${clockedIn ? "text-emerald-500" : "text-muted-foreground"}`}
+        />
+        <h2 className="text-sm font-semibold">שעון נוכחות</h2>
+        {clockedIn ? (
+          <span className="ms-auto inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            </span>
+            במשמרת
+          </span>
+        ) : (
+          <span className="ms-auto text-xs text-muted-foreground">לא מחובר</span>
+        )}
+      </div>
+
+      {clockedIn && clockInAt ? (
+        <div className="mb-4 text-center">
+          <div className="tabular-nums text-3xl font-bold text-emerald-600 dark:text-emerald-400">
+            {elapsed}
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            מאז כניסה בשעה {clockInAt}
+          </div>
+        </div>
+      ) : null}
+
+      {clockedIn ? (
+        <Button
+          onClick={handleClockOut}
+          disabled={mutating}
+          className="h-16 w-full rounded-xl bg-rose-500 text-base font-bold hover:bg-rose-600 active:scale-95 transition-transform disabled:opacity-60"
+        >
+          {mutating ? (
+            <span className="animate-pulse">מעדכן…</span>
+          ) : (
+            <>
+              <LogOutIcon className="me-2 h-5 w-5" />
+              יציאה ממשמרת
+            </>
+          )}
+        </Button>
+      ) : (
+        <Button
+          onClick={handleClockIn}
+          disabled={mutating}
+          className="h-16 w-full rounded-xl bg-emerald-500 text-base font-bold hover:bg-emerald-600 active:scale-95 transition-transform disabled:opacity-60"
+        >
+          {mutating ? (
+            <span className="animate-pulse">מעדכן…</span>
+          ) : (
+            <>
+              <LogIn className="me-2 h-5 w-5" />
+              כניסה למשמרת
+            </>
+          )}
+        </Button>
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Stat Card
+// ---------------------------------------------------------------------------
 
 function StatCard({
   label,

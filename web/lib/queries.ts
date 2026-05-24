@@ -8,6 +8,8 @@ import {
 } from "@tanstack/react-query";
 import {
   applyProposals,
+  clockIn,
+  clockOut,
   createEmployee,
   createLocation,
   createRole,
@@ -17,6 +19,9 @@ import {
   fetchLocations,
   fetchRoles,
   fetchSchedule,
+  fetchTimeEntries,
+  fetchTimetrackingLive,
+  fetchTimetrackingStatus,
   patchAssignment,
   publishSchedule,
   runAutoSchedule,
@@ -28,6 +33,9 @@ import {
   type EmployeeSummary,
   type LocationItem,
   type RoleItem,
+  type TimeEntry,
+  type TimetrackingLiveResponse,
+  type TimetrackingStatusResponse,
   type UpdateEmployeeBody,
 } from "./api";
 import { buildMockSchedule, mockEmployees, mockMetrics } from "./mocks";
@@ -319,5 +327,46 @@ export function usePublishSchedule() {
       return publishSchedule(scheduleId);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["schedule"] }),
+  });
+}
+
+// --------- Time Tracking hooks ---------
+
+export function useTimetrackingStatus() {
+  return useQuery<TimetrackingStatusResponse>({
+    queryKey: ["timetracking", "status"],
+    queryFn: fetchTimetrackingStatus,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useTimetrackingLive() {
+  return useQuery<TimetrackingLiveResponse>({
+    queryKey: ["timetracking", "live"],
+    queryFn: fetchTimetrackingLive,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useTimeEntries(from: string, to: string) {
+  return useQuery<TimeEntry[]>({
+    queryKey: ["timetracking", "entries", from, to],
+    queryFn: () => fetchTimeEntries(from, to),
+  });
+}
+
+export function useClockIn() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: clockIn,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["timetracking"] }),
+  });
+}
+
+export function useClockOut() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: clockOut,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["timetracking"] }),
   });
 }
