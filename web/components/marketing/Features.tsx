@@ -77,8 +77,8 @@ export function Features() {
     <section className="py-20 px-4 max-w-6xl mx-auto">
       {/* Section heading */}
       <div className="text-center mb-12">
-        <h2 className="text-3xl font-bold text-foreground">הכל במקום אחד</h2>
-        <p className="mt-3 text-muted-foreground text-base max-w-xl mx-auto">
+        <h2 className="text-3xl font-bold text-[#0F172A]">הכל במקום אחד</h2>
+        <p className="mt-3 text-[#64748B] text-base max-w-xl mx-auto">
           כל מה שמנהל זקוק לו כדי לבנות סידור עבודה מקצועי — ללא טבלאות אקסל ועם אפס כפילויות.
         </p>
       </div>
@@ -98,7 +98,7 @@ export function Features() {
                 f.wide ? "bento-wide" : "",
                 f.gradient
                   ? "bg-gradient-to-br from-[#6366F1] to-[#22D3EE] text-white border-transparent shadow-[0_8px_32px_rgb(99_102_241/0.30)]"
-                  : "bg-card border-border hover:border-[#6366F1]/40 hover:shadow-[0_4px_24px_rgb(99_102_241/0.12)]",
+                  : "bg-white border-[#E2E8F0] hover:border-[#6366F1]/40 hover:shadow-[0_4px_24px_rgb(99_102_241/0.12)]",
               ].join(" ")}
             >
               {/* Gradient hero card decorative blob */}
@@ -133,7 +133,7 @@ export function Features() {
               {/* Description */}
               <p
                 className={`text-sm leading-relaxed ${
-                  f.gradient ? "text-white/80" : "text-muted-foreground"
+                  f.gradient ? "text-white/80" : "text-[#64748B]"
                 }`}
               >
                 {f.description}

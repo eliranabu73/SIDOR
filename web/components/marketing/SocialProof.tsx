@@ -28,7 +28,7 @@ function MetricCard({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-60px" }}
       transition={{ duration: reduceMotion ? 0 : 0.5, delay: reduceMotion ? 0 : index * 0.1 }}
-      className="glass-card rounded-2xl p-6 text-center transition-all duration-300 hover:-translate-y-0.5"
+      className="bg-white border border-[#E2E8F0] rounded-2xl p-6 text-center transition-all duration-300 hover:-translate-y-0.5 shadow-sm"
     >
       {started ? (
         <div className="text-4xl font-bold bg-gradient-to-r from-[#6366F1] to-[#22D3EE] bg-clip-text text-transparent tabular-nums">
@@ -37,7 +37,7 @@ function MetricCard({
       ) : (
         <Skeleton className="mx-auto h-10 w-20" />
       )}
-      <div className="mt-2 text-sm text-muted-foreground">{label}</div>
+      <div className="mt-2 text-sm text-[#64748B]">{label}</div>
     </motion.div>
   );
 }
@@ -59,9 +59,9 @@ export function SocialProof() {
   ];
 
   return (
-    <section className="mesh-bg py-20 px-4">
+    <section className="py-20 px-4 bg-[#F8FAFC] border-y border-[#E2E8F0]">
       <div className="max-w-4xl mx-auto">
-        <h2 className="text-center text-2xl font-bold mb-12">מספרים שמדברים</h2>
+        <h2 className="text-center text-2xl font-bold text-[#0F172A] mb-12">מספרים שמדברים</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {metrics.map((m, i) => (
             <MetricCard
