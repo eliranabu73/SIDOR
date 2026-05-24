@@ -104,6 +104,8 @@ function emp(id: string) {
     dateOfBirth: null,
     weeklyRestDay: 'SATURDAY' as const,
     israeliId: null,
+    isPregnant: false,
+    pregnancyWeeks: null,
     isActive: true,
     createdAt: new Date(),
     updatedAt: new Date(),

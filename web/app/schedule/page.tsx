@@ -67,6 +67,7 @@ import {
   useAutoSchedule,
   useEmployeeMetrics,
   useEmployees,
+  useLocations,
   usePublishSchedule,
   useSchedule,
 } from "@/lib/queries";
@@ -110,6 +111,7 @@ function ScheduleInner() {
   );
   const employeesQuery = useEmployees();
   const metricsQuery = useEmployeeMetrics();
+  const locationsQuery = useLocations();
   const autoSchedule = useAutoSchedule();
   const applyProposals = useApplyProposals();
   const publish = usePublishSchedule();
@@ -332,7 +334,7 @@ function ScheduleInner() {
                 aria-label="סינון לפי סניף"
               >
                 <option value="all">כל הסניפים</option>
-                {mockLocations.map((l) => (
+                {(isDemo ? mockLocations : locationsQuery.data ?? []).map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.name}
                   </option>

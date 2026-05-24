@@ -189,6 +189,36 @@ export async function timetrackingRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // -------------------------------------------------------------------------
+  // GET /v1/timetracking/live  — JWT session (manager dashboard live view)
+  // Returns all open (clocked-in) entries for the org with elapsed seconds.
+  // -------------------------------------------------------------------------
+  app.get(
+    '/timetracking/live',
+    { preHandler: authHandlers },
+    async (req) => {
+      const orgId = orgIdFor(req);
+      const openEntries = await prisma.timeEntry.findMany({
+        where: { organizationId: orgId, clockOutAt: null },
+        include: { employee: { select: { id: true, fullName: true } } },
+        orderBy: { clockInAt: 'asc' },
+      });
+      const now = Date.now();
+      return {
+        count: openEntries.length,
+        employees: openEntries.map((e) => ({
+          employeeId: e.employeeId,
+          fullName: e.employee.fullName,
+          clockInAt: e.clockInAt.toISOString(),
+          elapsedSeconds: Math.floor((now - e.clockInAt.getTime()) / 1000),
+          shiftAssignmentId: e.shiftAssignmentId ?? null,
+          lat: e.clockInLat ?? null,
+          lng: e.clockInLng ?? null,
+        })),
+      };
+    },
+  );
+
   // =========================================================================
   // HMAC share-token routes — employee self-service (no JWT)
   // =========================================================================

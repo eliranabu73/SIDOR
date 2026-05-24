@@ -1158,7 +1158,9 @@ export async function getTimeOffRequests(
 ): Promise<TimeOffRequestItem[]> {
   const qs = status ? `?status=${encodeURIComponent(status)}` : "";
   try {
-    return await request<TimeOffRequestItem[]>(`/v1/timeoff${qs}`);
+    // Backend returns { items: [...] } — unwrap for UI consumption.
+    const res = await request<{ items: TimeOffRequestItem[] } | TimeOffRequestItem[]>(`/v1/timeoff${qs}`);
+    return Array.isArray(res) ? res : res.items;
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) return [];
     throw err;

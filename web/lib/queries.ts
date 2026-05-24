@@ -16,6 +16,7 @@ import {
   deleteEmployee,
   fetchEmployees,
   fetchEmployeesSummary,
+  fetchFairness,
   fetchLocations,
   fetchRoles,
   fetchSchedule,
@@ -52,7 +53,8 @@ import type {
   ValidateAssignmentResponse,
 } from "./types";
 
-const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS !== "false";
+// Must be explicitly "true" to show mocks. Absence of the var = real data.
+const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS === "true";
 
 export const queryKeys = {
   schedule: (id: ID, weekStart?: string) =>
@@ -179,7 +181,17 @@ export function useCreateRole() {
 export function useEmployeeMetrics() {
   return useQuery<EmployeeScheduleMetrics[]>({
     queryKey: queryKeys.metrics(),
-    queryFn: async () => mockMetrics,
+    queryFn: async () => {
+      if (USE_MOCKS) return mockMetrics;
+      // Use 1-week fairness window and transform to EmployeeScheduleMetrics shape.
+      const data = await fetchFairness(1);
+      return data.employees.map((e) => ({
+        employeeId: e.employeeId,
+        weeklyAssignedMinutes: Math.round(e.hours * 60),
+        weeklyTargetMinutes: 42 * 60, // IL standard week
+        fairnessScore: e.score,
+      })) as unknown as EmployeeScheduleMetrics[];
+    },
     staleTime: 60_000,
   });
 }

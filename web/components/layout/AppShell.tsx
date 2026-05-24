@@ -126,7 +126,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         aria-label="ניווט תחתון"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <ul className="grid grid-cols-6">
+        <ul className="grid grid-cols-7">
           {nav.map((item) => {
             const active = pathname?.startsWith(item.href);
             return (
