@@ -1,34 +1,31 @@
-const BUSINESSES = [
-  "קפה לוין",
-  "חנות סלולר אורן",
-  "צהרון הפלאי",
-  "מסעדת אגדה",
-  "מוסך גליל",
-  "בית קפה ים",
+const BRANDS = [
+  { name: "Greg Cafe", style: "font-bold tracking-tight", size: "text-lg" },
+  { name: "ארומה", style: "font-black", size: "text-2xl" },
+  { name: "BBB", style: "font-black tracking-widest", size: "text-xl" },
+  { name: "פיצה פרגו", style: "font-bold", size: "text-lg" },
+  { name: "ISRAEL CANADA", style: "font-bold tracking-wider", size: "text-sm" },
+  { name: "מגה בול", style: "font-black", size: "text-xl" },
 ];
 
 export function CustomerLogos() {
   return (
     <section
-      id="customers"
-      className="border-b border-border bg-background"
+      className="bg-white border-b border-[#E2E8F0]"
       aria-label="עסקים שמשתמשים בסידור4S"
     >
-      <div className="mx-auto max-w-6xl px-6 py-12">
-        <p className="text-center text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          עסקים שכבר משתמשים בסידור4S
+      <div className="mx-auto max-w-[1400px] px-6 py-14">
+        <p className="text-center text-sm font-medium text-[#94A3B8] mb-10">
+          מצטרפים לתחושת עבודה חכמה
         </p>
-        <div className="mt-6 -mx-6 overflow-x-auto px-6 sm:mx-0 sm:px-0">
-          <ul className="flex min-w-max items-center justify-start gap-3 sm:min-w-0 sm:flex-wrap sm:justify-center sm:gap-4">
-            {BUSINESSES.map((name) => (
-              <li
-                key={name}
-                className="inline-flex items-center rounded-full border border-border bg-card/60 px-4 py-2 text-sm font-medium text-muted-foreground grayscale transition hover:grayscale-0 hover:text-foreground hover:border-foreground/30"
-              >
-                {name}
-              </li>
-            ))}
-          </ul>
+        <div className="flex items-center justify-center gap-10 lg:gap-16 flex-wrap">
+          {BRANDS.map((brand) => (
+            <span
+              key={brand.name}
+              className={`${brand.size} ${brand.style} text-[#CBD5E1] hover:text-[#94A3B8] transition-colors duration-200 select-none`}
+            >
+              {brand.name}
+            </span>
+          ))}
         </div>
       </div>
     </section>

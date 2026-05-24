@@ -2,183 +2,266 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { motion, useScroll, useTransform, useReducedMotion } from "framer-motion";
-import { ArrowLeft, Sparkles, CheckCircle2, AlertCircle, Play } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { motion } from "framer-motion";
+import { ArrowLeft, Sparkles, CheckCircle2, Play, Clock, Users, Shield } from "lucide-react";
 import { VideoModal } from "./VideoModal";
 
-// Mini schedule preview — realistic-looking shift board
-function SchedulePreview() {
+function DashboardMockup() {
   const days = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳"];
-  const employees = [
-    { name: "ישי כ׳", shifts: [1, 1, 0, 1, 0] },
-    { name: "מיה ל׳", shifts: [0, 1, 1, 1, 0] },
-    { name: "דן א׳", shifts: [1, 0, 1, 0, 1] },
-    { name: "רותם פ׳", shifts: [0, 1, 0, 1, 1] },
+
+  // Color classes for shift blocks — pastel fill style
+  const C = {
+    cyan:   "bg-[#BAE6FD]",
+    green:  "bg-[#BBF7D0]",
+    purple: "bg-[#DDD6FE]",
+    orange: "bg-[#FED7AA]",
+    empty:  "bg-[#F1F5F9]",
+  } as const;
+  type Color = keyof typeof C;
+
+  const employees: { name: string; shifts: Color[] }[] = [
+    { name: "יעל לוי",   shifts: ["purple","purple","empty","cyan","cyan"] },
+    { name: "מיה כהן",   shifts: ["cyan","green","cyan","empty","empty"] },
+    { name: "דן אברמי",  shifts: ["empty","purple","purple","orange","empty"] },
+    { name: "רותם שחר",  shifts: ["green","orange","empty","green","green"] },
+    { name: "יובל גולן", shifts: ["cyan","cyan","green","empty","orange"] },
   ];
 
   return (
-    <div className="glass-card rounded-2xl p-5 shadow-2xl w-80 shrink-0">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-xs font-semibold text-foreground/80">סידור שבועי — שבוע 22</span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-brand-500/10 px-2 py-0.5 text-[10px] font-medium text-brand-500">
-          <Sparkles className="h-2.5 w-2.5" aria-hidden />
-          AI שיבץ
-        </span>
-      </div>
+    <div className="relative" style={{ paddingBottom: "80px" }}>
+      {/* Main card */}
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+        className="relative bg-white rounded-[32px] p-6 w-[500px]"
+        style={{
+          boxShadow: "0 32px 80px rgba(15,23,42,0.12), 0 8px 24px rgba(15,23,42,0.06)",
+          transform: "perspective(1200px) rotateY(-6deg) rotateX(2deg)",
+          willChange: "transform",
+        }}
+      >
+        {/* Card header row */}
+        <div className="flex items-center justify-between mb-5">
+          <span className="text-[11px] text-[#94A3B8]">13 סמני גיעה</span>
+          <span className="text-sm font-bold text-[#0F172A]">סידור שבועי — שבוע 22</span>
+        </div>
 
-      {/* Day headers */}
-      <div className="grid grid-cols-[60px_repeat(5,1fr)] gap-1 mb-1">
-        <div />
-        {days.map((d) => (
-          <div key={d} className="text-center text-[10px] font-medium text-muted-foreground">{d}</div>
-        ))}
-      </div>
+        {/* Day headers */}
+        <div className="grid mb-2" style={{ gridTemplateColumns: "108px repeat(5,1fr)", gap: "8px" }}>
+          <div />
+          {days.map((d) => (
+            <div key={d} className="text-center text-[11px] font-semibold text-[#64748B]">{d}</div>
+          ))}
+        </div>
 
-      {/* Employee rows */}
-      <div className="flex flex-col gap-1">
-        {employees.map((emp, i) => (
-          <div key={i} className="grid grid-cols-[60px_repeat(5,1fr)] gap-1 items-center">
-            <span className="text-[11px] text-muted-foreground truncate text-end pe-2">{emp.name}</span>
-            {emp.shifts.map((on, j) => (
-              <div
-                key={j}
-                className={`h-7 rounded-md ${
-                  on
-                    ? i % 2 === 0
-                      ? "bg-gradient-to-br from-[#6366F1] to-[#818CF8] opacity-90"
-                      : "bg-gradient-to-br from-[#06B6D4] to-[#22D3EE] opacity-80"
-                    : "bg-muted/50"
-                }`}
-              />
-            ))}
+        {/* Employee rows */}
+        <div className="flex flex-col gap-2">
+          {employees.map((emp, i) => (
+            <div key={i} className="grid items-center" style={{ gridTemplateColumns: "108px repeat(5,1fr)", gap: "8px" }}>
+              <span className="text-[12px] font-medium text-[#0F172A] text-end pe-3">{emp.name}</span>
+              {emp.shifts.map((color, j) => (
+                <div key={j} className={`h-10 rounded-xl ${C[color]}`} />
+              ))}
+            </div>
+          ))}
+        </div>
+      </motion.div>
+
+      {/* Floating badge — top-right corner of card (start in RTL = right visually) */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.4, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        className="absolute -top-4 -start-6 bg-gradient-to-br from-[#8B5CF6] to-[#6D28D9] rounded-2xl px-4 py-3 shadow-[0_8px_24px_rgba(109,40,217,0.35)]"
+      >
+        <div className="flex items-center gap-2.5">
+          <Sparkles className="h-4 w-4 text-white/90 shrink-0" />
+          <div>
+            <div className="text-[12px] font-bold text-white leading-none">שיבוץ אוטומטי</div>
+            <div className="text-[10px] text-white/70 mt-0.5">חכם ומדויק</div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Floating stat cards — bottom */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.6, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        className="absolute bottom-0 start-0 end-0 flex gap-3"
+        style={{ paddingInline: "12px" }}
+      >
+        {[
+          { icon: Clock,   color: "#2563EB", bg: "#DBEAFE", value: "4.2", label: "שעות נחסכו\nהשבוע" },
+          { icon: Users,   color: "#10B981", bg: "#DCFCE7", value: "12",  label: "משמרות\nשובצו" },
+          { icon: Shield,  color: "#8B5CF6", bg: "#EDE9FE", value: "100%",label: "עמידה בחוקי\nעבודה" },
+        ].map(({ icon: Icon, color, bg, value, label }) => (
+          <div
+            key={value}
+            className="flex-1 bg-white rounded-2xl p-3 flex items-center gap-3"
+            style={{ boxShadow: "0 8px 24px rgba(15,23,42,0.10)" }}
+          >
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: bg }}>
+              <Icon className="h-4 w-4" style={{ color }} />
+            </div>
+            <div>
+              <div className="text-lg font-black leading-none" style={{ color }}>{value}</div>
+              <div className="text-[9px] text-[#94A3B8] mt-0.5 whitespace-pre-line leading-tight">{label}</div>
+            </div>
           </div>
         ))}
-      </div>
-
-      {/* Footer stats */}
-      <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between gap-2">
-        <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
-          <CheckCircle2 className="h-3 w-3" />
-          12 משמרות
-        </span>
-        <span className="inline-flex items-center gap-1 text-[11px] text-amber-500 font-medium">
-          <AlertCircle className="h-3 w-3" />
-          1 אזהרה
-        </span>
-        <span className="text-[10px] text-muted-foreground">100% עמידה</span>
-      </div>
+      </motion.div>
     </div>
   );
 }
 
 export function Hero() {
   const [videoOpen, setVideoOpen] = useState(false);
-  const reduceMotion = useReducedMotion();
-  const { scrollY } = useScroll();
-  // Parallax: drift mesh background down ~20% of scroll. Disabled if reduced motion.
-  const parallaxY = useTransform(scrollY, [0, 500], [0, reduceMotion ? 0 : 100]);
 
-  const trustBadges = [
-    "תואם חוק עבודה ומנוחה",
-    "פיילוט חינם 14 יום",
-    "אפס התקנות לעובד",
+  const trustItems = [
+    "ללא כרטיס אשראי",
+    "הקמה ב-2 דקות",
+    "ניסיון חינם 14 יום",
+    "מותאם לחוקי עבודה",
   ];
 
   return (
-    <section className="mesh-bg relative overflow-hidden min-h-[85vh] flex items-center border-b border-border">
-      {/* Parallax overlay layer — uses transform only for perf */}
-      <motion.div
+    <section
+      className="relative overflow-hidden"
+      style={{
+        background:
+          "radial-gradient(ellipse 80% 60% at 75% 10%, rgba(37,99,235,0.07) 0%, transparent 60%)," +
+          "radial-gradient(ellipse 60% 50% at 20% 90%, rgba(6,182,212,0.06) 0%, transparent 55%)," +
+          "#F0F4FF",
+      }}
+    >
+      {/* Subtle dotted pattern */}
+      <div
         aria-hidden
-        style={{ y: parallaxY }}
-        className="pointer-events-none absolute inset-0 -z-0"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage: "radial-gradient(circle, rgba(148,163,184,0.4) 1px, transparent 1px)",
+          backgroundSize: "28px 28px",
+          opacity: 0.5,
+        }}
+      />
+
+      {/* Decorative arc lines */}
+      <svg
+        aria-hidden
+        className="pointer-events-none absolute end-0 top-0 h-full"
+        style={{ width: "55%", opacity: 0.07 }}
+        viewBox="0 0 900 800"
+        fill="none"
+        preserveAspectRatio="xMidYMid slice"
       >
-        <div className="absolute -top-24 -end-24 w-[480px] h-[480px] rounded-full bg-gradient-to-br from-[#6366F1]/15 to-transparent blur-3xl" />
-        <div className="absolute -bottom-32 -start-24 w-[420px] h-[420px] rounded-full bg-gradient-to-tr from-[#22D3EE]/15 to-transparent blur-3xl" />
-      </motion.div>
+        <path d="M 900 0 Q 450 200 700 400 Q 950 600 450 800" stroke="#2563EB" strokeWidth="2.5" />
+        <path d="M 950 80 Q 550 280 750 480 Q 950 680 550 880" stroke="#06B6D4" strokeWidth="2" />
+        <path d="M 800 -50 Q 350 150 600 350 Q 850 550 350 750" stroke="#8B5CF6" strokeWidth="1.5" />
+      </svg>
 
-      <div className="relative mx-auto max-w-6xl px-6 py-24 lg:py-32 w-full">
-        <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
+      <div className="relative mx-auto max-w-[1400px] px-6 pt-[120px] pb-[160px]">
+        <div className="flex flex-col lg:flex-row items-center gap-16 lg:gap-20">
 
-          {/* Copy column — first in DOM = inline-start (right in RTL) */}
+          {/* RIGHT column — copy (first in RTL DOM = right visually) */}
           <div className="flex-1 text-center lg:text-start">
 
-            {/* Badge */}
-            <span className="inline-flex items-center gap-2 rounded-full glass-card px-3.5 py-1.5 text-xs font-medium text-foreground shadow-sm">
-              <Sparkles className="h-3.5 w-3.5 text-brand-500" aria-hidden />
-              בטא פתוחה · חינם לזמן מוגבל
-            </span>
+            {/* Israel badge */}
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="inline-flex items-center gap-2.5 bg-white border border-[#E2E8F0] rounded-full px-4 py-2 text-sm font-medium text-[#0F172A] shadow-sm"
+            >
+              <span className="text-base" role="img" aria-label="דגל ישראל">🇮🇱</span>
+              <span>נבנה במיוחד לעסקים בישראל</span>
+            </motion.div>
 
             {/* Headline */}
-            <h1 className="mt-6 text-4xl font-bold leading-tight text-foreground sm:text-5xl md:text-6xl">
+            <motion.h1
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1, duration: 0.6 }}
+              className="mt-6 font-black text-[#0F172A] leading-[0.95]"
+              style={{ fontSize: "clamp(2.8rem, 5vw, 4.5rem)", maxWidth: "700px" }}
+            >
               סידורי עבודה{" "}
-              <span className="text-gradient-brand">חכמים</span>
+              <span
+                className="bg-clip-text text-transparent"
+                style={{ backgroundImage: "linear-gradient(to left, #2563EB, #06B6D4)" }}
+              >
+                חכמים
+              </span>
               <br />
               לעסק שלך
-            </h1>
+            </motion.h1>
 
-            {/* Sub */}
-            <p className="mx-auto mt-5 max-w-xl text-lg text-muted-foreground sm:text-xl lg:mx-0">
-              סידור4S חוסך למנהלים ישראלים כ-4 שעות בשבוע עם שיבוץ אוטומטי
-              שמקפיד על חוקי העבודה — שעות נוספות, מנוחה שבועית, ערבי חג ומילואים.
-            </p>
+            {/* Subtitle */}
+            <motion.p
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.6 }}
+              className="mt-6 text-lg text-[#64748B] leading-relaxed"
+              style={{ maxWidth: "640px" }}
+            >
+              סידור4S חוסך למנהלים 4–6 שעות בשבוע עם שיבוץ אוטומטי שמתחשב בזמינות עובדים,
+              חוקי עבודה, העדפות ומשמרות פתוחות.
+            </motion.p>
 
             {/* CTAs */}
-            <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row lg:justify-start">
-              <Button asChild size="lg" variant="glow" className="min-w-44">
-                <Link href="/login">
-                  התחל חינם
-                  <ArrowLeft className="h-4 w-4" />
-                </Link>
-              </Button>
-              <Button
-                type="button"
-                size="lg"
-                variant="ghost"
-                className="min-w-44"
-                onClick={() => setVideoOpen(true)}
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3, duration: 0.6 }}
+              className="mt-8 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3"
+            >
+              <Link
+                href="/login"
+                className="inline-flex items-center gap-2 h-14 px-8 rounded-2xl text-white font-semibold text-base transition-all hover:-translate-y-0.5"
+                style={{
+                  background: "linear-gradient(to left, #2563EB, #06B6D4)",
+                  boxShadow: "0 8px 24px rgba(37,99,235,0.35)",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "0 12px 32px rgba(37,99,235,0.45)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 24px rgba(37,99,235,0.35)"; }}
               >
-                <Play className="h-4 w-4" aria-hidden />
-                צפה בדמו (60 שניות)
-              </Button>
-            </div>
+                <span>התחל חינם</span>
+                <ArrowLeft className="h-4 w-4" />
+              </Link>
 
-            {/* Trust badges row — directly under CTAs */}
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
-              {trustBadges.map((badge) => (
-                <span
-                  key={badge}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/60 backdrop-blur px-3 py-1 text-[11px] font-medium text-foreground/80 shadow-sm"
-                >
-                  <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" aria-hidden />
-                  {badge}
-                </span>
+              <button
+                type="button"
+                onClick={() => setVideoOpen(true)}
+                className="inline-flex items-center gap-3 h-14 px-8 rounded-2xl bg-white border border-[#E2E8F0] text-[#0F172A] font-medium text-base transition-all hover:-translate-y-0.5 hover:shadow-md"
+                style={{ boxShadow: "0 2px 8px rgba(15,23,42,0.06)" }}
+              >
+                <div className="w-7 h-7 bg-[#F1F5F9] rounded-full flex items-center justify-center">
+                  <Play className="h-3.5 w-3.5 text-[#0F172A] fill-current" />
+                </div>
+                <span>צפה בדמו (60 שניות)</span>
+              </button>
+            </motion.div>
+
+            {/* Trust indicators */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.45, duration: 0.6 }}
+              className="mt-6 flex flex-wrap items-center justify-center lg:justify-start gap-x-6 gap-y-3"
+            >
+              {trustItems.map((item) => (
+                <div key={item} className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-[#10B981] shrink-0" />
+                  <span className="text-sm text-[#475569] font-medium">{item}</span>
+                </div>
               ))}
-            </div>
-
-            <p className="mt-4 text-xs text-muted-foreground">
-              ללא כרטיס אשראי · התקנה ב-2 דקות
-            </p>
-
-            {/* Trust row */}
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 lg:justify-start">
-              {[
-                "שעות נוספות אוטומטי",
-                "מנוחה שבועית",
-                "מילואים",
-              ].map((item) => (
-                <span key={item} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                  {item}
-                </span>
-              ))}
-            </div>
+            </motion.div>
           </div>
 
-          {/* Preview card — second in DOM = inline-end (left in RTL), desktop only */}
-          <div className="hidden lg:block shrink-0" aria-hidden>
-            <SchedulePreview />
+          {/* LEFT column — dashboard (second in RTL DOM = left visually) */}
+          <div className="hidden lg:flex shrink-0 items-center justify-center" aria-hidden>
+            <DashboardMockup />
           </div>
 
         </div>
