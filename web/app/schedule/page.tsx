@@ -3,7 +3,7 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { DateTime } from "luxon";
-import { ArrowLeft, Filter, MessageCircle, Printer, Search, Sparkles, Upload, Users as UsersIcon } from "lucide-react";
+import { ArrowLeft, Copy, Filter, MessageCircle, Printer, Search, Sparkles, Upload, Users as UsersIcon } from "lucide-react";
 import {
   DndContext,
   DragOverlay,
@@ -83,6 +83,7 @@ import {
 import {
   useApplyProposals,
   useAutoSchedule,
+  useCopyFromPreviousWeek,
   useEmployeeMetrics,
   useEmployees,
   useLocations,
@@ -140,6 +141,7 @@ function ScheduleInner() {
   const autoSchedule = useAutoSchedule();
   const applyProposals = useApplyProposals();
   const publish = usePublishSchedule();
+  const copyWeek = useCopyFromPreviousWeek();
 
   // ── DnD state (lifted from ScheduleBoard so EmployeeCard sources live INSIDE DndContext)
   const [activeEmployeeId, setActiveEmployeeId] = React.useState<string | null>(null);
@@ -438,6 +440,21 @@ function ScheduleInner() {
     }
   };
 
+  const copyFromPreviousWeek = async () => {
+    if (!scheduleQuery.data) return;
+    if (blockIfDemo()) return;
+    try {
+      const res = await copyWeek.mutateAsync(scheduleQuery.data.id);
+      if (res.copied > 0) {
+        toast.success(`הועתקו ${res.copied} משמרות מהשבוע הקודם`);
+      } else {
+        toast.info("אין משמרות בשבוע הקודם להעתקה");
+      }
+    } catch {
+      toast.error("העתקת השבוע הקודם נכשלה");
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-[calc(100vh-3.5rem)]">
       <h1 className="sr-only">סידור עבודה</h1>
@@ -466,6 +483,20 @@ function ScheduleInner() {
         >
           <UsersIcon className="h-4 w-4" />
           עובדים
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={copyFromPreviousWeek}
+          disabled={!scheduleQuery.data || copyWeek.isPending}
+          className="h-11 sm:h-10"
+          aria-label="העתק שבוע קודם"
+          title="העתק את שלד המשמרות מהשבוע הקודם (בלי השיבוצים)"
+        >
+          <Copy className="h-4 w-4" />
+          <span className="hidden sm:inline">
+            {copyWeek.isPending ? "מעתיק…" : "העתק שבוע קודם"}
+          </span>
         </Button>
         <Button
           variant="outline"

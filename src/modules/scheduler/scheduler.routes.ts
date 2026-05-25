@@ -272,6 +272,93 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // MANAGER — copy shift skeleton (no assignments) from the previous week.
+  // POST /v1/schedules/:scheduleId/copy-from-previous-week
+  // Used by the "העתק שבוע קודם" button in the schedule top-bar.
+  app.post(
+    '/schedules/:scheduleId/copy-from-previous-week',
+    { schema: { params: ScheduleIdParam }, preHandler: authHandlers },
+    async (req, reply) => {
+      const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
+      const orgId = orgIdFor(req);
+      try {
+        const result = await dbFor(req).query(async (tx) => {
+          const target = await tx.schedule.findFirst({
+            where: { id: scheduleId, organizationId: orgId },
+            select: { id: true, periodStartDate: true, locationId: true },
+          });
+          if (!target) {
+            throw Object.assign(new Error('Schedule not found'), {
+              statusCode: 404,
+              code: 'NOT_FOUND',
+            });
+          }
+          const prevStart = new Date(target.periodStartDate);
+          prevStart.setUTCDate(prevStart.getUTCDate() - 7);
+          const prevEnd = new Date(prevStart);
+          prevEnd.setUTCDate(prevEnd.getUTCDate() + 7);
+
+          const prevShifts = await tx.shift.findMany({
+            where: {
+              organizationId: orgId,
+              startAtUtc: { gte: prevStart, lt: prevEnd },
+              status: { not: 'CANCELLED' },
+              ...(target.locationId ? { locationId: target.locationId } : {}),
+            },
+            select: {
+              roleId: true,
+              locationId: true,
+              startAtUtc: true,
+              endAtUtc: true,
+              timezone: true,
+              requiredEmployeeCount: true,
+            },
+          });
+          if (prevShifts.length === 0) {
+            return { copied: 0, skipped: 0, message: 'no_shifts_in_previous_week' };
+          }
+          // Skip if any shift already exists in the target week (avoid duplicates).
+          const existing = await tx.shift.count({
+            where: {
+              organizationId: orgId,
+              scheduleId: target.id,
+              status: { not: 'CANCELLED' },
+            },
+          });
+          let copied = 0;
+          for (const s of prevShifts) {
+            const start = new Date(s.startAtUtc);
+            start.setUTCDate(start.getUTCDate() + 7);
+            const end = new Date(s.endAtUtc);
+            end.setUTCDate(end.getUTCDate() + 7);
+            const localStart = new Date(start);
+            const localEnd = new Date(end);
+            await tx.shift.create({
+              data: {
+                organizationId: orgId,
+                scheduleId: target.id,
+                locationId: s.locationId,
+                roleId: s.roleId,
+                startAtUtc: start,
+                endAtUtc: end,
+                localStartDate: localStart,
+                localEndDate: localEnd,
+                timezone: s.timezone,
+                status: 'PLANNED',
+                requiredEmployeeCount: s.requiredEmployeeCount,
+              },
+            });
+            copied++;
+          }
+          return { copied, skipped: 0, existingBefore: existing };
+        });
+        return reply.send(result);
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
+
   // MANAGER — per-employee confirmation status for a published schedule.
   // GET /v1/schedules/:scheduleId/confirmations
   app.get(

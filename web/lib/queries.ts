@@ -23,9 +23,11 @@ import {
   fetchTimeEntries,
   fetchTimetrackingLive,
   fetchTimetrackingStatus,
+  copyFromPreviousWeek,
   patchAssignment,
   publishSchedule,
   runAutoSchedule,
+  type CopyFromPreviousWeekResult,
   updateEmployee,
   validateAssignment,
   type CreateEmployeeBody,
@@ -339,6 +341,17 @@ export function usePublishSchedule() {
       return publishSchedule(scheduleId);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["schedule"] }),
+  });
+}
+
+export function useCopyFromPreviousWeek() {
+  const qc = useQueryClient();
+  return useMutation<CopyFromPreviousWeekResult, Error, ID>({
+    mutationFn: async (scheduleId) => copyFromPreviousWeek(scheduleId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["schedule"] });
+      qc.invalidateQueries({ queryKey: ["shifts"] });
+    },
   });
 }
 

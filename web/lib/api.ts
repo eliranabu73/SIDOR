@@ -733,6 +733,22 @@ export function publishSchedule(scheduleId: ID): Promise<Schedule> {
   });
 }
 
+export interface CopyFromPreviousWeekResult {
+  copied: number;
+  skipped: number;
+  message?: string;
+  existingBefore?: number;
+}
+
+export function copyFromPreviousWeek(
+  scheduleId: ID,
+): Promise<CopyFromPreviousWeekResult> {
+  return request<CopyFromPreviousWeekResult>(
+    `/v1/schedules/${scheduleId}/copy-from-previous-week`,
+    { method: "POST" },
+  );
+}
+
 // --------- Shift item helper (locally compute) ---------
 
 export function shiftHasEmployee(shift: Shift, employeeId: ID): boolean {
