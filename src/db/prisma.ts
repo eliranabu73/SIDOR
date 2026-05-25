@@ -114,11 +114,13 @@ export function withAdminContext() {
   };
 }
 
-export function withOrgContext(orgId: string) {
+export function withOrgContext(orgId: string, timeoutMs = 5000) {
   return {
     /**
      * Run `queryFn` inside a transaction that first sets the RLS context.
      * `queryFn` receives a `PrismaClient` scoped to the transaction.
+     * Pass a higher `timeoutMs` for expensive operations (e.g. auto-schedule).
+     * Prisma Accelerate cap: 15 000 ms.
      */
     query<T>(queryFn: (tx: PrismaClient) => Promise<T>): Promise<T> {
       return prisma.$transaction(async (tx) => {
@@ -129,7 +131,7 @@ export function withOrgContext(orgId: string) {
           `SET LOCAL app.current_org_id = '${safeOrgId}'`,
         );
         return queryFn(tx as unknown as PrismaClient);
-      });
+      }, { timeout: timeoutMs, maxWait: 5000 });
     },
   };
 }

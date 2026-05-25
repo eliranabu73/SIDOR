@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { SchedulerService, type ProviderName } from './scheduler.service';
 import { computeWeeklyCost } from './labor-cost.service';
 import { HttpError } from '../../shared/errors';
-import { prisma } from '../../db/prisma';
+import { prisma, withOrgContext } from '../../db/prisma';
 import type { PrismaClient } from '@prisma/client';
 import { locationScope } from '../../shared/location-scope';
 
@@ -33,6 +33,12 @@ function orgIdFor(req: { user?: { orgId?: string } }): string {
 /** RLS-aware DB handle (falls back to direct prisma in AUTH_DISABLED mode). */
 function dbFor(req: { orgPrisma?: { query: <T>(fn: (tx: PrismaClient) => Promise<T>) => Promise<T> } }) {
   return req.orgPrisma ?? { query: <T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> => fn(prisma) };
+}
+
+/** Long-timeout RLS context for expensive operations like auto-schedule. */
+function dbForLong(req: { user?: { orgId?: string } }) {
+  const orgId = orgIdFor(req);
+  return withOrgContext(orgId, 14_000);
 }
 
 const ScheduleIdParam = z.object({ scheduleId: z.string().uuid() });
@@ -233,7 +239,7 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
       }
 
       try {
-        const result = await dbFor(req).query(async (tx) => {
+        const result = await dbForLong(req).query(async (tx) => {
           // Validate schedule belongs to this org (RLS already enforces this,
           // but be explicit for a clear 404 rather than "0 proposals").
           const schedCheck = await tx.schedule.findFirst({
