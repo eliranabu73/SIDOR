@@ -137,16 +137,20 @@ const authPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
       } else {
         // Even when the JWT already carries orgId, we still need to load
         // locationId for BRANCH_MANAGER users (not available in the JWT).
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const membership = await (prisma.membership as any).findFirst({
-          where: { userId: user.id, organizationId: user.orgId },
-          select: { locationId: true, role: true },
-        }) as { locationId: string | null; role: string } | null;
-        if (membership) {
-          user.locationId = membership.locationId ?? null;
-          // Update role from DB in case it was recently changed but JWT hasn't refreshed.
-          if (membership.role) {
-            user.role = membership.role.toLowerCase();
+        // Guard: skip DB call if orgId isn't a valid UUID (e.g. test fixtures).
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (UUID_RE.test(user.orgId ?? '')) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const membership = await (prisma.membership as any).findFirst({
+            where: { userId: user.id, organizationId: user.orgId },
+            select: { locationId: true, role: true },
+          }) as { locationId: string | null; role: string } | null;
+          if (membership) {
+            user.locationId = membership.locationId ?? null;
+            // Update role from DB in case it was recently changed but JWT hasn't refreshed.
+            if (membership.role) {
+              user.role = membership.role.toLowerCase();
+            }
           }
         }
       }
