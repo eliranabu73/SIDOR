@@ -11,7 +11,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { createOrgForUser, listMemberships } from './onboarding.service.js';
 import { quickBootstrap } from './quick-bootstrap.service.js';
-import { prisma } from '../../db/prisma.js';
+import { prisma, withOrgContext } from '../../db/prisma.js';
 
 const CreateOrgBody = z.object({
   name: z.string().min(2).max(120),
@@ -96,11 +96,14 @@ export async function onboardingRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req) => {
       const { id } = req.params as z.infer<typeof OrgIdParam>;
-      const shift = await prisma.shift.findFirst({
-        where: { organizationId: id },
-        select: { scheduleId: true },
-        orderBy: { createdAt: 'asc' },
-      });
+      const db = withOrgContext(id);
+      const shift = await db.query((tx) =>
+        tx.shift.findFirst({
+          where: { organizationId: id },
+          select: { scheduleId: true },
+          orderBy: { createdAt: 'asc' },
+        }),
+      );
       if (!shift) return { ready: false };
       return { ready: true, scheduleId: shift.scheduleId ?? undefined };
     },
