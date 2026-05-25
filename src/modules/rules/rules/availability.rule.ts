@@ -12,6 +12,16 @@ export const availabilityRule: RuleFn = (ctx): RuleResult => {
     };
   }
 
+  // No availability rules defined → employee is assumed fully available.
+  if (availabilityRules.length === 0) {
+    return {
+      ruleCode: 'AVAILABILITY_OK',
+      status: 'passed',
+      severity: 'info',
+      metadata: { coverageRatio: 1, note: 'no_rules_defined' },
+    };
+  }
+
   const coverage = computeAvailabilityCoverage({
     startAtUtc: shift.startAtUtc,
     endAtUtc: shift.endAtUtc,

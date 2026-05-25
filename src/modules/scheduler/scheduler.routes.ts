@@ -244,15 +244,6 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
             throw Object.assign(new Error('Schedule not found'), { statusCode: 404, code: 'NOT_FOUND' });
           }
 
-          // DEBUG: count shifts + employees visible in this tx context
-          const [dbShiftCount, dbEmpCount] = await Promise.all([
-            tx.shift.count({ where: { scheduleId, organizationId: orgId } }),
-            tx.employee.count({ where: { organizationId: orgId, isActive: true } }),
-          ]);
-          if (dbShiftCount === 0 || dbEmpCount === 0) {
-            return reply.send({ _debug: 'zero_data', orgId, scheduleId, dbShiftCount, dbEmpCount }) as never;
-          }
-
           const svc = new SchedulerService(tx);
           return svc.run(
             {
@@ -371,7 +362,5 @@ function handleHttpError(reply: FastifyReply, err: unknown) {
     return reply.code(e.statusCode).send({ code: e.code, message: e.message });
   }
   reply.log.error(err);
-  const msg = err instanceof Error ? err.message : String(err);
-  const stack = err instanceof Error ? err.stack?.slice(0, 500) : undefined;
-  return reply.code(500).send({ code: 'INTERNAL_ERROR', message: 'Internal error', _debug: msg, _stack: stack });
+  return reply.code(500).send({ code: 'INTERNAL_ERROR', message: 'Internal error' });
 }
