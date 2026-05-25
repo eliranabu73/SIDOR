@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { SchedulerService, type ProviderName } from './scheduler.service';
 import { computeWeeklyCost } from './labor-cost.service';
 import { HttpError } from '../../shared/errors';
-import { prisma } from '../../db/prisma';
+import { prisma, withAdminContext } from '../../db/prisma';
 import type { PrismaClient } from '@prisma/client';
 import { locationScope } from '../../shared/location-scope';
 
@@ -233,7 +233,17 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
       }
 
       try {
-        const result = await dbFor(req).query((tx) => {
+        // Step 1: validate schedule belongs to this org (uses RLS-aware context)
+        const schedCheck = await dbFor(req).query((tx) =>
+          tx.schedule.findFirst({ where: { id: scheduleId, organizationId: orgId }, select: { id: true } }),
+        );
+        if (!schedCheck) {
+          return reply.code(404).send({ code: 'NOT_FOUND', message: 'Schedule not found' });
+        }
+
+        // Step 2: run scheduler with admin context — bypasses RLS so shifts/employees
+        // are always visible regardless of session variable state.
+        const result = await withAdminContext().query((tx) => {
           const svc = new SchedulerService(tx);
           return svc.run(
             {
