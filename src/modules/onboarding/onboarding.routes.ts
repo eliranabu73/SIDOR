@@ -11,7 +11,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { createOrgForUser, listMemberships } from './onboarding.service.js';
 import { quickBootstrap } from './quick-bootstrap.service.js';
-import { prisma, withOrgContext } from '../../db/prisma.js';
+import { prisma, withOrgContext, withAdminContext } from '../../db/prisma.js';
 
 const CreateOrgBody = z.object({
   name: z.string().min(2).max(120),
@@ -34,7 +34,10 @@ export async function onboardingRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: [app.authenticate] },
     async (req) => {
       const u = req.user!;
-      const memberships = await listMemberships(u.id);
+      // Use admin context to bypass RLS — /v1/me is a cross-tenant discovery
+      // endpoint (user doesn't know their orgId yet, so no context to set).
+      const adminDb = withAdminContext();
+      const memberships = await adminDb.query((tx) => listMemberships(u.id, tx));
       const activeOrgId =
         memberships.find((m) => m.orgId === u.orgId)?.orgId ?? memberships[0]?.orgId ?? null;
       return {

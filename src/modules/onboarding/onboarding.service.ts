@@ -8,7 +8,7 @@
  * (the Custom Access Token Hook is the canonical source — this is a
  * fallback for environments where the hook isn't installed yet).
  */
-import { prisma } from '../../db/prisma.js';
+import { prisma, type Db } from '../../db/prisma.js';
 
 export interface CreateOrgInput {
   userId: string;
@@ -41,8 +41,8 @@ function currentWeekRange(now = new Date()): { start: Date; end: Date } {
   return { start, end };
 }
 
-export async function listMemberships(userId: string): Promise<MeMembershipRow[]> {
-  const rows = await prisma.membership.findMany({
+export async function listMemberships(userId: string, db: Db = prisma): Promise<MeMembershipRow[]> {
+  const rows = await (db as typeof prisma).membership.findMany({
     where: { userId },
     include: { organization: { select: { id: true, name: true } } },
     orderBy: { createdAt: 'asc' },
