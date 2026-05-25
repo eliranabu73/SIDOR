@@ -53,10 +53,14 @@ async function request<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const headers = {
-    ...(await authHeaders()),
+  const authH = await authHeaders() as Record<string, string>;
+  // Don't send Content-Type: application/json when there is no body —
+  // Fastify rejects the combination with FST_ERR_CTP_EMPTY_JSON_BODY.
+  const headers: Record<string, string> = {
+    ...authH,
     ...(init.headers as Record<string, string> | undefined),
   };
+  if (!init.body) delete headers["content-type"];
   const res = await fetch(`${API_URL}${path}`, { ...init, headers });
   const text = await res.text();
   let body: unknown = null;
