@@ -28,7 +28,7 @@ import type {
 import fp from 'fastify-plugin';
 import { verifyJwt } from './jwt-verifier.js';
 import { UnauthorizedError } from './errors.js';
-import { prisma, withOrgContext } from '../../db/prisma.js';
+import { prisma, withOrgContext, withAdminContext } from '../../db/prisma.js';
 // Side-effect import: registers the `user` field on FastifyRequest via
 // module augmentation.
 import './types.js';
@@ -121,13 +121,20 @@ const authPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
       // the request through with orgId=''. Routes that require an org context must
       // add `requireMembership` as an additional preHandler — onboarding routes
       // intentionally only use `authenticate` so new users can create their org.
+      // The membership lookups below cross tenant boundaries (we look up which
+      // org a user belongs to). They must bypass RLS via withAdminContext —
+      // which sets app.current_org_id = '*'. Without this, the lookup returns
+      // 0 rows for any newly-onboarded user (their JWT has no orgId claim yet)
+      // and AuthGuard bounces them back to /onboarding in an infinite loop.
       if (!user.orgId) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const membership = await (prisma.membership as any).findFirst({
-          where: { userId: user.id },
-          orderBy: { createdAt: 'asc' },
-          select: { organizationId: true, role: true, locationId: true },
-        }) as { organizationId: string; role: string; locationId: string | null } | null;
+        const membership = await withAdminContext().query((tx) =>
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (tx.membership as any).findFirst({
+            where: { userId: user.id },
+            orderBy: { createdAt: 'asc' },
+            select: { organizationId: true, role: true, locationId: true },
+          }),
+        ) as { organizationId: string; role: string; locationId: string | null } | null;
         if (membership) {
           user.orgId = membership.organizationId;
           user.role = membership.role.toLowerCase();
@@ -140,11 +147,13 @@ const authPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
         // Guard: skip DB call if orgId isn't a valid UUID (e.g. test fixtures).
         const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (UUID_RE.test(user.orgId ?? '')) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const membership = await (prisma.membership as any).findFirst({
-            where: { userId: user.id, organizationId: user.orgId },
-            select: { locationId: true, role: true },
-          }) as { locationId: string | null; role: string } | null;
+          const membership = await withAdminContext().query((tx) =>
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (tx.membership as any).findFirst({
+              where: { userId: user.id, organizationId: user.orgId },
+              select: { locationId: true, role: true },
+            }),
+          ) as { locationId: string | null; role: string } | null;
           if (membership) {
             user.locationId = membership.locationId ?? null;
             // Update role from DB in case it was recently changed but JWT hasn't refreshed.
