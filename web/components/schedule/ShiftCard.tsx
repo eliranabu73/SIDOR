@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { DateTime } from "luxon";
 import { useDroppable } from "@dnd-kit/core";
 import { Clock, AlertTriangle, Lock } from "lucide-react";
@@ -50,7 +51,7 @@ const TIME_FORMAT = "HH:mm";
  * and (during drag) overlay tint shift between states. Tokens are in
  * `app/globals.css` under @theme as `--color-shift-*`.
  */
-export function ShiftCard({
+function ShiftCardImpl({
   shift,
   employees,
   validationTone = "neutral",
@@ -214,6 +215,10 @@ export function ShiftCard({
     </div>
   );
 }
+
+// Memoised so re-renders of the parent ScheduleBoard don't waste paint
+// on every individual cell when only one cell's data changed.
+export const ShiftCard = React.memo(ShiftCardImpl);
 
 function shiftCardStyle(
   state: "empty" | "ok" | "warning" | "conflict" | "open" | "locked",

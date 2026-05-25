@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { Check, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,7 +23,7 @@ function fairnessTone(score?: number): {
   return { label: "חוסר איזון", className: "bg-destructive/15 text-destructive" };
 }
 
-export function EmployeeCard({ employee, metrics, onSelect, isSelected }: Props) {
+function EmployeeCardImpl({ employee, metrics, onSelect, isSelected }: Props) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
       id: `employee:${employee.id}`,
@@ -76,3 +77,5 @@ export function EmployeeCard({ employee, metrics, onSelect, isSelected }: Props)
     </div>
   );
 }
+
+export const EmployeeCard = React.memo(EmployeeCardImpl);

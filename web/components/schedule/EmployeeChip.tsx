@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Employee } from "@/lib/types";
@@ -33,7 +34,7 @@ const GHOST_KEYFRAMES = `@keyframes chipIn {
  *
  * Tokens in app/globals.css under @theme.
  */
-export function EmployeeChip({
+function EmployeeChipImpl({
   employee,
   density = "standard",
   score,
@@ -126,3 +127,5 @@ export function EmployeeChip({
     </>
   );
 }
+
+export const EmployeeChip = React.memo(EmployeeChipImpl);
