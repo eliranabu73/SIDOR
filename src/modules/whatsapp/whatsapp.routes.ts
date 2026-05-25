@@ -79,7 +79,7 @@ export async function whatsappRoutes(app: FastifyInstance): Promise<void> {
   // Manager-auth: bulk-send the schedule-published template to all employees.
   // -----------------------------------------------------------------------
   app.post(
-    '/v1/schedules/:id/whatsapp-send',
+    '/schedules/:id/whatsapp-send',
     { schema: { params: ScheduleParam, body: SendBody }, preHandler: authHandlers },
     async (req, reply) => {
       const { id } = req.params as z.infer<typeof ScheduleParam>;
@@ -108,7 +108,7 @@ export async function whatsappRoutes(app: FastifyInstance): Promise<void> {
   // Meta verification GET — return hub.challenge raw when verify_token matches.
   // -----------------------------------------------------------------------
   app.get(
-    '/v1/whatsapp/webhook',
+    '/whatsapp/webhook',
     { schema: { querystring: WebhookVerifyQuery } },
     async (req, reply) => {
       const q = req.query as z.infer<typeof WebhookVerifyQuery>;
@@ -130,7 +130,7 @@ export async function whatsappRoutes(app: FastifyInstance): Promise<void> {
   // Meta POST callback — status updates (sent / delivered / read / failed)
   // and inbound message events. We only act on status updates today.
   // -----------------------------------------------------------------------
-  app.post('/v1/whatsapp/webhook', async (req, reply) => {
+  app.post('/whatsapp/webhook', async (req, reply) => {
     // Fastify already parsed JSON — reconstruct a deterministic raw string
     // for the HMAC. Meta signs the raw bytes; round-tripping through JSON.stringify
     // works as long as no proxy mutates the body. For production-grade
