@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { SchedulerService, type ProviderName } from './scheduler.service';
 import { computeWeeklyCost } from './labor-cost.service';
 import { HttpError } from '../../shared/errors';
-import { prisma, withAdminContext } from '../../db/prisma';
+import { prisma } from '../../db/prisma';
 import type { PrismaClient } from '@prisma/client';
 import { locationScope } from '../../shared/location-scope';
 
@@ -233,17 +233,17 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
       }
 
       try {
-        // Step 1: validate schedule belongs to this org (uses RLS-aware context)
-        const schedCheck = await dbFor(req).query((tx) =>
-          tx.schedule.findFirst({ where: { id: scheduleId, organizationId: orgId }, select: { id: true } }),
-        );
-        if (!schedCheck) {
-          return reply.code(404).send({ code: 'NOT_FOUND', message: 'Schedule not found' });
-        }
+        const result = await dbFor(req).query(async (tx) => {
+          // Validate schedule belongs to this org (RLS already enforces this,
+          // but be explicit for a clear 404 rather than "0 proposals").
+          const schedCheck = await tx.schedule.findFirst({
+            where: { id: scheduleId, organizationId: orgId },
+            select: { id: true },
+          });
+          if (!schedCheck) {
+            throw Object.assign(new Error('Schedule not found'), { statusCode: 404, code: 'NOT_FOUND' });
+          }
 
-        // Step 2: run scheduler with admin context — bypasses RLS so shifts/employees
-        // are always visible regardless of session variable state.
-        const result = await withAdminContext().query((tx) => {
           const svc = new SchedulerService(tx);
           return svc.run(
             {
@@ -355,6 +355,11 @@ function handleHttpError(reply: FastifyReply, err: unknown) {
     return reply
       .code(err.statusCode)
       .send({ code: err.code, message: err.message, details: err.details ?? null });
+  }
+  // Custom errors thrown inside dbFor transactions
+  if (err instanceof Error && 'statusCode' in err) {
+    const e = err as Error & { statusCode: number; code: string };
+    return reply.code(e.statusCode).send({ code: e.code, message: e.message });
   }
   reply.log.error(err);
   const msg = err instanceof Error ? err.message : String(err);
