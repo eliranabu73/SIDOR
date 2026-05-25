@@ -86,12 +86,6 @@ export default function AdminLayout({
               })}
             </nav>
             <div className="me-auto" />
-            <Link
-              href="/schedule"
-              className="hidden sm:inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            >
-              חזרה לאפליקציה
-            </Link>
             <ThemeToggle />
             <Button
               variant="ghost"

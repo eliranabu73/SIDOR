@@ -1195,6 +1195,33 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       `ALTER TABLE "employee_preferences" ADD COLUMN IF NOT EXISTS "avoidWeekends" BOOLEAN NOT NULL DEFAULT false`,
       `ALTER TABLE "employee_preferences" ADD COLUMN IF NOT EXISTS "avoidNightShifts" BOOLEAN NOT NULL DEFAULT false`,
       `ALTER TABLE "employee_preferences" ADD COLUMN IF NOT EXISTS "notes" TEXT NULL`,
+      // 20260525170000_admin_rls_bypass — teach every tenant_isolation
+      // policy to also match when app.current_org_id = '*' (platform-admin
+      // sentinel). Idempotent: drops + recreates each existing policy.
+      `DO $$
+       DECLARE
+         r RECORD;
+         policy_name TEXT := 'tenant_isolation';
+         org_col TEXT;
+       BEGIN
+         FOR r IN
+           SELECT schemaname, tablename
+             FROM pg_policies
+            WHERE policyname = policy_name
+              AND schemaname = 'public'
+         LOOP
+           EXECUTE format('DROP POLICY %I ON %I.%I', policy_name, r.schemaname, r.tablename);
+           IF r.tablename = 'organizations' THEN
+             org_col := 'id';
+           ELSE
+             org_col := 'organizationId';
+           END IF;
+           EXECUTE format(
+             'CREATE POLICY %I ON %I.%I USING (current_setting(''app.current_org_id'', true) = ''*'' OR %I::text = current_setting(''app.current_org_id'', true))',
+             policy_name, r.schemaname, r.tablename, org_col
+           );
+         END LOOP;
+       END $$`,
     ];
     for (const stmt of statements) {
       try {

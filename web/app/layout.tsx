@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { RegisterSW } from "@/components/pwa/register-sw";
 import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
+import { AdminAutoRedirect } from "@/components/auth/AdminAutoRedirect";
 import {
   SITE_URL,
   SITE_NAME,
@@ -150,6 +151,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full bg-background text-foreground">
         <ImpersonationBanner />
+        <AdminAutoRedirect />
         <Providers>{children}</Providers>
         <RegisterSW />
       </body>
