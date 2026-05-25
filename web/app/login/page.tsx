@@ -20,6 +20,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Logo } from "@/components/brand/Logo";
 import { getSupabase } from "@/lib/supabase";
+import { translateAuthError, passwordStrength } from "@/lib/auth-errors";
+import { cn } from "@/lib/utils";
 
 // --- Schemas ---
 
@@ -74,7 +76,10 @@ function GoogleIcon({ className }: { className?: string }) {
 export default function LoginPage() {
   const router = useRouter();
   const [magicSent, setMagicSent] = React.useState<string | null>(null);
+  const [signupSent, setSignupSent] = React.useState<string | null>(null);
+  const [resending, setResending] = React.useState(false);
   const [googleLoading, setGoogleLoading] = React.useState(false);
+  const [showPw, setShowPw] = React.useState(false);
 
   const signInForm = useForm<SignInData>({
     resolver: zodResolver(signInSchema),
@@ -108,7 +113,7 @@ export default function LoginPage() {
     } catch (err) {
       setGoogleLoading(false);
       toast.error(
-        err instanceof Error ? err.message : "התחברות עם Google נכשלה",
+        err instanceof Error ? translateAuthError(err.message) : "התחברות עם Google נכשלה",
       );
     }
   };
@@ -123,14 +128,14 @@ export default function LoginPage() {
       if (error) throw error;
       router.replace("/schedule");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "התחברות נכשלה");
+      toast.error(err instanceof Error ? translateAuthError(err.message) : "התחברות נכשלה");
     }
   };
 
   const onSignUp = async ({ fullName, email, password }: SignUpData) => {
     try {
       const supabase = getSupabase();
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -139,10 +144,35 @@ export default function LoginPage() {
         },
       });
       if (error) throw error;
-      toast.success("נשלח אימייל אישור — בדוק/י את תיבת הדואר");
+      // If session is returned, email confirmation is OFF — sign user in.
+      if (data.session) {
+        router.replace("/onboarding");
+        return;
+      }
+      // Email confirmation ON — show "check your inbox" screen with resend.
+      setSignupSent(email);
       signUpForm.reset();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "יצירת חשבון נכשלה");
+      toast.error(err instanceof Error ? translateAuthError(err.message) : "יצירת חשבון נכשלה");
+    }
+  };
+
+  const onResendVerification = async () => {
+    if (!signupSent) return;
+    try {
+      setResending(true);
+      const supabase = getSupabase();
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: signupSent,
+        options: { emailRedirectTo: callbackUrl() },
+      });
+      if (error) throw error;
+      toast.success("האימייל נשלח שוב — בדוק/י את תיבת הדואר");
+    } catch (err) {
+      toast.error(err instanceof Error ? translateAuthError(err.message) : "שליחה חוזרת נכשלה");
+    } finally {
+      setResending(false);
     }
   };
 
@@ -156,7 +186,7 @@ export default function LoginPage() {
       if (error) throw error;
       setMagicSent(email);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "שליחת הקישור נכשלה");
+      toast.error(err instanceof Error ? translateAuthError(err.message) : "שליחת הקישור נכשלה");
     }
   };
 
@@ -253,6 +283,38 @@ export default function LoginPage() {
 
             {/* --- Sign up --- */}
             <TabsContent value="signup">
+              {signupSent ? (
+                <div className="space-y-3 text-sm" role="status" aria-live="polite">
+                  <div className="rounded-md border border-success/30 bg-success/5 p-3">
+                    <div className="font-medium">שלחנו אליך אימייל אימות</div>
+                    <div className="mt-1 break-all text-muted-foreground">
+                      {signupSent}
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    בדוק/י גם את תיקיית הספאם. הקישור תקף ל-24 שעות.
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={onResendVerification}
+                      disabled={resending}
+                    >
+                      {resending ? "שולח…" : "שלח שוב"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="flex-1"
+                      onClick={() => setSignupSent(null)}
+                    >
+                      הרשמה עם דוא״ל אחר
+                    </Button>
+                  </div>
+                </div>
+              ) : (
               <form
                 onSubmit={signUpForm.handleSubmit(onSignUp)}
                 className="space-y-3"
@@ -291,19 +353,72 @@ export default function LoginPage() {
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="signup-password">סיסמה</Label>
-                  <Input
-                    id="signup-password"
-                    type="password"
-                    autoComplete="new-password"
-                    {...signUpForm.register("password")}
-                    aria-invalid={!!signUpForm.formState.errors.password}
-                  />
+                  <div className="relative">
+                    <Input
+                      id="signup-password"
+                      type={showPw ? "text" : "password"}
+                      autoComplete="new-password"
+                      {...signUpForm.register("password")}
+                      aria-invalid={!!signUpForm.formState.errors.password}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPw((v) => !v)}
+                      className="absolute inset-y-0 end-2 inline-flex items-center px-2 text-xs text-muted-foreground hover:text-foreground"
+                      aria-label={showPw ? "הסתר סיסמה" : "הצג סיסמה"}
+                    >
+                      {showPw ? "הסתר" : "הצג"}
+                    </button>
+                  </div>
+                  {signUpForm.watch("password") ? (
+                    (() => {
+                      const s = passwordStrength(signUpForm.watch("password"));
+                      return (
+                        <div className="flex items-center gap-2 pt-1">
+                          <div className="flex h-1 flex-1 gap-1">
+                            {[1, 2, 3, 4].map((i) => (
+                              <div
+                                key={i}
+                                className={cn(
+                                  "h-full flex-1 rounded-full transition-colors",
+                                  i <= s.score
+                                    ? s.tone === "success"
+                                      ? "bg-success"
+                                      : s.tone === "warning"
+                                        ? "bg-warning"
+                                        : "bg-destructive"
+                                    : "bg-muted",
+                                )}
+                              />
+                            ))}
+                          </div>
+                          <span
+                            className={cn(
+                              "text-[10px] font-medium",
+                              s.tone === "success"
+                                ? "text-success"
+                                : s.tone === "warning"
+                                  ? "text-warning"
+                                  : "text-destructive",
+                            )}
+                          >
+                            {s.label}
+                          </span>
+                        </div>
+                      );
+                    })()
+                  ) : null}
                   {signUpForm.formState.errors.password ? (
                     <p className="text-xs text-destructive" role="alert">
                       {signUpForm.formState.errors.password.message}
                     </p>
                   ) : null}
                 </div>
+                <p className="text-[11px] text-muted-foreground">
+                  בלחיצה על "צור חשבון" אתם מאשרים את{" "}
+                  <a href="/terms" className="underline">תנאי השימוש</a> ואת{" "}
+                  <a href="/privacy" className="underline">מדיניות הפרטיות</a>.
+                </p>
                 <Button
                   type="submit"
                   variant="glow"
@@ -313,6 +428,7 @@ export default function LoginPage() {
                   {signUpForm.formState.isSubmitting ? "יוצר…" : "צור חשבון"}
                 </Button>
               </form>
+              )}
             </TabsContent>
 
             {/* --- Magic link --- */}
