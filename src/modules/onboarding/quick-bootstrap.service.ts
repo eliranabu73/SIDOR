@@ -8,6 +8,7 @@
  * The intent is to give a brand-new user a fully populated, ready-to-edit
  * weekly schedule in <60 seconds with a single form submission.
  */
+import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../db/prisma.js';
 import { SCHEDULE_TEMPLATES, type ScheduleTemplate } from '../templates/schedule-templates.js';
@@ -84,18 +85,23 @@ export async function quickBootstrap(
 
   const { organizationId, scheduleId } = await prisma.$transaction(
     async (tx: Prisma.TransactionClient) => {
+      // Generate the org id up-front so we can SET LOCAL app.current_org_id
+      // BEFORE the INSERT. Without this, the implicit SELECT after INSERT
+      // (RETURNING) is filtered by the RLS USING expression — current_org_id
+      // is unset, the new row is invisible, and Prisma throws "no record
+      // returned", aborting the whole signup.
+      const newOrgId = randomUUID();
+      await tx.$executeRawUnsafe(`SET LOCAL app.current_org_id = '${newOrgId}'`);
+
       const org = await tx.organization.create({
         data: {
+          id: newOrgId,
           name: name.trim(),
           defaultTimezone: tz,
           industry: industry.trim(),
           ownerUserId: userId,
         },
       });
-
-      // Set RLS context so all subsequent inserts in this transaction pass
-      // the tenant_isolation policies (organizationId = current_setting(...)).
-      await tx.$executeRawUnsafe(`SET LOCAL app.current_org_id = '${org.id}'`);
 
       await tx.membership.create({
         data: { userId, organizationId: org.id, role: 'OWNER' },

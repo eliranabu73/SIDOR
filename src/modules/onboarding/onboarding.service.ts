@@ -8,6 +8,7 @@
  * (the Custom Access Token Hook is the canonical source — this is a
  * fallback for environments where the hook isn't installed yet).
  */
+import { randomUUID } from 'node:crypto';
 import { prisma, type Db } from '../../db/prisma.js';
 
 export interface CreateOrgInput {
@@ -59,8 +60,16 @@ export async function createOrgForUser(input: CreateOrgInput): Promise<CreateOrg
   const week = currentWeekRange();
 
   const result = await prisma.$transaction(async (tx) => {
+    // Generate the org id up-front and SET LOCAL app.current_org_id BEFORE
+    // the INSERT. Without this, the implicit SELECT after INSERT (RETURNING)
+    // is filtered by RLS — current_org_id is unset, no rows match, Prisma
+    // throws "no record returned", and the whole onboarding aborts.
+    const newOrgId = randomUUID();
+    await tx.$executeRawUnsafe(`SET LOCAL app.current_org_id = '${newOrgId}'`);
+
     const org = await tx.organization.create({
       data: {
+        id: newOrgId,
         name: input.name.trim(),
         defaultTimezone: tz,
         industry: input.industry?.trim() || null,
