@@ -40,7 +40,7 @@ export async function generateCandidates(
   if (!schedule) throw new Error(`Schedule ${scheduleId} not found`);
 
   const shifts = await prisma.shift.findMany({
-    where: { scheduleId },
+    where: { scheduleId, organizationId: schedule.organizationId },
     orderBy: { startAtUtc: 'asc' },
   });
   if (shifts.length === 0) return [];
