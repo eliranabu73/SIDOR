@@ -113,54 +113,67 @@ export class SchedulerService {
     actingUserId: string,
     organizationId?: string,
   ): Promise<ApplyProposalsResult> {
-    // Per-proposal tenancy is enforced inside applyAssignment via
+    // Per-proposal tenancy is enforced inside applyAssignment via the
     // organizationId param. Each proposal runs in its own short
-    // RLS-scoped transaction (parallel) so the total wall time stays
-    // well under the Vercel function and Accelerate transaction caps,
-    // even for batches of 12+ proposals.
+    // RLS-scoped transaction. We cap concurrency at CONCURRENCY so the
+    // Accelerate connection pool (~5-10 connections) is not saturated;
+    // queued transactions would otherwise tick their own 5 s timeout
+    // while waiting for a connection.
     const orgIdForRls = organizationId ?? '';
+    const CONCURRENCY = 4;
+    const PER_CALL_TIMEOUT_MS = 8_000;
 
-    const settled = await Promise.all(
-      proposals.map(async (p): Promise<
-        { ok: true } | { ok: false; code: string; message: string; shiftId: string; employeeId: string }
-      > => {
-        try {
-          await withOrgContext(orgIdForRls).query(async (tx) => {
-            const shift = await tx.shift.findFirst({
-              where: organizationId
-                ? { id: p.shiftId, organizationId }
-                : { id: p.shiftId },
-              select: { version: true },
-            });
-            if (!shift) {
-              throw Object.assign(new Error('Shift not found'), { code: 'NOT_FOUND' });
-            }
-            await applyAssignment(
-              {
-                shiftId: p.shiftId,
-                employeeId: p.employeeId,
-                expectedShiftVersion: shift.version,
-                action: 'assign',
-                acknowledgeWarnings: true,
-                actingUserId,
-                organizationId,
-              },
-              tx,
-            );
+    type Settled =
+      | { ok: true }
+      | { ok: false; code: string; message: string; shiftId: string; employeeId: string };
+
+    const runOne = async (p: ApplyProposalInput): Promise<Settled> => {
+      try {
+        await withOrgContext(orgIdForRls, {
+          timeout: PER_CALL_TIMEOUT_MS,
+          maxWait: 5_000,
+        }).query(async (tx) => {
+          const shift = await tx.shift.findFirst({
+            where: organizationId
+              ? { id: p.shiftId, organizationId }
+              : { id: p.shiftId },
+            select: { version: true },
           });
-          return { ok: true } as const;
-        } catch (err) {
-          const e = err as { code?: string; message?: string };
-          return {
-            ok: false,
-            shiftId: p.shiftId,
-            employeeId: p.employeeId,
-            code: e.code ?? 'APPLY_FAILED',
-            message: e.message ?? 'Failed to apply proposal',
-          } as const;
-        }
-      }),
-    );
+          if (!shift) {
+            throw Object.assign(new Error('Shift not found'), { code: 'NOT_FOUND' });
+          }
+          await applyAssignment(
+            {
+              shiftId: p.shiftId,
+              employeeId: p.employeeId,
+              expectedShiftVersion: shift.version,
+              action: 'assign',
+              acknowledgeWarnings: true,
+              actingUserId,
+              organizationId,
+            },
+            tx,
+          );
+        });
+        return { ok: true } as const;
+      } catch (err) {
+        const e = err as { code?: string; message?: string };
+        return {
+          ok: false,
+          shiftId: p.shiftId,
+          employeeId: p.employeeId,
+          code: e.code ?? 'APPLY_FAILED',
+          message: e.message ?? 'Failed to apply proposal',
+        } as const;
+      }
+    };
+
+    const settled: Settled[] = [];
+    for (let i = 0; i < proposals.length; i += CONCURRENCY) {
+      const batch = proposals.slice(i, i + CONCURRENCY);
+      const batchResults = await Promise.all(batch.map(runOne));
+      settled.push(...batchResults);
+    }
 
     const applied = settled.filter((r) => r.ok).length;
     const failed: ApplyProposalsResult['failed'] = settled
