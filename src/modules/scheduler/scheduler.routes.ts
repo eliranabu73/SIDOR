@@ -125,10 +125,11 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
       const actingUserId = req.user!.id;
 
       try {
-        const result = await dbFor(req).query((tx) => {
-          const svc = new SchedulerService(tx);
-          return svc.applyProposals(scheduleId, body.proposals, actingUserId, req.user?.orgId);
-        });
+        // Each applyAssignment creates its own short-lived transaction internally.
+        // Wrapping all 12 in one outer RLS transaction exceeds the 5 s timeout.
+        // Tenant isolation is enforced by the organizationId guard in applyProposals.
+        const svc = new SchedulerService(prisma);
+        const result = await svc.applyProposals(scheduleId, body.proposals, actingUserId, req.user?.orgId);
         return reply.send(result);
       } catch (err) {
         return handleHttpError(reply, err);
