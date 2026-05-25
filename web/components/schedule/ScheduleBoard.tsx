@@ -9,6 +9,22 @@ import type { Employee, Schedule, Shift } from "@/lib/types";
 
 const DAYS_HE = ["א'", "ב'", "ג'", "ד'", "ה'", "ו'", "ש'"];
 
+/** Total minutes across all shifts in a day — used for the per-column summary. */
+function totalMinutes(shifts: Shift[]): number {
+  return shifts.reduce((sum, s) => {
+    const start = DateTime.fromISO(s.startsAt);
+    const end = DateTime.fromISO(s.endsAt);
+    const diff = end.diff(start, "minutes").minutes;
+    return sum + Math.max(0, diff) * (s.requiredCount ?? 1);
+  }, 0);
+}
+
+function formatHours(min: number): string {
+  if (min <= 0) return "0";
+  const h = Math.round(min / 60);
+  return h.toString();
+}
+
 interface Props {
   schedule: Schedule;
   employees: Employee[];
@@ -171,23 +187,53 @@ export function ScheduleBoard({
           {Array.from({ length: 7 }, (_, day) => {
             const date = weekStart.plus({ days: day });
             const isFirstCol = day === 0;
+            const isToday = date.hasSame(DateTime.now(), "day");
+            // Friday afternoon onwards + all of Saturday — Shabbat tint.
+            const isShabbat = day === 6 || day === 5; // 5=ו (Friday), 6=ש (Saturday)
+            const dayShifts = shiftsByDay[day] ?? [];
+            const dayCount = dayShifts.length;
+            const dayHours = formatHours(totalMinutes(dayShifts));
             return (
               <div
                 key={day}
                 className={cn(
-                  "flex flex-col gap-2 rounded-lg border bg-card/40 p-2 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0",
-                  isFirstCol && "sm:sticky sm:right-0 sm:z-10 sm:bg-card",
+                  "flex flex-col gap-2 rounded-lg border bg-card/40 p-2 sm:rounded-lg sm:border sm:p-2 sm:transition-colors",
+                  isFirstCol && "sm:sticky sm:right-0 sm:z-10",
+                  isToday
+                    ? "sm:border-primary/40 sm:bg-primary/[0.04] sm:shadow-[0_0_0_1px_var(--color-primary-30)]"
+                    : isShabbat
+                      ? "sm:bg-amber-500/[0.04] sm:border-amber-500/20"
+                      : "sm:bg-card/40",
                 )}
                 role="row"
+                aria-current={isToday ? "date" : undefined}
               >
                 <div
                   role="rowheader"
-                  className="flex items-center justify-between sm:justify-center sm:flex-col text-sm sm:text-xs font-semibold sm:sticky sm:top-0 sm:z-20 sm:bg-background pb-1 sm:border-b"
+                  className={cn(
+                    "flex flex-col items-center text-sm sm:text-xs font-semibold sm:sticky sm:top-0 sm:z-20 sm:bg-background/80 sm:backdrop-blur sm:rounded-md pb-1 sm:px-2 sm:py-1.5 sm:border",
+                    isToday && "sm:border-primary/40 sm:bg-primary/10",
+                    isShabbat && !isToday && "sm:border-amber-500/30",
+                  )}
                 >
-                  <div className="text-base sm:text-xs">{DAYS_HE[day]}</div>
-                  <div className="text-muted-foreground tabular-nums">
-                    {date.toFormat("d.M")}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-base sm:text-sm">{DAYS_HE[day]}</span>
+                    <span className="text-muted-foreground tabular-nums text-xs">
+                      {date.toFormat("d.M")}
+                    </span>
+                    {isToday ? (
+                      <span className="hidden sm:inline-flex items-center rounded-full bg-primary px-1.5 py-0 text-[9px] font-bold text-primary-foreground">
+                        היום
+                      </span>
+                    ) : null}
                   </div>
+                  {dayCount > 0 ? (
+                    <div className="mt-0.5 hidden sm:flex items-center gap-2 text-[10px] font-normal text-muted-foreground tabular-nums">
+                      <span>{dayCount} משמרות</span>
+                      <span aria-hidden>·</span>
+                      <span>{dayHours} שעות</span>
+                    </div>
+                  ) : null}
                 </div>
                 <div role="gridcell" className="flex flex-col gap-2 min-h-32">
                   {(shiftsByDay[day] ?? []).map((shift) => {

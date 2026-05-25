@@ -3,7 +3,7 @@
 import * as React from "react";
 import { DateTime } from "luxon";
 import { useDroppable } from "@dnd-kit/core";
-import { Clock, AlertTriangle, Lock } from "lucide-react";
+import { Clock, AlertTriangle, Lock, Sunrise, Sun, Sunset, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EmployeeChip } from "./EmployeeChip";
 import {
@@ -45,6 +45,18 @@ interface Props {
 
 const TIME_FORMAT = "HH:mm";
 
+/** Period of day inferred from the shift's start hour. */
+function shiftPeriod(startHour: number): {
+  label: string;
+  Icon: typeof Sun;
+  tint: string;
+} {
+  if (startHour >= 5 && startHour < 11) return { label: "בוקר", Icon: Sunrise, tint: "text-amber-500" };
+  if (startHour >= 11 && startHour < 16) return { label: "צהריים", Icon: Sun, tint: "text-orange-500" };
+  if (startHour >= 16 && startHour < 21) return { label: "ערב", Icon: Sunset, tint: "text-rose-500" };
+  return { label: "לילה", Icon: Moon, tint: "text-indigo-400" };
+}
+
 /**
  * ShiftCard — design system co-authored with ChatGPT.
  * Rule: card background almost never changes. Only border, accent strip,
@@ -69,8 +81,10 @@ function ShiftCardImpl({
     disabled: isLocked,
   });
 
-  const start = DateTime.fromISO(shift.startsAt).toFormat(TIME_FORMAT);
+  const startDt = DateTime.fromISO(shift.startsAt);
+  const start = startDt.toFormat(TIME_FORMAT);
   const end = DateTime.fromISO(shift.endsAt).toFormat(TIME_FORMAT);
+  const period = shiftPeriod(startDt.hour);
 
   const assigned = shift.assignments.filter((a) => a.status === "assigned");
   const empty = assigned.length === 0;
@@ -133,9 +147,11 @@ function ShiftCardImpl({
         <div className="flex flex-col">
           <span className="text-xs font-semibold inline-flex items-center gap-1">
             {isLocked && <Lock className="h-3 w-3" />}
+            <period.Icon className={cn("h-3.5 w-3.5", period.tint)} aria-hidden />
             {shift.role}
+            <span className="text-[10px] font-normal text-muted-foreground">· {period.label}</span>
           </span>
-          <span className="text-[11px] tabular-nums inline-flex items-center gap-1 opacity-80">
+          <span dir="ltr" className="text-[11px] tabular-nums inline-flex items-center gap-1 opacity-80">
             <Clock className="h-3 w-3" />
             {start}–{end}
           </span>
