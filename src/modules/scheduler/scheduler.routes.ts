@@ -125,20 +125,12 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
       const actingUserId = req.user!.id;
 
       try {
-        // RLS context must be active for raw prisma reads/writes; without it
-        // the schedule and shift lookups return null. Wrapping in one RLS
-        // transaction is required, but the default 5 s Prisma cap is too low
-        // for batches of ~12 proposals (each ~600-700 ms). Bump to 14 s,
-        // under Accelerate's hard 15 s ceiling.
-        const orgId = orgIdFor(req);
-        const result = await withOrgContext(orgId, { timeout: 14_000, maxWait: 5_000 }).query(
-          (tx) => new SchedulerService(tx).applyProposals(
-            scheduleId,
-            body.proposals,
-            actingUserId,
-            req.user?.orgId,
-          ),
-        );
+        // The service runs each applyAssignment inside its own short
+        // RLS-scoped tx and parallelises them with Promise.all, so the
+        // outer route uses raw prisma (no big wrapping tx that would
+        // exceed Accelerate's 15 s cap or the Vercel function timeout).
+        const svc = new SchedulerService(prisma);
+        const result = await svc.applyProposals(scheduleId, body.proposals, actingUserId, req.user?.orgId);
         return reply.send(result);
       } catch (err) {
         return handleHttpError(reply, err);

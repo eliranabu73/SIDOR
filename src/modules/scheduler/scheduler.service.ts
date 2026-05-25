@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
-import { prisma as defaultPrisma, ensureTx } from '../../db/prisma';
+import { prisma as defaultPrisma, ensureTx, withOrgContext } from '../../db/prisma';
 import type { Db } from '../../db/prisma';
 import { GreedySchedulerProvider } from './providers/greedy.provider';
 import { OrToolsSchedulerProvider } from './providers/or-tools.provider';
@@ -113,68 +113,72 @@ export class SchedulerService {
     actingUserId: string,
     organizationId?: string,
   ): Promise<ApplyProposalsResult> {
-    // Per-proposal tenancy is enforced inside applyAssignment (it checks
-    // shift.organizationId and employee.organizationId against the passed
-    // organizationId). A top-level guard that uses raw prisma (no RLS)
-    // returned null silently when the caller's JWT orgId differed from
-    // the schedule's organizationId even though RLS-aware queries succeeded;
-    // that masked legitimate apply attempts as "applied: 0".
-    let applied = 0;
-    const failed: ApplyProposalsResult['failed'] = [];
+    // Per-proposal tenancy is enforced inside applyAssignment via
+    // organizationId param. Each proposal runs in its own short
+    // RLS-scoped transaction (parallel) so the total wall time stays
+    // well under the Vercel function and Accelerate transaction caps,
+    // even for batches of 12+ proposals.
+    const orgIdForRls = organizationId ?? '';
 
-    for (const p of proposals) {
-      // Each applyAssignment is its own transaction; we sequence them so a single
-      // proposal failure does not abort the entire batch. Need current shift
-      // version for the optimistic concurrency check.
-      try {
-        const shift = await this.prisma.shift.findFirst({
-          where: organizationId
-            ? { id: p.shiftId, organizationId }
-            : { id: p.shiftId },
-          select: { version: true },
-        });
-        if (!shift) {
-          failed.push({
-            shiftId: p.shiftId,
-            employeeId: p.employeeId,
-            code: 'NOT_FOUND',
-            message: 'Shift not found',
+    const settled = await Promise.all(
+      proposals.map(async (p): Promise<
+        { ok: true } | { ok: false; code: string; message: string; shiftId: string; employeeId: string }
+      > => {
+        try {
+          await withOrgContext(orgIdForRls).query(async (tx) => {
+            const shift = await tx.shift.findFirst({
+              where: organizationId
+                ? { id: p.shiftId, organizationId }
+                : { id: p.shiftId },
+              select: { version: true },
+            });
+            if (!shift) {
+              throw Object.assign(new Error('Shift not found'), { code: 'NOT_FOUND' });
+            }
+            await applyAssignment(
+              {
+                shiftId: p.shiftId,
+                employeeId: p.employeeId,
+                expectedShiftVersion: shift.version,
+                action: 'assign',
+                acknowledgeWarnings: true,
+                actingUserId,
+                organizationId,
+              },
+              tx,
+            );
           });
-          continue;
-        }
-        await applyAssignment(
-          {
+          return { ok: true } as const;
+        } catch (err) {
+          const e = err as { code?: string; message?: string };
+          return {
+            ok: false,
             shiftId: p.shiftId,
             employeeId: p.employeeId,
-            expectedShiftVersion: shift.version,
-            action: 'assign',
-            acknowledgeWarnings: true,
-            actingUserId,
-            organizationId,
-          },
-          this.prisma,
-        );
-        applied++;
-      } catch (err) {
-        const e = err as { code?: string; message?: string };
-        failed.push({
-          shiftId: p.shiftId,
-          employeeId: p.employeeId,
-          code: e.code ?? 'APPLY_FAILED',
-          message: e.message ?? 'Failed to apply proposal',
-        });
-      }
-    }
+            code: e.code ?? 'APPLY_FAILED',
+            message: e.message ?? 'Failed to apply proposal',
+          } as const;
+        }
+      }),
+    );
 
-    const updated = await this.prisma.schedule.findUnique({
-      where: { id: scheduleId },
-      include: {
-        shifts: {
-          include: { role: true, assignments: true },
-          orderBy: { startAtUtc: 'asc' },
+    const applied = settled.filter((r) => r.ok).length;
+    const failed: ApplyProposalsResult['failed'] = settled
+      .filter((r): r is { ok: false; code: string; message: string; shiftId: string; employeeId: string } => !r.ok)
+      .map(({ shiftId, employeeId, code, message }) => ({ shiftId, employeeId, code, message }));
+
+    // Final schedule fetch in its own short RLS-scoped tx.
+    const updated = await withOrgContext(orgIdForRls).query((tx) =>
+      tx.schedule.findUnique({
+        where: { id: scheduleId },
+        include: {
+          shifts: {
+            include: { role: true, assignments: true },
+            orderBy: { startAtUtc: 'asc' },
+          },
         },
-      },
-    });
+      }),
+    );
     if (!updated) throw new NotFoundError('Schedule not found');
 
     return { applied, failed, schedule: mapSchedule(updated) };
