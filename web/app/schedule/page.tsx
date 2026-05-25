@@ -165,6 +165,8 @@ function ScheduleInner() {
         toast.error("המשמרת התעדכנה, מרענן…");
         return;
       }
+      // WARNINGS_REQUIRE_ACK is handled via dialog — suppress the toast.
+      if (status === 409 && body?.code === "WARNINGS_REQUIRE_ACK") return;
       if (status === 422 && body?.code === "CONSTRAINTS_VIOLATED") {
         const lines = (body.violations ?? []).map((v) => v.message).join(", ");
         toast.error(`השיבוץ נכשל: ${lines || "הפרות חוקים"}`);
