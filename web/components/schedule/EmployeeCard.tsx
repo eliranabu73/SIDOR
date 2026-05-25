@@ -1,13 +1,15 @@
 "use client";
 
 import { useDraggable } from "@dnd-kit/core";
-import { GripVertical } from "lucide-react";
+import { Check, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Employee, EmployeeScheduleMetrics } from "@/lib/types";
 
 interface Props {
   employee: Employee;
   metrics?: EmployeeScheduleMetrics;
+  onSelect?: () => void;
+  isSelected?: boolean;
 }
 
 function fairnessTone(score?: number): {
@@ -20,7 +22,7 @@ function fairnessTone(score?: number): {
   return { label: "חוסר איזון", className: "bg-destructive/15 text-destructive" };
 }
 
-export function EmployeeCard({ employee, metrics }: Props) {
+export function EmployeeCard({ employee, metrics, onSelect, isSelected }: Props) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
       id: `employee:${employee.id}`,
@@ -41,16 +43,24 @@ export function EmployeeCard({ employee, metrics }: Props) {
       style={style}
       {...attributes}
       {...listeners}
+      onClick={onSelect}
       className={cn(
         "group flex items-center gap-2 rounded-lg border bg-card p-2 text-start shadow-xs hover:border-primary/40 hover:bg-accent cursor-grab active:cursor-grabbing touch-none focus:outline-none focus:ring-2 focus:ring-ring",
         isDragging && "opacity-50 ring-2 ring-primary",
+        isSelected && "border-primary bg-primary/10 ring-2 ring-primary",
       )}
       aria-roledescription="עובד/ת ניתן/ת לגרירה"
       aria-label={`גרור את ${employee.fullName} למשמרת`}
+      aria-pressed={isSelected ? true : undefined}
     >
       <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium truncate">{employee.fullName}</div>
+        <div className="text-sm font-medium truncate inline-flex items-center gap-1">
+          {isSelected && (
+            <Check className="h-3.5 w-3.5 text-primary shrink-0" aria-hidden />
+          )}
+          <span className="truncate">{employee.fullName}</span>
+        </div>
         <div className="text-xs text-muted-foreground truncate">
           {employee.roles.join(" · ")}
         </div>

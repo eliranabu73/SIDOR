@@ -1,37 +1,11 @@
 "use client";
 
 import * as React from "react";
-import {
-  DndContext,
-  DragOverlay,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragOverEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
 import { DateTime } from "luxon";
-import { toast } from "sonner";
-import { Check, AlertTriangle, Ban } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ApiError } from "@/lib/api";
 import { ShiftCard, type ShiftValidationTone } from "./ShiftCard";
-import { ConfirmWarningsDialog } from "./ConfirmWarningsDialog";
-import {
-  useAssignMutation,
-  useValidateAssignment,
-} from "@/lib/queries";
-import type {
-  AssignBody,
-  ApiErrorBody,
-  Employee,
-  RuleResult,
-  Schedule,
-  Shift,
-} from "@/lib/types";
+import type { Employee, Schedule, Shift } from "@/lib/types";
 
 const DAYS_HE = ["א'", "ב'", "ג'", "ד'", "ה'", "ו'", "ש'"];
 
@@ -49,13 +23,13 @@ interface Props {
    * — locks held by *me* should not appear as locked in my UI.
    */
   currentUserId?: string;
-}
-
-interface PendingDrop {
-  shiftId: string;
-  employeeId: string;
-  expectedShiftVersion: number;
-  warnings: RuleResult[];
+  // Lifted from DnD:
+  validationByShift: Record<string, ShiftValidationTone>;
+  activeEmployee: Employee | null;
+  onUnassign: (shift: Shift, employeeId: string) => void;
+  // Tap-to-assign (mobile):
+  selectedEmployeeId?: string | null;
+  onTapAssign?: (shift: Shift) => void;
 }
 
 export function ScheduleBoard({
@@ -65,51 +39,16 @@ export function ScheduleBoard({
   locationFilter = "all",
   roleFilter = "all",
   currentUserId,
+  validationByShift,
+  activeEmployee,
+  onUnassign,
+  selectedEmployeeId,
+  onTapAssign,
 }: Props) {
   const employeesById = React.useMemo(
     () => Object.fromEntries(employees.map((e) => [e.id, e])),
     [employees],
   );
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor),
-  );
-
-  const [activeEmployeeId, setActiveEmployeeId] = React.useState<string | null>(
-    null,
-  );
-  const [validationByShift, setValidationByShift] = React.useState<
-    Record<string, ShiftValidationTone>
-  >({});
-  const [pendingDrop, setPendingDrop] = React.useState<PendingDrop | null>(null);
-
-  const validate = useValidateAssignment();
-  const assign = useAssignMutation({
-    onError: (err) => {
-      const apiErr = err as Error & { status?: number; body?: ApiErrorBody };
-      const status = (err as unknown as { status?: number }).status;
-      const body =
-        (err as unknown as { body?: ApiErrorBody }).body ?? undefined;
-      if (status === 409 && body?.code === "VERSION_MISMATCH") {
-        toast.error("המשמרת התעדכנה בינתיים, מרענן…");
-        return;
-      }
-      if (status === 422 && body?.code === "CONSTRAINTS_VIOLATED") {
-        const lines = (body.violations ?? [])
-          .map((v) => v.message)
-          .join(", ");
-        toast.error(`השיבוץ נכשל: ${lines || "הפרות חוקים"}`);
-        return;
-      }
-      toast.error(apiErr.message || "השיבוץ נכשל");
-    },
-    onSuccess: () => {
-      toast.success("שיבוץ בוצע");
-    },
-  });
-
-  const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const filteredShifts = React.useMemo(() => {
     return schedule.shifts.filter((s) => {
@@ -132,152 +71,13 @@ export function ScheduleBoard({
     return groups;
   }, [filteredShifts]);
 
-  const onDragStart = (e: DragStartEvent) => {
-    const empId =
-      (e.active.data.current as { employeeId?: string } | undefined)?.employeeId;
-    setActiveEmployeeId(empId ?? null);
-    setValidationByShift({});
-  };
-
-  const onDragOver = (e: DragOverEvent) => {
-    const over = e.over;
-    const active = e.active;
-    if (!over) return;
-    const overData = over.data.current as { type?: string; shiftId?: string } | undefined;
-    const activeData = active.data.current as { type?: string; employeeId?: string } | undefined;
-    if (overData?.type !== "shift" || !overData.shiftId) return;
-    if (activeData?.type !== "employee" || !activeData.employeeId) return;
-
-    const shiftId = overData.shiftId;
-    const employeeId = activeData.employeeId;
-
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      validate.mutate(
-        { shiftId, employeeId, action: "assign" },
-        {
-          onSuccess: (res) => {
-            setValidationByShift((prev) => ({
-              ...prev,
-              [shiftId]:
-                res.violations.length > 0
-                  ? "error"
-                  : res.warnings.length > 0
-                    ? "warning"
-                    : "ok",
-            }));
-          },
-          onError: () => {
-            setValidationByShift((prev) => ({ ...prev, [shiftId]: "neutral" }));
-          },
-        },
-      );
-    }, 200);
-  };
-
-  const onDragEnd = (e: DragEndEvent) => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    setActiveEmployeeId(null);
-    const over = e.over;
-    const active = e.active;
-    const tonesSnapshot = validationByShift;
-    setValidationByShift({});
-    if (!over) return;
-    const overData = over.data.current as { type?: string; shiftId?: string } | undefined;
-    const activeData = active.data.current as { type?: string; employeeId?: string } | undefined;
-    if (overData?.type !== "shift" || !overData.shiftId) return;
-    if (activeData?.type !== "employee" || !activeData.employeeId) return;
-
-    const shift = schedule.shifts.find((s) => s.id === overData.shiftId);
-    if (!shift) return;
-    if (shift.assignments.some((a) => a.employeeId === activeData.employeeId && a.status === "assigned")) {
-      toast.info("העובד/ת כבר משובץ/ת במשמרת זו");
-      return;
-    }
-
-    void performAssign({
-      shift,
-      employeeId: activeData.employeeId,
-      acknowledgeWarnings: false,
-      knownTone: tonesSnapshot[shift.id],
-    });
-  };
-
-  const performAssign = async ({
-    shift,
-    employeeId,
-    acknowledgeWarnings,
-    knownTone,
-  }: {
-    shift: Shift;
-    employeeId: string;
-    acknowledgeWarnings: boolean;
-    knownTone?: ShiftValidationTone;
-  }) => {
-    const body: AssignBody = {
-      action: "assign",
-      employeeId,
-      expectedShiftVersion: shift.version,
-      acknowledgeWarnings,
-    };
-    try {
-      await assign.mutateAsync({ shiftId: shift.id, body });
-    } catch (err) {
-      if (err instanceof ApiError) {
-        const apiBody = err.body as ApiErrorBody | null;
-        if (err.status === 409 && apiBody?.code === "WARNINGS_REQUIRE_ACK") {
-          setPendingDrop({
-            shiftId: shift.id,
-            employeeId,
-            expectedShiftVersion: shift.version,
-            warnings: apiBody.warnings ?? [],
-          });
-          return;
-        }
-      }
-      // Other errors handled by onError of mutation.
-      void knownTone;
-    }
-  };
-
-  const confirmWarnings = async () => {
-    if (!pendingDrop) return;
-    const shift = schedule.shifts.find((s) => s.id === pendingDrop.shiftId);
-    if (!shift) {
-      setPendingDrop(null);
-      return;
-    }
-    await performAssign({
-      shift,
-      employeeId: pendingDrop.employeeId,
-      acknowledgeWarnings: true,
-    });
-    setPendingDrop(null);
-  };
-
-  const unassign = (shift: Shift, employeeId: string) => {
-    assign.mutate({
-      shiftId: shift.id,
-      body: {
-        action: "unassign",
-        employeeId,
-        expectedShiftVersion: shift.version,
-      },
-    });
-  };
-
-  const activeEmployee = activeEmployeeId
-    ? employeesById[activeEmployeeId]
-    : null;
+  const [activeMobileDay, setActiveMobileDay] = React.useState<number>(() => {
+    const todayIdx = DateTime.now().weekday % 7;
+    return todayIdx;
+  });
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDragEnd={onDragEnd}
-    >
+    <>
       {employees.length === 0 ? (
         <div
           className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed bg-card/40 px-4 py-3 text-sm"
@@ -295,7 +95,75 @@ export function ScheduleBoard({
         </div>
       ) : null}
 
-      <div className="sm:overflow-x-auto">
+      {/* Mobile — day selector + single-day list */}
+      <div className="sm:hidden flex flex-col">
+        <div className="flex border-b bg-background">
+          {Array.from({ length: 7 }, (_, day) => {
+            const date = weekStart.plus({ days: day });
+            const isToday = date.hasSame(DateTime.now(), "day");
+            const count = shiftsByDay[day]?.length ?? 0;
+            return (
+              <button
+                key={day}
+                type="button"
+                onClick={() => setActiveMobileDay(day)}
+                className={cn(
+                  "flex-1 flex flex-col items-center py-2 text-[11px] font-medium transition-colors relative",
+                  activeMobileDay === day
+                    ? "text-primary border-b-2 border-primary"
+                    : "text-muted-foreground",
+                  isToday && activeMobileDay !== day && "bg-primary/5",
+                )}
+              >
+                <span className="font-semibold">{DAYS_HE[day]}</span>
+                <span className="tabular-nums opacity-70">{date.toFormat("d.M")}</span>
+                {count > 0 && (
+                  <span
+                    className={cn(
+                      "mt-0.5 h-4 min-w-[16px] px-1 rounded-full text-[9px] flex items-center justify-center",
+                      activeMobileDay === day
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="p-3 space-y-3">
+          {(shiftsByDay[activeMobileDay] ?? []).length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
+              <CalendarDays className="h-10 w-10 opacity-30" />
+              <p className="text-sm">אין משמרות ביום זה</p>
+            </div>
+          ) : (
+            (shiftsByDay[activeMobileDay] ?? []).map((shift) => {
+              const lockedByOther =
+                !!shift.lockedByUserId && shift.lockedByUserId !== currentUserId;
+              return (
+                <ShiftCard
+                  key={shift.id}
+                  shift={shift}
+                  employees={employeesById}
+                  validationTone={validationByShift[shift.id] ?? "neutral"}
+                  isLocked={lockedByOther}
+                  lockedByName={lockedByOther ? shift.lockedByName ?? undefined : undefined}
+                  ghostEmployee={activeEmployee}
+                  onUnassign={(empId) => onUnassign(shift, empId)}
+                  onTapAssign={selectedEmployeeId ? () => onTapAssign?.(shift) : undefined}
+                />
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* Desktop — 7-column grid */}
+      <div className="hidden sm:block sm:overflow-x-auto">
         <div
           className="flex flex-col gap-3 sm:grid sm:grid-cols-7 sm:gap-2 sm:min-w-[640px] md:min-w-[1100px]"
           role="grid"
@@ -335,7 +203,8 @@ export function ScheduleBoard({
                         isLocked={lockedByOther}
                         lockedByName={lockedByOther ? shift.lockedByName ?? undefined : undefined}
                         ghostEmployee={activeEmployee}
-                        onUnassign={(empId) => unassign(shift, empId)}
+                        onUnassign={(empId) => onUnassign(shift, empId)}
+                        onTapAssign={selectedEmployeeId ? () => onTapAssign?.(shift) : undefined}
                       />
                     );
                   })}
@@ -350,82 +219,6 @@ export function ScheduleBoard({
           })}
         </div>
       </div>
-
-      <DragOverlay dropAnimation={null}>
-        {activeEmployee ? (
-          <DragChip
-            employee={activeEmployee}
-            tone={activeOverTone(validationByShift)}
-          />
-        ) : null}
-      </DragOverlay>
-
-      <ConfirmWarningsDialog
-        open={pendingDrop !== null}
-        warnings={pendingDrop?.warnings ?? []}
-        onConfirm={() => void confirmWarnings()}
-        onCancel={() => setPendingDrop(null)}
-        pending={assign.isPending}
-      />
-    </DndContext>
+    </>
   );
-}
-
-/**
- * DragChip — the floating element pinned to the cursor while dragging.
- * Per design review (ChatGPT, 2026-05-21):
- *   - EmployeeChip + tiny status pill, max 2 lines.
- *   - NO score, NO ghost shift card, NO rotation.
- *   - Status pill: ✓ מתאים · ⚠ אזהרה · ✕ חסום.
- */
-function DragChip({
-  employee,
-  tone,
-}: {
-  employee: Employee;
-  tone: ShiftValidationTone;
-}) {
-  const initials = employee.fullName
-    .split(/\s+/)
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2);
-  return (
-    <div className="flex flex-col items-start gap-1 select-none">
-      <div className="inline-flex items-center gap-2 rounded-full border bg-card px-2.5 py-1 text-sm font-medium shadow-lg">
-        <span
-          aria-hidden
-          className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/20 text-[10px]"
-        >
-          {initials}
-        </span>
-        <span className="max-w-44 truncate">{employee.fullName}</span>
-      </div>
-      {tone !== "neutral" && (
-        <span
-          className={cn(
-            "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium shadow-md",
-            tone === "ok" && "border-[var(--color-shift-ok-accent)] bg-[var(--color-drag-valid-bg)] text-[var(--color-shift-ok-accent)]",
-            tone === "warning" && "border-[var(--color-shift-warning-accent)] bg-[var(--color-drag-warning-bg)] text-[var(--color-shift-warning-accent)]",
-            tone === "error" && "border-[var(--color-shift-conflict-accent)] bg-[var(--color-drag-blocked-bg)] text-[var(--color-shift-conflict-accent)]",
-          )}
-        >
-          {tone === "ok" && <><Check className="h-3 w-3" /> מתאים</>}
-          {tone === "warning" && <><AlertTriangle className="h-3 w-3" /> אזהרה</>}
-          {tone === "error" && <><Ban className="h-3 w-3" /> חסום</>}
-        </span>
-      )}
-    </div>
-  );
-}
-
-/** Returns the strongest non-neutral tone across all currently-hovered shifts. */
-function activeOverTone(
-  validationByShift: Record<string, ShiftValidationTone>,
-): ShiftValidationTone {
-  const tones = Object.values(validationByShift);
-  if (tones.includes("error")) return "error";
-  if (tones.includes("warning")) return "warning";
-  if (tones.includes("ok")) return "ok";
-  return "neutral";
 }

@@ -35,6 +35,11 @@ interface Props {
   ghostEmployee?: Employee | null;
   onUnassign: (employeeId: string) => void;
   onSwap?: (employeeId: string) => void;
+  /**
+   * Mobile tap-to-assign. When provided, the entire card becomes tappable and
+   * the empty-state hint changes from "drag" to "tap".
+   */
+  onTapAssign?: () => void;
 }
 
 const TIME_FORMAT = "HH:mm";
@@ -55,6 +60,7 @@ export function ShiftCard({
   ghostEmployee = null,
   onUnassign,
   onSwap,
+  onTapAssign,
 }: Props) {
   const { isOver, setNodeRef } = useDroppable({
     id: `shift:${shift.id}`,
@@ -98,12 +104,14 @@ export function ShiftCard({
     <div
       ref={setNodeRef}
       data-drag-over={isOver && !isLocked ? "true" : undefined}
+      onClick={onTapAssign && !isLocked ? onTapAssign : undefined}
       className={cn(
         "shift-card group relative rounded-lg border",
         // empty / dashed
         restingState === "empty" && "border-dashed opacity-95",
         // locked is visually quieter
         restingState === "locked" && "opacity-90 cursor-not-allowed",
+        onTapAssign && !isLocked && "cursor-pointer hover:bg-primary/5 active:scale-[0.98] transition-transform",
       )}
       style={{ ...shiftCardStyle(restingState, dragOverlay), ...densitySizing(density) }}
       aria-label={`משמרת ${shift.role}, ${start} עד ${end}, ${assigned.length} מתוך ${shift.requiredCount} עובדים${isLocked ? " — נעולה לעריכה" : ""}`}
@@ -168,7 +176,7 @@ export function ShiftCard({
         {empty ? (
           <span className="text-[11px] italic inline-flex items-center gap-1 opacity-80">
             {understaffed && !isOpen && <AlertTriangle className="h-3 w-3" />}
-            {isOpen ? "משמרת פתוחה — לעובדים לקחת" : "גרור עובד/ת לכאן"}
+            {isOpen ? "משמרת פתוחה — לעובדים לקחת" : onTapAssign ? "הקש לשיבוץ" : "גרור עובד/ת לכאן"}
           </span>
         ) : (
           assigned.map((a) => {

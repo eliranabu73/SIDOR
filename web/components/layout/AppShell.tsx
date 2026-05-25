@@ -43,12 +43,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   });
   const isAdmin = adminCheck.data?.isAdmin === true;
 
+  // Tips feature is optional — only restaurants/bars typically need it.
+  // Controlled via localStorage flag toggled from settings > general.
+  const [showTips, setShowTips] = React.useState<boolean>(false);
+  React.useEffect(() => {
+    try {
+      setShowTips(localStorage.getItem("sidor_show_tips") === "true");
+    } catch {
+      setShowTips(false);
+    }
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "sidor_show_tips") {
+        setShowTips(e.newValue === "true");
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   const nav: NavItem[] = [
     { href: "/schedule", label: "סידור עבודה", icon: <CalendarDays className="h-5 w-5" /> },
     { href: "/employees", label: "עובדים", icon: <Users className="h-5 w-5" /> },
     { href: "/swaps", label: "החלפות", icon: <ArrowLeftRight className="h-5 w-5" /> },
     { href: "/fairness", label: "הוגנות", icon: <Scale className="h-5 w-5" /> },
-    { href: "/tips", label: "חלוקת טיפים", icon: <CircleDollarSign className="h-5 w-5" /> },
+    ...(showTips
+      ? [{ href: "/tips", label: "חלוקת טיפים", icon: <CircleDollarSign className="h-5 w-5" /> }]
+      : []),
     { href: "/timetracking", label: "נוכחות", icon: <Clock className="h-5 w-5" /> },
     { href: "/settings", label: "הגדרות", icon: <Settings className="h-5 w-5" /> },
   ];
@@ -126,7 +146,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         aria-label="ניווט תחתון"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <ul className="grid grid-cols-7">
+        <ul className={cn("grid", showTips ? "grid-cols-7" : "grid-cols-6")}>
           {nav.map((item) => {
             const active = pathname?.startsWith(item.href);
             return (

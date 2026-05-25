@@ -5,6 +5,24 @@ import dynamic from "next/dynamic";
 import { DateTime } from "luxon";
 import { ArrowLeft, Filter, MessageCircle, Printer, Search, Sparkles, Upload, Users as UsersIcon } from "lucide-react";
 import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { ApiError } from "@/lib/api";
+import { useAssignMutation, useValidateAssignment } from "@/lib/queries";
+import { ConfirmWarningsDialog } from "@/components/schedule/ConfirmWarningsDialog";
+import type { AssignBody, ApiErrorBody, Employee, RuleResult, Shift } from "@/lib/types";
+import type { ShiftValidationTone } from "@/components/schedule/ShiftCard";
+import {
   Sheet,
   SheetContent,
   SheetHeader,
@@ -88,6 +106,13 @@ export default function SchedulePage() {
   );
 }
 
+interface PendingDrop {
+  shiftId: string;
+  employeeId: string;
+  expectedShiftVersion: number;
+  warnings: RuleResult[];
+}
+
 function ScheduleInner() {
   const isDemo = useDemoMode();
   const [weekStart, setWeekStart] = React.useState<DateTime>(() =>
@@ -115,6 +140,42 @@ function ScheduleInner() {
   const autoSchedule = useAutoSchedule();
   const applyProposals = useApplyProposals();
   const publish = usePublishSchedule();
+
+  // ── DnD state (lifted from ScheduleBoard so EmployeeCard sources live INSIDE DndContext)
+  const [activeEmployeeId, setActiveEmployeeId] = React.useState<string | null>(null);
+  const [validationByShift, setValidationByShift] = React.useState<
+    Record<string, ShiftValidationTone>
+  >({});
+  const [pendingDrop, setPendingDrop] = React.useState<PendingDrop | null>(null);
+  // Tap-to-assign (mobile)
+  const [selectedEmployeeId, setSelectedEmployeeId] = React.useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(KeyboardSensor),
+  );
+
+  const validate = useValidateAssignment();
+  const assign = useAssignMutation({
+    onError: (err) => {
+      const status = (err as unknown as { status?: number }).status;
+      const body = (err as unknown as { body?: ApiErrorBody }).body ?? undefined;
+      if (status === 409 && body?.code === "VERSION_MISMATCH") {
+        toast.error("המשמרת התעדכנה, מרענן…");
+        return;
+      }
+      if (status === 422 && body?.code === "CONSTRAINTS_VIOLATED") {
+        const lines = (body.violations ?? []).map((v) => v.message).join(", ");
+        toast.error(`השיבוץ נכשל: ${lines || "הפרות חוקים"}`);
+        return;
+      }
+      toast.error((err as Error).message || "השיבוץ נכשל");
+    },
+    onSuccess: () => toast.success("שיבוץ בוצע"),
+  });
+
+  const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // In public-demo mode, force-feed seeded mocks instead of API responses
   // so the page is usable without auth or backend reachability.
@@ -164,6 +225,161 @@ function ScheduleInner() {
       return true;
     });
   }, [employees, search, locationFilter, roleFilter]);
+
+  // ── DnD handlers
+  const onDragStart = (e: DragStartEvent) => {
+    const empId = (e.active.data.current as { employeeId?: string } | undefined)?.employeeId;
+    setActiveEmployeeId(empId ?? null);
+    setValidationByShift({});
+  };
+
+  const onDragOver = (e: DragOverEvent) => {
+    const over = e.over;
+    const active = e.active;
+    if (!over) return;
+    const overData = over.data.current as { type?: string; shiftId?: string } | undefined;
+    const activeData = active.data.current as { type?: string; employeeId?: string } | undefined;
+    if (overData?.type !== "shift" || !overData.shiftId) return;
+    if (activeData?.type !== "employee" || !activeData.employeeId) return;
+    const shiftId = overData.shiftId;
+    const employeeId = activeData.employeeId;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      validate.mutate(
+        { shiftId, employeeId, action: "assign" },
+        {
+          onSuccess: (res) => {
+            setValidationByShift((prev) => ({
+              ...prev,
+              [shiftId]:
+                res.violations.length > 0
+                  ? "error"
+                  : res.warnings.length > 0
+                    ? "warning"
+                    : "ok",
+            }));
+          },
+          onError: () => {
+            setValidationByShift((prev) => ({ ...prev, [shiftId]: "neutral" }));
+          },
+        },
+      );
+    }, 200);
+  };
+
+  const performAssign = async ({
+    shift,
+    employeeId,
+    acknowledgeWarnings,
+    knownTone,
+  }: {
+    shift: Shift;
+    employeeId: string;
+    acknowledgeWarnings: boolean;
+    knownTone?: ShiftValidationTone;
+  }) => {
+    const body: AssignBody = {
+      action: "assign",
+      employeeId,
+      expectedShiftVersion: shift.version,
+      acknowledgeWarnings,
+    };
+    try {
+      await assign.mutateAsync({ shiftId: shift.id, body });
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const apiBody = err.body as ApiErrorBody | null;
+        if (err.status === 409 && apiBody?.code === "WARNINGS_REQUIRE_ACK") {
+          setPendingDrop({
+            shiftId: shift.id,
+            employeeId,
+            expectedShiftVersion: shift.version,
+            warnings: apiBody.warnings ?? [],
+          });
+          return;
+        }
+      }
+      void knownTone;
+    }
+  };
+
+  const onDragEnd = (e: DragEndEvent) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setActiveEmployeeId(null);
+    const over = e.over;
+    const active = e.active;
+    const tonesSnapshot = validationByShift;
+    setValidationByShift({});
+    if (!over) return;
+    const overData = over.data.current as { type?: string; shiftId?: string } | undefined;
+    const activeData = active.data.current as { type?: string; employeeId?: string } | undefined;
+    if (overData?.type !== "shift" || !overData.shiftId) return;
+    if (activeData?.type !== "employee" || !activeData.employeeId) return;
+    const shift = scheduleQuery.data?.shifts.find((s) => s.id === overData.shiftId);
+    if (!shift) return;
+    if (
+      shift.assignments.some(
+        (a) => a.employeeId === activeData.employeeId && a.status === "assigned",
+      )
+    ) {
+      toast.info("העובד/ת כבר משובץ/ת במשמרת זו");
+      return;
+    }
+    void performAssign({
+      shift,
+      employeeId: activeData.employeeId,
+      acknowledgeWarnings: false,
+      knownTone: tonesSnapshot[shift.id],
+    });
+  };
+
+  const confirmWarnings = async () => {
+    if (!pendingDrop) return;
+    const shift = scheduleQuery.data?.shifts.find((s) => s.id === pendingDrop.shiftId);
+    if (!shift) {
+      setPendingDrop(null);
+      return;
+    }
+    await performAssign({
+      shift,
+      employeeId: pendingDrop.employeeId,
+      acknowledgeWarnings: true,
+    });
+    setPendingDrop(null);
+  };
+
+  const unassign = (shift: Shift, employeeId: string) => {
+    assign.mutate({
+      shiftId: shift.id,
+      body: {
+        action: "unassign",
+        employeeId,
+        expectedShiftVersion: shift.version,
+      },
+    });
+  };
+
+  const handleTapAssign = (shift: Shift) => {
+    if (!selectedEmployeeId) return;
+    if (
+      shift.assignments.some(
+        (a) => a.employeeId === selectedEmployeeId && a.status === "assigned",
+      )
+    ) {
+      toast.info("העובד/ת כבר משובץ/ת במשמרת זו");
+      return;
+    }
+    void performAssign({
+      shift,
+      employeeId: selectedEmployeeId,
+      acknowledgeWarnings: false,
+    });
+    setSelectedEmployeeId(null);
+  };
+
+  const activeEmployee = activeEmployeeId
+    ? employees.find((e) => e.id === activeEmployeeId) ?? null
+    : null;
 
   const onPreviewAuto = async (weights: AutoScheduleWeights) => {
     if (!scheduleQuery.data) return [];
@@ -308,6 +524,34 @@ function ScheduleInner() {
         </div>
       )}
 
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragEnd={onDragEnd}
+      >
+        {/* Selected-employee bar (mobile only) */}
+        {selectedEmployeeId && (() => {
+          const selEmp = employees.find((e) => e.id === selectedEmployeeId);
+          if (!selEmp) return null;
+          return (
+            <div className="sm:hidden sticky top-14 z-20 flex items-center gap-3 px-4 py-2.5 bg-primary text-primary-foreground border-b">
+              <span className="text-sm font-medium flex-1 truncate">
+                שיבוץ: {selEmp.fullName} — הקש על משמרת
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedEmployeeId(null)}
+                className="text-primary-foreground/70 hover:text-primary-foreground text-lg leading-none"
+                aria-label="בטל בחירת עובד/ת"
+              >
+                ✕
+              </button>
+            </div>
+          );
+        })()}
+
       <div className="flex flex-col sm:flex-row flex-1 min-h-0">
         {/* Left rail — filters (desktop only) */}
         <aside aria-label="סינון וחיפוש" className="hidden sm:block w-60 shrink-0 border-e bg-muted/30 p-3 overflow-y-auto">
@@ -392,6 +636,11 @@ function ScheduleInner() {
                 weekStart={weekStart}
                 locationFilter={locationFilter}
                 roleFilter={roleFilter}
+                validationByShift={validationByShift}
+                activeEmployee={activeEmployee}
+                onUnassign={unassign}
+                selectedEmployeeId={selectedEmployeeId}
+                onTapAssign={handleTapAssign}
               />
             )
           ) : null}
@@ -418,6 +667,12 @@ function ScheduleInner() {
                   key={e.id}
                   employee={e}
                   metrics={metricsByEmployee[e.id]}
+                  onSelect={() =>
+                    setSelectedEmployeeId(
+                      e.id === selectedEmployeeId ? null : e.id,
+                    )
+                  }
+                  isSelected={e.id === selectedEmployeeId}
                 />
               ))}
               {visibleEmployees.length === 0 ? (
@@ -429,6 +684,32 @@ function ScheduleInner() {
           )}
         </aside>
       </div>
+
+        <DragOverlay dropAnimation={null}>
+          {activeEmployee ? (
+            <DragChipInline
+              employee={activeEmployee}
+              tone={
+                Object.values(validationByShift).includes("error")
+                  ? "error"
+                  : Object.values(validationByShift).includes("warning")
+                    ? "warning"
+                    : Object.values(validationByShift).includes("ok")
+                      ? "ok"
+                      : "neutral"
+              }
+            />
+          ) : null}
+        </DragOverlay>
+
+        <ConfirmWarningsDialog
+          open={pendingDrop !== null}
+          warnings={pendingDrop?.warnings ?? []}
+          onConfirm={() => void confirmWarnings()}
+          onCancel={() => setPendingDrop(null)}
+          pending={assign.isPending}
+        />
+      </DndContext>
 
       {/* Mobile filters drawer */}
       <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
@@ -543,6 +824,13 @@ function ScheduleInner() {
                   key={e.id}
                   employee={e}
                   metrics={metricsByEmployee[e.id]}
+                  onSelect={() => {
+                    setSelectedEmployeeId(
+                      e.id === selectedEmployeeId ? null : e.id,
+                    );
+                    setEmployeesPanelOpen(false);
+                  }}
+                  isSelected={e.id === selectedEmployeeId}
                 />
               ))}
               {visibleEmployees.length === 0 ? (
@@ -611,6 +899,32 @@ function ScheduleInner() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function DragChipInline({
+  employee,
+  tone,
+}: {
+  employee: Employee;
+  tone: "neutral" | "ok" | "warning" | "error";
+}) {
+  const initials = employee.fullName
+    .split(/\s+/)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2);
+  void tone;
+  return (
+    <div className="inline-flex items-center gap-2 rounded-full border bg-card px-2.5 py-1 text-sm font-medium shadow-lg select-none">
+      <span
+        aria-hidden
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/20 text-[10px]"
+      >
+        {initials}
+      </span>
+      <span className="max-w-44 truncate">{employee.fullName}</span>
     </div>
   );
 }
