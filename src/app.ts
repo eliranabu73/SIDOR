@@ -50,6 +50,10 @@ export async function buildApp(): Promise<FastifyInstance> {
     // Generate a correlation id per request — propagated to logs + Sentry.
     genReqId: (req) =>
       (req.headers['x-request-id'] as string | undefined) ?? randomUUID(),
+    // HMAC-signed share tokens (employee portal) are ~188 chars and embed
+    // into /v1/share/:token/* routes. Fastify's default 100-char cap on
+    // route params makes find-my-way return 404 before any handler runs.
+    maxParamLength: 500,
     logger: {
       level: env.LOG_LEVEL,
       redact: ['req.headers.authorization'],
