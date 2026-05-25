@@ -62,6 +62,15 @@ export interface SchedulerInput {
   weights?: Partial<ScoringWeights>;
 }
 
+export interface CandidatePersistRow {
+  organizationId: string;
+  shiftId: string;
+  employeeId: string;
+  eligibilityScore: number;
+  violationsCount: number;
+  warningsCount: number;
+}
+
 export interface SchedulerOutput {
   scheduleId: string;
   proposals: AssignmentProposal[];
@@ -75,6 +84,8 @@ export interface SchedulerOutput {
     averageScore: number;
   };
   providerName: string;
+  /** Candidate rows for persistence — populated by provider, consumed by route. */
+  _candidateRows: CandidatePersistRow[];
 }
 
 /**

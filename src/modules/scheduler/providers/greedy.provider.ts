@@ -1,11 +1,12 @@
 import type { PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../../db/prisma';
-import { generateCandidates, persistCandidates } from '../candidate-generation.service';
+import { generateCandidates } from '../candidate-generation.service';
 import { scoreCandidate } from '../scoring.service';
 import {
   DEFAULT_WEIGHTS,
   type AssignmentProposal,
   type Candidate,
+  type CandidatePersistRow,
   type SchedulerInput,
   type SchedulerOutput,
   type SchedulerProvider,
@@ -85,18 +86,14 @@ export class GreedySchedulerProvider implements SchedulerProvider {
       if (filled < slots) unfilled.push(shift.id);
     }
 
-    // persist all eligible candidates with their final scores (idempotent)
-    if (!input.dryRun) {
-      const persistRows = scored.map((row) => ({
-        organizationId: row.candidate.shift.organizationId,
-        shiftId: row.candidate.shift.id,
-        employeeId: row.candidate.employee.id,
-        eligibilityScore: row.score,
-        violationsCount: row.candidate.violations.length,
-        warningsCount: row.candidate.warnings.length,
-      }));
-      await persistCandidates(persistRows, this.prisma);
-    }
+    const _candidateRows: CandidatePersistRow[] = scored.map((row) => ({
+      organizationId: row.candidate.shift.organizationId,
+      shiftId: row.candidate.shift.id,
+      employeeId: row.candidate.employee.id,
+      eligibilityScore: row.score,
+      violationsCount: row.candidate.violations.length,
+      warningsCount: row.candidate.warnings.length,
+    }));
 
     const totalCandidatesConsidered = scored.length;
     const averageScore =
@@ -115,6 +112,7 @@ export class GreedySchedulerProvider implements SchedulerProvider {
         averageScore,
       },
       providerName: this.name,
+      _candidateRows,
     };
   }
 }

@@ -120,6 +120,14 @@ export class OrToolsSchedulerProvider implements SchedulerProvider {
         averageScore,
       },
       providerName: this.name,
+      _candidateRows: scored.map((row) => ({
+        organizationId: row.candidate.shift.organizationId,
+        shiftId: row.candidate.shift.id,
+        employeeId: row.candidate.employee.id,
+        eligibilityScore: row.score,
+        violationsCount: row.candidate.violations.length,
+        warningsCount: row.candidate.warnings.length,
+      })),
     };
   }
 }

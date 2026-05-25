@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { SchedulerService, type ProviderName } from './scheduler.service';
+import { persistCandidates } from './candidate-generation.service';
 import { computeWeeklyCost } from './labor-cost.service';
 import { HttpError } from '../../shared/errors';
 import { prisma, withOrgContext } from '../../db/prisma';
@@ -35,11 +36,6 @@ function dbFor(req: { orgPrisma?: { query: <T>(fn: (tx: PrismaClient) => Promise
   return req.orgPrisma ?? { query: <T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> => fn(prisma) };
 }
 
-/** Long-timeout RLS context for expensive operations like auto-schedule. */
-function dbForLong(req: { user?: { orgId?: string } }) {
-  const orgId = orgIdFor(req);
-  return withOrgContext(orgId, 14_000);
-}
 
 const ScheduleIdParam = z.object({ scheduleId: z.string().uuid() });
 
@@ -239,9 +235,10 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
       }
 
       try {
-        const result = await dbForLong(req).query(async (tx) => {
-          // Validate schedule belongs to this org (RLS already enforces this,
-          // but be explicit for a clear 404 rather than "0 proposals").
+        // Transaction 1 (reads + CPU): fetch data, generate + score candidates.
+        // Always runs as dryRun=true to avoid calling persistCandidates inside
+        // the transaction — that would exceed the Prisma Accelerate 15s cap.
+        const result = await dbFor(req).query(async (tx) => {
           const schedCheck = await tx.schedule.findFirst({
             where: { id: scheduleId, organizationId: orgId },
             select: { id: true },
@@ -252,16 +249,21 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
 
           const svc = new SchedulerService(tx);
           return svc.run(
-            {
-              scheduleId,
-              dryRun: body.dryRun,
-              weights: body.weights,
-            },
+            { scheduleId, dryRun: true, weights: body.weights },
             body.provider as ProviderName,
             orgId,
           );
         });
-        return reply.send(result);
+
+        // Transaction 2 (writes): persist candidates in a separate short transaction.
+        if (!body.dryRun && result._candidateRows.length > 0) {
+          await withOrgContext(orgId).query((tx) =>
+            persistCandidates(result._candidateRows, tx),
+          );
+        }
+
+        const { _candidateRows: _, ...publicResult } = result;
+        return reply.send(publicResult);
       } catch (err) {
         return handleHttpError(reply, err);
       }
