@@ -125,11 +125,20 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
       const actingUserId = req.user!.id;
 
       try {
-        // Each applyAssignment creates its own short-lived transaction internally.
-        // Wrapping all 12 in one outer RLS transaction exceeds the 5 s timeout.
-        // Tenant isolation is enforced by the organizationId guard in applyProposals.
-        const svc = new SchedulerService(prisma);
-        const result = await svc.applyProposals(scheduleId, body.proposals, actingUserId, req.user?.orgId);
+        // RLS context must be active for raw prisma reads/writes; without it
+        // the schedule and shift lookups return null. Wrapping in one RLS
+        // transaction is required, but the default 5 s Prisma cap is too low
+        // for batches of ~12 proposals (each ~600-700 ms). Bump to 14 s,
+        // under Accelerate's hard 15 s ceiling.
+        const orgId = orgIdFor(req);
+        const result = await withOrgContext(orgId, { timeout: 14_000, maxWait: 5_000 }).query(
+          (tx) => new SchedulerService(tx).applyProposals(
+            scheduleId,
+            body.proposals,
+            actingUserId,
+            req.user?.orgId,
+          ),
+        );
         return reply.send(result);
       } catch (err) {
         return handleHttpError(reply, err);

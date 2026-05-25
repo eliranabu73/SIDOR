@@ -114,22 +114,31 @@ export function withAdminContext() {
   };
 }
 
-export function withOrgContext(orgId: string) {
+export function withOrgContext(
+  orgId: string,
+  opts?: { timeout?: number; maxWait?: number },
+) {
   return {
     /**
      * Run `queryFn` inside a transaction that first sets the RLS context.
      * `queryFn` receives a `PrismaClient` scoped to the transaction.
+     * Pass opts.timeout (ms) to override the default 5 s Prisma cap, e.g. for
+     * batch endpoints that issue many sequential writes. Accelerate enforces
+     * a hard 15 s max — do not exceed it.
      */
     query<T>(queryFn: (tx: PrismaClient) => Promise<T>): Promise<T> {
-      return prisma.$transaction(async (tx) => {
-        // SET LOCAL only affects the current transaction (connection-pool safe).
-        // We sanitise orgId to a UUID pattern to prevent SQL injection.
-        const safeOrgId = orgId.replace(/[^a-f0-9-]/gi, '');
-        await tx.$executeRawUnsafe(
-          `SET LOCAL app.current_org_id = '${safeOrgId}'`,
-        );
-        return queryFn(tx as unknown as PrismaClient);
-      });
+      return prisma.$transaction(
+        async (tx) => {
+          // SET LOCAL only affects the current transaction (connection-pool safe).
+          // We sanitise orgId to a UUID pattern to prevent SQL injection.
+          const safeOrgId = orgId.replace(/[^a-f0-9-]/gi, '');
+          await tx.$executeRawUnsafe(
+            `SET LOCAL app.current_org_id = '${safeOrgId}'`,
+          );
+          return queryFn(tx as unknown as PrismaClient);
+        },
+        opts ? { timeout: opts.timeout, maxWait: opts.maxWait } : undefined,
+      );
     },
   };
 }
