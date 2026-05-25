@@ -113,16 +113,12 @@ export class SchedulerService {
     actingUserId: string,
     organizationId?: string,
   ): Promise<ApplyProposalsResult> {
-    // Cross-tenant guard: ensure the schedule belongs to the caller's org.
-    if (organizationId) {
-      const sched = await this.prisma.schedule.findFirst({
-        where: { id: scheduleId, organizationId },
-        select: { id: true },
-      });
-      if (!sched) {
-        return { applied: 0, failed: [], schedule: null };
-      }
-    }
+    // Per-proposal tenancy is enforced inside applyAssignment (it checks
+    // shift.organizationId and employee.organizationId against the passed
+    // organizationId). A top-level guard that uses raw prisma (no RLS)
+    // returned null silently when the caller's JWT orgId differed from
+    // the schedule's organizationId even though RLS-aware queries succeeded;
+    // that masked legitimate apply attempts as "applied: 0".
     let applied = 0;
     const failed: ApplyProposalsResult['failed'] = [];
 
