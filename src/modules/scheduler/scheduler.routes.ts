@@ -357,5 +357,7 @@ function handleHttpError(reply: FastifyReply, err: unknown) {
       .send({ code: err.code, message: err.message, details: err.details ?? null });
   }
   reply.log.error(err);
-  return reply.code(500).send({ code: 'INTERNAL_ERROR', message: 'Internal error' });
+  const msg = err instanceof Error ? err.message : String(err);
+  const stack = err instanceof Error ? err.stack?.slice(0, 500) : undefined;
+  return reply.code(500).send({ code: 'INTERNAL_ERROR', message: 'Internal error', _debug: msg, _stack: stack });
 }
