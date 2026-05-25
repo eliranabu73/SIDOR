@@ -88,26 +88,25 @@ if (process.env.NODE_ENV !== 'production') {
 // Platform-admin context — bypasses RLS for cross-tenant queries.
 // ---------------------------------------------------------------------------
 /**
- * Returns a wrapper around `prisma.$transaction` that disables RLS for the
- * duration of the transaction via `SET LOCAL row_security = off`.
+ * Returns a wrapper around `prisma.$transaction` that lets RLS policies
+ * see an admin wildcard for `app.current_org_id`. Use this ONLY in routes
+ * gated by `isPlatformAdmin()`.
  *
- * Use this ONLY in routes that are gated by `isPlatformAdmin()`. RLS is
- * still enforced for any non-admin caller.
- *
- * Postgres semantics:
- *   - `SET LOCAL` is transaction-scoped and reverts at COMMIT/ROLLBACK.
- *   - Disabling `row_security` causes RLS policies to be skipped for the
- *     current role inside this transaction.
- *
- * @example
- *   const db = withAdminContext();
- *   const orgs = await db.query((tx) => tx.organization.findMany());
+ * Implementation: each tenant_isolation policy recognises the literal
+ * sentinel `'*'` and matches all rows when the GUC is set to it (see
+ * migration 20260525170000_admin_rls_bypass). Setting `row_security = off`
+ * was the prior approach — it does the OPPOSITE of bypass (causes 42501
+ * unless the role has BYPASSRLS), so it was removed.
  */
+export const ADMIN_ORG_SENTINEL = '*';
+
 export function withAdminContext() {
   return {
     query<T>(queryFn: (tx: PrismaClient) => Promise<T>): Promise<T> {
       return prisma.$transaction(async (tx) => {
-        await tx.$executeRawUnsafe(`SET LOCAL row_security = off`);
+        await tx.$executeRawUnsafe(
+          `SET LOCAL app.current_org_id = '${ADMIN_ORG_SENTINEL}'`,
+        );
         return queryFn(tx as unknown as PrismaClient);
       });
     },
