@@ -429,7 +429,10 @@ function ScheduleInner() {
     if (blockIfDemo()) return;
     try {
       await publish.mutateAsync(scheduleQuery.data.id);
-      toast.success("הסידור פורסם");
+      toast.success("הסידור פורסם — בחרו כיצד לשתף");
+      // Auto-open the share dialog so the user sees templates + WhatsApp options.
+      // Without this, on mobile the user only sees a toast and nothing happens.
+      setExportOpen(true);
     } catch {
       toast.error("פרסום הסידור נכשל");
     }
@@ -466,46 +469,54 @@ function ScheduleInner() {
         </Button>
         <Button
           variant="outline"
+          size="sm"
           onClick={() => {
             if (blockIfDemo()) return;
             setAutoOpen(true);
           }}
           disabled={!scheduleQuery.data}
-          className="hidden sm:inline-flex"
+          className="h-11 sm:h-10"
+          aria-label="שיבוץ אוטומטי"
+          title="שיבוץ אוטומטי"
         >
           <Sparkles className="h-4 w-4" />
-          שיבוץ אוטומטי
+          <span className="hidden sm:inline">שיבוץ אוטומטי</span>
         </Button>
         <Button
           variant="outline"
+          size="sm"
           onClick={() => setExportOpen(true)}
           disabled={!scheduleQuery.data}
           title="ייצוא ושיתוף — תמונה או PDF"
-          className="hidden sm:inline-flex"
+          className="h-11 sm:h-10"
+          aria-label="ייצוא ושיתוף"
         >
           <Printer className="h-4 w-4" />
-          ייצוא ושיתוף
+          <span className="hidden sm:inline">ייצוא ושיתוף</span>
         </Button>
         <Button
           variant="glow"
+          size="sm"
           onClick={() => {
             if (blockIfDemo()) return;
             setPublishOpen(true);
           }}
           disabled={!scheduleQuery.data}
           title="פרסום בוואטסאפ עם קישור אישי לכל עובד"
-          className="hidden sm:inline-flex"
+          className="h-11 sm:h-10"
+          aria-label="פרסום ב-WhatsApp"
         >
           <MessageCircle className="h-4 w-4" />
-          פרסום ב-WhatsApp
+          <span className="hidden sm:inline">פרסום ב-WhatsApp</span>
         </Button>
         <Button
           onClick={publishNow}
           disabled={publish.isPending || !scheduleQuery.data}
           className="h-11 sm:h-10"
+          title="שמירה כסידור פורסם + פתיחת חלון שיתוף"
         >
           <Upload className="h-4 w-4" />
-          {publish.isPending ? "מפרסם…" : "פרסם"}
+          {publish.isPending ? "מפרסם…" : "פרסם ושתף"}
         </Button>
       </div>
 
