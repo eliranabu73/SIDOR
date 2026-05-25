@@ -1,6 +1,6 @@
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { DateTime } from 'luxon';
-import { prisma as defaultPrisma, ensureTx } from '../../db/prisma';
+import { prisma as defaultPrisma } from '../../db/prisma';
 import type { Db } from '../../db/prisma';
 import { validateAssignment } from '../rules/validator.service';
 import {
@@ -126,9 +126,9 @@ export async function generateCandidates(
 }
 
 /**
- * Persist the eligible candidates into `SchedulingCandidate`. Idempotent via
- * the `(shiftId, employeeId)` unique index. Called by SchedulerService after
- * scoring so we can store the final score, not just eligibility.
+ * Persist the eligible candidates into `SchedulingCandidate`.
+ * Uses delete-then-createMany (2 DB ops) instead of N sequential upserts to
+ * stay well under the Prisma Accelerate 15s transaction cap.
  */
 export async function persistCandidates(
   rows: Array<{
@@ -142,24 +142,12 @@ export async function persistCandidates(
   prisma: Db = defaultPrisma,
 ): Promise<number> {
   if (rows.length === 0) return 0;
-  // Run upserts inside a (possibly outer-managed) transaction so RLS context
-  // and atomicity hold.  ensureTx reuses an existing tx when one is passed in.
-  await ensureTx(prisma, async (tx) => {
-    for (const r of rows) {
-      await tx.schedulingCandidate.upsert({
-        where: {
-          shiftId_employeeId: { shiftId: r.shiftId, employeeId: r.employeeId },
-        },
-        create: { ...r },
-        update: {
-          eligibilityScore: r.eligibilityScore,
-          violationsCount: r.violationsCount,
-          warningsCount: r.warningsCount,
-          generatedAt: new Date(),
-        },
-      });
-    }
-  });
+  const shiftIds = [...new Set(rows.map((r) => r.shiftId))];
+  // Delete stale candidates for these shifts, then bulk-insert fresh scores.
+  // Analytics data — brief inconsistency window is acceptable.
+  const db = prisma as PrismaClient;
+  await db.schedulingCandidate.deleteMany({ where: { shiftId: { in: shiftIds } } });
+  await db.schedulingCandidate.createMany({ data: rows });
   return rows.length;
 }
 
