@@ -244,6 +244,15 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
             throw Object.assign(new Error('Schedule not found'), { statusCode: 404, code: 'NOT_FOUND' });
           }
 
+          // DEBUG: count shifts + employees visible in this tx context
+          const [dbShiftCount, dbEmpCount] = await Promise.all([
+            tx.shift.count({ where: { scheduleId, organizationId: orgId } }),
+            tx.employee.count({ where: { organizationId: orgId, isActive: true } }),
+          ]);
+          if (dbShiftCount === 0 || dbEmpCount === 0) {
+            return reply.send({ _debug: 'zero_data', orgId, scheduleId, dbShiftCount, dbEmpCount }) as never;
+          }
+
           const svc = new SchedulerService(tx);
           return svc.run(
             {
