@@ -33,6 +33,7 @@ export const mockEmployees: Employee[] = [
     active: true,
     maxHoursPerWeek: 40,
     minHoursPerWeek: 20,
+    hourlyRate: 45,
   },
   {
     id: "emp_2",
@@ -45,6 +46,7 @@ export const mockEmployees: Employee[] = [
     active: true,
     maxHoursPerWeek: 45,
     minHoursPerWeek: 30,
+    hourlyRate: 60,
   },
   {
     id: "emp_3",
@@ -57,6 +59,7 @@ export const mockEmployees: Employee[] = [
     active: true,
     maxHoursPerWeek: 30,
     minHoursPerWeek: 15,
+    hourlyRate: 42,
   },
   {
     id: "emp_4",
@@ -69,6 +72,7 @@ export const mockEmployees: Employee[] = [
     active: true,
     maxHoursPerWeek: 50,
     minHoursPerWeek: 35,
+    hourlyRate: 55,
   },
   {
     id: "emp_5",
@@ -81,6 +85,7 @@ export const mockEmployees: Employee[] = [
     active: true,
     maxHoursPerWeek: 25,
     minHoursPerWeek: 10,
+    hourlyRate: 40,
   },
   {
     id: "emp_6",
@@ -93,6 +98,7 @@ export const mockEmployees: Employee[] = [
     active: true,
     maxHoursPerWeek: 42,
     minHoursPerWeek: 25,
+    hourlyRate: 58,
   },
 ];
 
