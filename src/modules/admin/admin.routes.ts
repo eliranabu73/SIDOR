@@ -1524,6 +1524,97 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       }
     },
   );
+
+  // -------------------------------------------------------------------------
+  // POST /v1/admin/purge-test-users — hard-delete orgs for given userIds.
+  // Also accepts orgNamePatterns to wipe test orgs from any account.
+  // Protected by ADMIN_SECRET (not JWT) — usable even when auth is broken.
+  //
+  // Body: { userIds: string[], orgNamePatterns?: string[] }
+  // orgNamePatterns: LIKE patterns, e.g. ["TEST_PERSIST%", "E2E%", "backend%"]
+  // -------------------------------------------------------------------------
+  const PurgeBody = z.object({
+    userIds: z.array(z.string().uuid()).min(1).max(20),
+    orgNamePatterns: z.array(z.string().min(1).max(80)).max(20).default([]),
+  });
+
+  app.post('/purge-test-users', async (req, reply) => {
+    if (!checkAdminSecret(req, reply)) return;
+
+    const parsed = PurgeBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: 'INVALID_BODY', error: parsed.error.issues });
+    }
+    const { userIds, orgNamePatterns } = parsed.data;
+
+    const db = withAdminContext();
+    return db.query(async (tx) => {
+      const orgRows = await tx.$queryRawUnsafe<Array<{ id: string; name: string }>>(
+        `SELECT DISTINCT o.id, o.name
+           FROM organizations o
+           JOIN memberships m ON m."organizationId" = o.id
+          WHERE m."userId" = ANY($1::uuid[])`,
+        userIds,
+      ) as Array<{ id: string; name: string }>;
+
+      let patternOrgRows: Array<{ id: string; name: string }> = [];
+      if (orgNamePatterns.length > 0) {
+        const patternClause = orgNamePatterns
+          .map((_, i) => `name LIKE $${i + 1}`)
+          .join(' OR ');
+        patternOrgRows = await tx.$queryRawUnsafe<Array<{ id: string; name: string }>>(
+          `SELECT id, name FROM organizations WHERE ${patternClause}`,
+          ...orgNamePatterns,
+        ) as Array<{ id: string; name: string }>;
+      }
+
+      const allOrgs = [
+        ...orgRows,
+        ...patternOrgRows.filter(r => !orgRows.find(o => o.id === r.id)),
+      ];
+
+      if (allOrgs.length === 0) {
+        return { deleted: 0, orgs: [] };
+      }
+
+      const orgIds = allOrgs.map(o => o.id);
+
+      const tables = [
+        'schedule_audit_logs', 'schedule_events', 'open_shift_claims',
+        'assignments', 'message_deliveries', 'shifts', 'schedules',
+        'employee_availability_requests', 'employee_time_off_requests',
+        'employee_schedule_metrics', 'employee_shift_preferences',
+        'employee_preferences', 'employee_roles', 'employees',
+        'custom_rule_conditions', 'custom_rule_definitions',
+        'roles', 'locations', 'departments', 'memberships', 'organizations',
+      ];
+
+      const counts: Record<string, number> = {};
+      for (const table of tables) {
+        const col = table === 'organizations' ? 'id' : '"organizationId"';
+        try {
+          const result = await tx.$executeRawUnsafe(
+            `DELETE FROM "${table}" WHERE ${col} = ANY($1::uuid[])`,
+            orgIds,
+          );
+          if (result > 0) counts[table] = result;
+        } catch {
+          // table may not have organizationId column — skip
+        }
+      }
+
+      await tx.$executeRawUnsafe(
+        `DELETE FROM memberships WHERE "userId" = ANY($1::uuid[])`,
+        userIds,
+      );
+
+      return {
+        deleted: allOrgs.length,
+        orgs: allOrgs.map(o => ({ id: o.id, name: o.name })),
+        rowCounts: counts,
+      };
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
