@@ -14,6 +14,7 @@ import {
   OG_IMAGE_PATH,
   TWITTER_HANDLE,
 } from "@/lib/site";
+import { Analytics } from "@vercel/analytics/next";
 
 const heebo = Heebo({
   variable: "--font-heebo",
@@ -154,6 +155,7 @@ export default function RootLayout({
         <AdminAutoRedirect />
         <Providers>{children}</Providers>
         <RegisterSW />
+        <Analytics />
       </body>
     </html>
   );
