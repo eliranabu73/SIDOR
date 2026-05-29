@@ -871,7 +871,7 @@ export async function uploadOrgLogo(
  * Remove the org logo: delete from storage and clear the DB field.
  */
 export async function removeOrgLogo(
-  orgId: string,
+  _orgId: string,
   logoUrl: string | null,
   getSupabaseClient: () => import("@supabase/supabase-js").SupabaseClient,
 ): Promise<OrgSettings> {
