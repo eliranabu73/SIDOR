@@ -1,6 +1,15 @@
 import { ImageResponse } from "next/og";
+import bidiFactory from "bidi-js";
 
 export const runtime = "edge";
+
+// Satori renders LTR only — convert Hebrew logical→visual order via Unicode BiDi.
+const _bidi = bidiFactory();
+function vis(str: string): string {
+  if (!str) return str;
+  const levels = _bidi.getEmbeddingLevels(str, "rtl");
+  return _bidi.getReorderedString(str, levels);
+}
 
 export const alt = "סידור4S — סידור עבודה אוטומטי בעברית";
 export const size = { width: 1200, height: 630 };
@@ -44,9 +53,9 @@ async function loadHeebo(text: string): Promise<ArrayBuffer | null> {
 }
 
 export default async function Image() {
-  const brand = "סידור4S";
-  const tagline = "סידור עבודה אוטומטי בעברית";
-  const fontData = await loadHeebo(brand + tagline);
+  const brand = vis("סידור4S");
+  const tagline = vis("סידור עבודה אוטומטי בעברית");
+  const fontData = await loadHeebo("סידור4S" + "סידור עבודה אוטומטי בעברית");
 
   return new ImageResponse(
     (
@@ -63,7 +72,6 @@ export default async function Image() {
           color: "white",
           fontFamily: "Heebo, sans-serif",
           padding: 80,
-          direction: "rtl",
         }}
       >
         {/* Decorative blurred orbs (Satori supports radial-gradient backgrounds) */}
