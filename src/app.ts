@@ -121,6 +121,33 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
   });
 
+  // Temporary: apply missing columns to the real prod DB (Prisma Postgres).
+  // Local migrations apply to the wrong Supabase project. Gated by a header.
+  app.post('/debug/apply-cols', async (req, reply) => {
+    if (req.headers['x-migrate-key'] !== 'sidor4S-migrate-2026') {
+      return reply.code(403).send({ error: 'forbidden' });
+    }
+    const stmts = [
+      `ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "logoUrl" TEXT`,
+      `ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS "hireDate" DATE`,
+      `ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS "userId" UUID`,
+      `ALTER TABLE "schedules" ADD COLUMN IF NOT EXISTS "submittedAt" TIMESTAMP(3)`,
+      `ALTER TABLE "schedules" ADD COLUMN IF NOT EXISTS "submittedByUserId" UUID`,
+      `ALTER TABLE "schedules" ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP(3)`,
+      `ALTER TABLE "schedules" ADD COLUMN IF NOT EXISTS "approvedByUserId" UUID`,
+    ];
+    const results: Array<{ stmt: string; ok: boolean; error?: string }> = [];
+    for (const stmt of stmts) {
+      try {
+        await prisma.$executeRawUnsafe(stmt);
+        results.push({ stmt, ok: true });
+      } catch (err) {
+        results.push({ stmt, ok: false, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    return reply.send({ results });
+  });
+
   // Temporary debug: probe whether interactive transactions work via txPrisma.
   // Hits the exact same code path as withOrgContext / withAdminContext.
   app.get('/debug/tx', async (_req, reply) => {
