@@ -176,14 +176,9 @@ const authPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
         return reply.code(err.statusCode).send({ code: err.code, message: err.message });
       }
       req.log.error({ err }, 'auth: unexpected error during token verification');
-      // TEMP DEBUG: expose error details so we can diagnose prod 500s.
-      // Remove once /v1/me etc are stable.
-      const errMsg = err instanceof Error ? err.message : String(err);
-      const errName = err instanceof Error ? err.name : 'unknown';
       return reply.code(500).send({
         code: 'INTERNAL_ERROR',
         message: 'Internal error',
-        debug: { name: errName, msg: errMsg.slice(0, 500) },
       });
     }
   }
