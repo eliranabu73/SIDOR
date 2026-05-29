@@ -1,6 +1,17 @@
 import { createElement, type ReactElement } from 'react';
+import bidiFactory from 'bidi-js';
 import type { ExportStyle, ScheduleExportData, ExportShiftRow } from '../types';
 
+// Satori renders LTR only — convert Hebrew logical-order strings to visual
+// order using the Unicode Bidirectional Algorithm before passing to satori.
+const _bidi = bidiFactory();
+function vis(str: string): string {
+  if (!str) return str;
+  const levels = _bidi.getEmbeddingLevels(str, 'rtl');
+  return _bidi.getReorderedString(str, levels);
+}
+
+// Sunday→Saturday in logical order; reversed below so ראשון is on the right.
 const HEB_DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
 interface Theme {
@@ -126,7 +137,7 @@ export function buildScheduleTemplate(
       createElement(
         'div',
         { style: { fontSize: 28, fontWeight: 700, color: theme.headerText } },
-        data.orgName,
+        vis(data.orgName),
       ),
       createElement(
         'div',
@@ -137,7 +148,7 @@ export function buildScheduleTemplate(
             color: style === 'branded' ? '#e0e7ff' : theme.textMuted,
           },
         },
-        `סידור עבודה לשבוע ${data.weekStart} – ${data.weekEnd}`,
+        vis(`סידור עבודה לשבוע ${data.weekStart} – ${data.weekEnd}`),
       ),
     ),
     createElement(
@@ -153,11 +164,11 @@ export function buildScheduleTemplate(
           color: style === 'minimal' ? '#ffffff' : theme.headerText,
         },
       },
-      'סידור4S',
+      vis('סידור4S'),
     ),
   );
 
-  // Day columns
+  // Day columns — reversed so ראשון (idx 0) appears on the RIGHT (RTL)
   const dayCols = HEB_DAYS.map((dayName, idx) => {
     const dayShifts = buckets[idx] ?? [];
     return createElement(
@@ -192,7 +203,7 @@ export function buildScheduleTemplate(
         createElement(
           'div',
           { style: { fontSize: 14, fontWeight: 700 } },
-          dayName,
+          vis(dayName),
         ),
         createElement(
           'div',
@@ -224,7 +235,7 @@ export function buildScheduleTemplate(
                 borderRadius: 8,
                 background: theme.shiftBg,
                 border: `1px solid ${theme.shiftBorder}`,
-                borderInlineStart:
+                borderRight:
                   style === 'dark' || style === 'branded'
                     ? `3px solid ${theme.accent}`
                     : `2px solid ${theme.accent}`,
@@ -247,7 +258,7 @@ export function buildScheduleTemplate(
                 ? createElement(
                     'span',
                     { style: { color: theme.accent, fontWeight: 600 } },
-                    s.role,
+                    vis(s.role),
                   )
                 : null,
             ),
@@ -261,13 +272,13 @@ export function buildScheduleTemplate(
                   color: theme.textMuted,
                 },
               },
-              s.employeeNames.slice(0, 3).join(' · ') || '— לא משובץ —',
+              vis(s.employeeNames.slice(0, 3).join(' · ') || '— לא משובץ —'),
             ),
           ),
         ),
       ),
     );
-  });
+  }).reverse(); // reverse so Sunday (idx 0) is rightmost column
 
   const grid = createElement(
     'div',
@@ -295,8 +306,8 @@ export function buildScheduleTemplate(
         color: theme.textMuted,
       },
     },
-    createElement('span', null, `${data.shifts.length} משמרות · ${data.employees.length} עובדים`),
-    createElement('span', null, `הופק ב-${new Date().toISOString().slice(0, 10)}`),
+    createElement('span', null, vis(`${data.employees.length} עובדים · ${data.shifts.length} משמרות`)),
+    createElement('span', null, `${vis('הופק ב')}-${new Date().toISOString().slice(0, 10)}`),
   );
 
   return createElement(
@@ -310,7 +321,6 @@ export function buildScheduleTemplate(
         background: theme.bg,
         color: theme.text,
         fontFamily: 'Heebo, system-ui, sans-serif',
-        direction: 'rtl',
       },
     },
     header,
