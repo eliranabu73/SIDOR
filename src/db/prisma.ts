@@ -27,6 +27,8 @@ export async function ensureTx<T>(
 declare global {
   // eslint-disable-next-line no-var
   var __prisma: PrismaClient | undefined;
+  // eslint-disable-next-line no-var
+  var __txPrisma: PrismaClient | undefined;
 }
 
 /**
@@ -46,10 +48,36 @@ function makePrisma(): PrismaClient {
   return base;
 }
 
+/**
+ * Builds a Prisma client for interactive transactions (withOrgContext /
+ * withAdminContext). Prisma Accelerate does NOT support interactive
+ * transactions (`$transaction(async cb)`) because they hold a real Postgres
+ * connection open across round-trips, which the proxy cannot facilitate.
+ *
+ * When DIRECT_URL is set (always in production — it is the raw Supabase
+ * connection string), this client connects directly, bypassing Accelerate.
+ * This lets SET LOCAL work correctly inside a real Postgres transaction.
+ */
+function makeTxPrisma(): PrismaClient {
+  const directUrl = process.env['DIRECT_URL'];
+  if (directUrl) {
+    return new PrismaClient({
+      log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+      datasourceUrl: directUrl,
+    });
+  }
+  // Fallback: no DIRECT_URL set (local dev without split URLs) — reuse main client.
+  // In this case DATABASE_URL is already a direct Postgres URL, so $transaction works.
+  return makePrisma();
+}
+
 export const prisma: PrismaClient = globalThis.__prisma ?? makePrisma();
+/** Direct-connection client used exclusively for RLS-context transactions. */
+const txPrisma: PrismaClient = globalThis.__txPrisma ?? makeTxPrisma();
 
 if (process.env.NODE_ENV !== 'production') {
   globalThis.__prisma = prisma;
+  globalThis.__txPrisma = txPrisma;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +131,9 @@ export const ADMIN_ORG_SENTINEL = '*';
 export function withAdminContext() {
   return {
     query<T>(queryFn: (tx: PrismaClient) => Promise<T>): Promise<T> {
-      return prisma.$transaction(async (tx) => {
+      // Use txPrisma (direct connection) — Prisma Accelerate doesn't support
+      // interactive transactions required for SET LOCAL.
+      return txPrisma.$transaction(async (tx) => {
         await tx.$executeRawUnsafe(
           `SET LOCAL app.current_org_id = '${ADMIN_ORG_SENTINEL}'`,
         );
@@ -122,11 +152,14 @@ export function withOrgContext(
      * Run `queryFn` inside a transaction that first sets the RLS context.
      * `queryFn` receives a `PrismaClient` scoped to the transaction.
      * Pass opts.timeout (ms) to override the default 5 s Prisma cap, e.g. for
-     * batch endpoints that issue many sequential writes. Accelerate enforces
-     * a hard 15 s max — do not exceed it.
+     * batch endpoints that issue many sequential writes.
+     *
+     * Uses `txPrisma` (direct Supabase connection via DIRECT_URL) to avoid
+     * Prisma Accelerate's lack of interactive-transaction support. Regular
+     * reads/writes on `prisma` continue to use Accelerate for connection pooling.
      */
     query<T>(queryFn: (tx: PrismaClient) => Promise<T>): Promise<T> {
-      return prisma.$transaction(
+      return txPrisma.$transaction(
         async (tx) => {
           // SET LOCAL only affects the current transaction (connection-pool safe).
           // We sanitise orgId to a UUID pattern to prevent SQL injection.
