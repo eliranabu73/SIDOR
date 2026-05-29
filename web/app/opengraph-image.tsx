@@ -1,23 +1,15 @@
 import { ImageResponse } from "next/og";
-import bidiFactory from "bidi-js";
 
 export const runtime = "edge";
 export const alt = "סידור4S — סידור עבודה אוטומטי בעברית";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-// Satori renders LTR only — convert Hebrew logical→visual order via Unicode BiDi.
-const _bidi = bidiFactory();
-function vis(str: string): string {
-  if (!str) return str;
-  const levels = _bidi.getEmbeddingLevels(str, "rtl");
-  return _bidi.getReorderedString(str, levels);
-}
-
-async function loadHeebo(text: string): Promise<ArrayBuffer | null> {
+async function loadFont(): Promise<ArrayBuffer | null> {
   try {
+    const text = "סידור עבודה אוטומטי בעברית4S";
     const cssUrl =
-      "https://fonts.googleapis.com/css2?family=Heebo:wght@700;800&text=" +
+      "https://fonts.googleapis.com/css2?family=Heebo:wght@800&text=" +
       encodeURIComponent(text);
     const cssRes = await fetch(cssUrl, {
       headers: {
@@ -37,14 +29,23 @@ async function loadHeebo(text: string): Promise<ArrayBuffer | null> {
   }
 }
 
-export default async function Image() {
-  const brandHeb = vis("סידור");
-  const tagline = vis("סידור עבודה אוטומטי בעברית");
-  const subTagline = vis("חכם · מהיר · בעברית");
+async function loadLogo(): Promise<string | null> {
+  try {
+    // Fetch logo2.png from the public folder via import.meta.url (edge-compatible)
+    const logoRes = await fetch(
+      new URL("../public/logo2.png", import.meta.url),
+    );
+    if (!logoRes.ok) return null;
+    const buf = await logoRes.arrayBuffer();
+    const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+    return `data:image/png;base64,${b64}`;
+  } catch {
+    return null;
+  }
+}
 
-  const fontData = await loadHeebo(
-    "סידור4Sסידור עבודה אוטומטי בעברית חכם מהיר",
-  );
+export default async function Image() {
+  const [fontData, logoDataUrl] = await Promise.all([loadFont(), loadLogo()]);
 
   return new ImageResponse(
     (
@@ -55,186 +56,35 @@ export default async function Image() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#0f172a",
+          background: "#ffffff",
           fontFamily: "Heebo, sans-serif",
-          position: "relative",
-          overflow: "hidden",
         }}
       >
-        {/* Background glow blobs */}
-        <div
-          style={{
-            position: "absolute",
-            top: -200,
-            right: -200,
-            width: 600,
-            height: 600,
-            borderRadius: "50%",
-            background:
-              "radial-gradient(circle, rgba(99,102,241,0.25) 0%, transparent 70%)",
-            display: "flex",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            bottom: -200,
-            left: -100,
-            width: 500,
-            height: 500,
-            borderRadius: "50%",
-            background:
-              "radial-gradient(circle, rgba(6,182,212,0.20) 0%, transparent 70%)",
-            display: "flex",
-          }}
-        />
-
-        {/* Main content row */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 72,
-            padding: "0 80px",
-          }}
-        >
-          {/* Logo icon — recreated as JSX (gradient box + schedule lines) */}
+        {logoDataUrl ? (
+          /* Show actual logo centered, large */
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={logoDataUrl}
+            alt="סידור4S"
+            style={{
+              maxWidth: 900,
+              maxHeight: 500,
+              objectFit: "contain",
+            }}
+          />
+        ) : (
+          /* Fallback if logo fails to load */
           <div
             style={{
+              fontSize: 100,
+              fontWeight: 800,
+              color: "#4f46e5",
               display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 220,
-              height: 220,
-              borderRadius: 44,
-              background: "linear-gradient(135deg, #6366f1 0%, #22d3ee 100%)",
-              flexShrink: 0,
-              boxShadow: "0 0 80px rgba(99,102,241,0.5)",
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 24,
-                alignItems: "center",
-              }}
-            >
-              <div
-                style={{
-                  width: 110,
-                  height: 16,
-                  borderRadius: 8,
-                  background: "rgba(255,255,255,0.95)",
-                }}
-              />
-              <div
-                style={{
-                  width: 110,
-                  height: 16,
-                  borderRadius: 8,
-                  background: "rgba(255,255,255,0.95)",
-                }}
-              />
-              <div
-                style={{
-                  width: 80,
-                  height: 16,
-                  borderRadius: 8,
-                  background: "rgba(255,255,255,0.55)",
-                }}
-              />
-            </div>
+            סידור4S
           </div>
-
-          {/* Text block */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 0,
-            }}
-          >
-            {/* Brand name: "סידור" white + "4S" gradient color */}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "row",
-                alignItems: "baseline",
-                gap: 0,
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 130,
-                  fontWeight: 800,
-                  color: "#ffffff",
-                  letterSpacing: -2,
-                  lineHeight: 1,
-                }}
-              >
-                {brandHeb}
-              </span>
-              <span
-                style={{
-                  fontSize: 130,
-                  fontWeight: 800,
-                  color: "#22d3ee",
-                  letterSpacing: -2,
-                  lineHeight: 1,
-                }}
-              >
-                4S
-              </span>
-            </div>
-
-            {/* Tagline */}
-            <div
-              style={{
-                fontSize: 46,
-                fontWeight: 700,
-                color: "rgba(255,255,255,0.75)",
-                marginTop: 8,
-              }}
-            >
-              {tagline}
-            </div>
-
-            {/* Pills row */}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "row",
-                gap: 16,
-                marginTop: 28,
-              }}
-            >
-              {["WhatsApp", vis("ניהול משמרות"), vis("עברית מלאה")].map(
-                (label) => (
-                  <div
-                    key={label}
-                    style={{
-                      display: "flex",
-                      paddingLeft: 20,
-                      paddingRight: 20,
-                      paddingTop: 10,
-                      paddingBottom: 10,
-                      borderRadius: 999,
-                      border: "1.5px solid rgba(99,102,241,0.5)",
-                      background: "rgba(99,102,241,0.12)",
-                      color: "#a5b4fc",
-                      fontSize: 28,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {label}
-                  </div>
-                ),
-              )}
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     ),
     {
