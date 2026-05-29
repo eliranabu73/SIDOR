@@ -20,7 +20,8 @@
     "prisma:validate": "prisma validate",
     "prisma:studio": "prisma studio",
     "lint:types": "tsc --noEmit",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "postinstall": "prisma generate"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

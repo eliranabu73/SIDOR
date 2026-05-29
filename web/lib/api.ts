@@ -828,6 +828,7 @@ export interface OrgSettings {
   defaultTimezone: string;
   weekStartDay: number;
   plan: string;
+  logoUrl: string | null;
   laborRules: LaborRules;
   roles: OrgRole[];
   locations: OrgLocation[];
@@ -845,27 +846,41 @@ export function patchSettings(body: Partial<Omit<OrgSettings, "id" | "plan" | "r
 }
 
 /**
- * Logo upload — disabled until logoUrl column is added to DB.
- * @deprecated
+ * Upload a logo file to Supabase Storage and persist the public URL via PATCH /v1/settings.
  */
 export async function uploadOrgLogo(
-  _orgId: string,
-  _file: File,
-  _getSupabaseClient: () => import("@supabase/supabase-js").SupabaseClient,
+  orgId: string,
+  file: File,
+  getSupabaseClient: () => import("@supabase/supabase-js").SupabaseClient,
 ): Promise<OrgSettings> {
-  throw new Error("Logo upload not yet available");
+  const ext = file.name.split(".").pop() ?? "png";
+  const path = `${orgId}/logo.${ext}`;
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.storage
+    .from("logos")
+    .upload(path, file, { upsert: true, contentType: file.type });
+  if (error) throw new Error(error.message);
+  const { data } = supabase.storage.from("logos").getPublicUrl(path);
+  const logoUrl = `${data.publicUrl}?t=${Date.now()}`;
+  return patchSettings({ logoUrl });
 }
 
 /**
- * Logo removal — disabled until logoUrl column is added to DB.
- * @deprecated
+ * Remove the org logo: delete from storage and clear the DB field.
  */
 export async function removeOrgLogo(
   _orgId: string,
-  _logoUrl: string | null,
-  _getSupabaseClient: () => import("@supabase/supabase-js").SupabaseClient,
+  logoUrl: string | null,
+  getSupabaseClient: () => import("@supabase/supabase-js").SupabaseClient,
 ): Promise<OrgSettings> {
-  throw new Error("Logo removal not yet available");
+  if (logoUrl) {
+    const supabase = getSupabaseClient();
+    const match = logoUrl.match(/\/object\/public\/logos\/(.+?)(\?|$)/);
+    if (match?.[1]) {
+      await supabase.storage.from("logos").remove([match[1]]);
+    }
+  }
+  return patchSettings({ logoUrl: null });
 }
 
 export function updateOrgRole(id: ID, name: string, description?: string | null): Promise<OrgRole> {

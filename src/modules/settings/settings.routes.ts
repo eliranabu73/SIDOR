@@ -49,6 +49,7 @@ const PatchOrgBody = z.object({
   industry: z.string().min(1).max(100).optional(),
   defaultTimezone: z.string().min(3).max(64).optional(),
   weekStartDay: z.number().int().min(0).max(6).optional(),
+  logoUrl: z.string().url().max(2000).nullable().optional(),
   laborRules: LaborRulesSchema.optional(),
 });
 
