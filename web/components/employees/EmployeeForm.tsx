@@ -4,6 +4,7 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { DateTime } from "luxon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,9 +17,16 @@ const schema = z.object({
   phone: z.string().max(40, "מספר ארוך מדי").optional().or(z.literal("")),
   roles: z.string().min(1, "ציין תפקיד אחד לפחות"),
   primaryLocationId: z.string(),
+  hourlyRate: z.coerce
+    .number()
+    .min(1, "שכר שעתי חייב להיות לפחות 1₪")
+    .max(500),
+  hireDate: z.string().optional(),
+  weeklyBudgetHours: z.coerce.number().int().min(0).max(80).optional(),
 });
 
-export type EmployeeFormData = z.infer<typeof schema>;
+export type EmployeeFormData = z.output<typeof schema>;
+type EmployeeFormInput = z.input<typeof schema>;
 
 interface Props {
   initial?: Employee | null;
@@ -26,10 +34,20 @@ interface Props {
   onCancel: () => void;
 }
 
+function formatSeniority(hireDate: string): string | null {
+  if (!hireDate) return null;
+  const dt = DateTime.fromISO(hireDate);
+  if (!dt.isValid) return null;
+  const diff = dt.diffNow(["years", "months"]).toObject();
+  const years = Math.abs(Math.trunc(diff.years ?? 0));
+  const months = Math.abs(Math.trunc(diff.months ?? 0));
+  return `ותק: ${years} שנים, ${months} חודשים`;
+}
+
 export function EmployeeForm({ initial, onSubmit, onCancel }: Props) {
   const locationsQuery = useLocations();
   const locations = locationsQuery.data ?? [];
-  const form = useForm<EmployeeFormData>({
+  const form = useForm<EmployeeFormInput, unknown, EmployeeFormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       fullName: initial?.fullName ?? "",
@@ -37,8 +55,16 @@ export function EmployeeForm({ initial, onSubmit, onCancel }: Props) {
       phone: initial?.phone ?? "",
       roles: initial?.roles.join(", ") ?? "",
       primaryLocationId: initial?.primaryLocationId ?? "",
+      hourlyRate: initial?.hourlyRate ?? undefined,
+      hireDate: initial?.hireDate
+        ? initial.hireDate.slice(0, 10)
+        : "",
+      weeklyBudgetHours: initial?.weeklyBudgetHours ?? undefined,
     },
   });
+
+  const watchedHireDate = form.watch("hireDate");
+  const seniorityText = watchedHireDate ? formatSeniority(watchedHireDate) : null;
 
   return (
     <form
@@ -90,6 +116,55 @@ export function EmployeeForm({ initial, onSubmit, onCancel }: Props) {
             <option key={l.id} value={l.id}>{l.name}</option>
           ))}
         </select>
+      </div>
+
+      <div className="space-y-1">
+        <Label htmlFor="hourlyRate">שכר שעתי</Label>
+        <div className="flex items-center gap-2">
+          <Input
+            id="hourlyRate"
+            type="number"
+            step="0.5"
+            min={1}
+            max={500}
+            {...form.register("hourlyRate")}
+            aria-invalid={!!form.formState.errors.hourlyRate}
+            className="flex-1"
+          />
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            ₪/שעה
+          </span>
+        </div>
+        {form.formState.errors.hourlyRate ? (
+          <p className="text-xs text-destructive">
+            {form.formState.errors.hourlyRate.message}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="space-y-1">
+        <Label htmlFor="hireDate">תאריך תחילת עבודה</Label>
+        <Input id="hireDate" type="date" {...form.register("hireDate")} />
+        {seniorityText ? (
+          <p className="text-xs text-muted-foreground">{seniorityText}</p>
+        ) : null}
+      </div>
+
+      <div className="space-y-1">
+        <Label htmlFor="weeklyBudgetHours">תקציב שעות שבועי (אופציונלי)</Label>
+        <Input
+          id="weeklyBudgetHours"
+          type="number"
+          min={0}
+          max={80}
+          step={1}
+          {...form.register("weeklyBudgetHours")}
+        />
+        {form.formState.errors.weeklyBudgetHours ? (
+          <p className="text-xs text-destructive">
+            {form.formState.errors.weeklyBudgetHours.message}
+          </p>
+        ) : null}
       </div>
 
       <div className="flex justify-end gap-2 pt-2">

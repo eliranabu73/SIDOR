@@ -50,10 +50,25 @@ export function AuthGuard({ children, skipMembershipCheck }: AuthGuardProps) {
         try {
           const me = await fetchMe();
           if (!mounted) return;
-          if (me.memberships.length === 0 && pathname !== "/onboarding") {
-            setStatus("redirect");
-            router.replace("/onboarding");
-            return;
+          if (
+            me.memberships.length === 0 &&
+            pathname !== "/onboarding" &&
+            !pathname.startsWith("/onboarding/")
+          ) {
+            // Honor an explicit "I'll set up later" preference — the schedule
+            // SetupChecklist nags them instead of a forced wizard redirect.
+            let skipped = false;
+            try {
+              skipped =
+                window.localStorage.getItem("wizardSkipped") === "true";
+            } catch {
+              skipped = false;
+            }
+            if (!skipped) {
+              setStatus("redirect");
+              router.replace("/onboarding/setup/business");
+              return;
+            }
           }
           setStatus("ok");
         } catch {

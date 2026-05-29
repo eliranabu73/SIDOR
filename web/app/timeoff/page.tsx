@@ -8,14 +8,22 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MobileTable, type MobileTableColumn } from "@/components/ui/mobile-table";
 import {
   approveTimeOff,
   getTimeOffRequests,
   rejectTimeOff,
   type TimeOffRequestItem,
+  type TimeOffStatus,
 } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
-const TIMEOFF_PENDING_KEY = ["timeoff", "pending"] as const;
+const STATUS_OPTIONS: ReadonlyArray<{ value: TimeOffStatus; label: string }> = [
+  { value: "PENDING", label: "ממתינות" },
+  { value: "APPROVED", label: "מאושרות" },
+  { value: "REJECTED", label: "נדחו" },
+  { value: "CANCELLED", label: "בוטלו" },
+];
 
 export default function TimeOffPage() {
   return (
@@ -44,18 +52,44 @@ function formatRange(startsAt: string, endsAt: string): string {
   }
 }
 
+function statusBadge(status: TimeOffStatus): React.ReactNode {
+  const cls =
+    status === "PENDING"
+      ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30"
+      : status === "APPROVED"
+        ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+        : status === "REJECTED"
+          ? "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/30"
+          : "bg-muted text-muted-foreground border-border";
+  const label =
+    STATUS_OPTIONS.find((s) => s.value === status)?.label ?? status;
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-full border px-2 py-0.5 text-xs font-medium",
+        cls,
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
 function TimeOffInner() {
   const qc = useQueryClient();
+  const [status, setStatus] = React.useState<TimeOffStatus>("PENDING");
+
+  const queryKey = React.useMemo(() => ["timeoff", status] as const, [status]);
   const q = useQuery<TimeOffRequestItem[]>({
-    queryKey: TIMEOFF_PENDING_KEY,
-    queryFn: () => getTimeOffRequests("PENDING"),
+    queryKey,
+    queryFn: () => getTimeOffRequests(status),
   });
 
   const approveMut = useMutation({
     mutationFn: (id: string) => approveTimeOff(id),
     onSuccess: () => {
       toast.success("הבקשה אושרה");
-      void qc.invalidateQueries({ queryKey: TIMEOFF_PENDING_KEY });
+      void qc.invalidateQueries({ queryKey: ["timeoff"] });
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "אישור נכשל");
@@ -66,16 +100,102 @@ function TimeOffInner() {
     mutationFn: (id: string) => rejectTimeOff(id),
     onSuccess: () => {
       toast.success("הבקשה נדחתה");
-      void qc.invalidateQueries({ queryKey: TIMEOFF_PENDING_KEY });
+      void qc.invalidateQueries({ queryKey: ["timeoff"] });
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "דחייה נכשלה");
     },
   });
 
+  const busy = approveMut.isPending || rejectMut.isPending;
+  const isPending = status === "PENDING";
+
+  const columns: ReadonlyArray<MobileTableColumn<TimeOffRequestItem>> = [
+    {
+      header: "עובד/ת",
+      accessor: (req) => <span className="font-medium">{req.employeeName}</span>,
+    },
+    {
+      header: "טווח תאריכים",
+      accessor: (req) => (
+        <span className="text-muted-foreground">
+          {formatRange(req.startsAt, req.endsAt)}
+        </span>
+      ),
+    },
+    {
+      header: "סיבה",
+      accessor: (req) => (
+        <span className="text-muted-foreground">{req.reason ?? "—"}</span>
+      ),
+    },
+    {
+      header: "סטטוס",
+      accessor: (req) => statusBadge(req.status),
+    },
+    {
+      header: "פעולות",
+      mobileLabel: false,
+      accessor: (req) =>
+        isPending ? (
+          <div className="flex gap-2 justify-end">
+            <Button
+              size="sm"
+              className="min-h-11 sm:min-h-0"
+              onClick={() => approveMut.mutate(req.id)}
+              disabled={busy}
+            >
+              אשר
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-11 sm:min-h-0"
+              onClick={() => rejectMut.mutate(req.id)}
+              disabled={busy}
+            >
+              דחה
+            </Button>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        ),
+    },
+  ];
+
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto" dir="rtl">
-      <h1 className="text-xl font-semibold mb-4">בקשות חופשה ממתינות</h1>
+      <h1 className="text-xl sm:text-2xl font-semibold mb-4">בקשות חופשה</h1>
+
+      {/* Status filter chips — horizontally scrollable on mobile, wrap on desktop */}
+      <div className="mb-4 -mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto sm:overflow-visible">
+        <div
+          role="tablist"
+          aria-label="סינון לפי סטטוס"
+          className="flex gap-2 min-w-max sm:min-w-0 sm:flex-wrap"
+        >
+          {STATUS_OPTIONS.map((opt) => {
+            const active = opt.value === status;
+            return (
+              <button
+                key={opt.value}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setStatus(opt.value)}
+                className={cn(
+                  "inline-flex items-center justify-center rounded-full border px-4 py-2 text-sm font-medium min-h-11 whitespace-nowrap transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  active
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background text-foreground border-border hover:bg-accent/40",
+                )}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {q.isLoading ? (
         <div className="space-y-2">
@@ -87,55 +207,17 @@ function TimeOffInner() {
         <Card className="p-4 text-sm text-destructive">
           טעינת הבקשות נכשלה. ייתכן שנקודת ה-API טרם זמינה בשרת.
         </Card>
-      ) : (q.data ?? []).length === 0 ? (
-        <Card className="p-6 text-center text-sm text-muted-foreground">
-          אין בקשות ממתינות כרגע.
-        </Card>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-right text-muted-foreground">
-              <tr className="border-b">
-                <th className="py-2 px-3 font-medium">עובד/ת</th>
-                <th className="py-2 px-3 font-medium">טווח תאריכים</th>
-                <th className="py-2 px-3 font-medium">סיבה</th>
-                <th className="py-2 px-3 font-medium">פעולות</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(q.data ?? []).map((req) => (
-                <tr key={req.id} className="border-b last:border-b-0">
-                  <td className="py-2 px-3 font-medium">{req.employeeName}</td>
-                  <td className="py-2 px-3 text-muted-foreground">
-                    {formatRange(req.startsAt, req.endsAt)}
-                  </td>
-                  <td className="py-2 px-3 text-muted-foreground">
-                    {req.reason ?? "—"}
-                  </td>
-                  <td className="py-2 px-3">
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => approveMut.mutate(req.id)}
-                        disabled={approveMut.isPending || rejectMut.isPending}
-                      >
-                        אשר
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => rejectMut.mutate(req.id)}
-                        disabled={approveMut.isPending || rejectMut.isPending}
-                      >
-                        דחה
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <MobileTable<TimeOffRequestItem>
+          data={q.data ?? []}
+          keyFn={(r) => r.id}
+          columns={columns}
+          emptyState={
+            <Card className="p-6 text-center text-sm text-muted-foreground">
+              אין בקשות במסנן זה.
+            </Card>
+          }
+        />
       )}
 
       <p className="mt-6 text-xs text-muted-foreground">

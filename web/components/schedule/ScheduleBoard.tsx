@@ -43,9 +43,12 @@ interface Props {
   validationByShift: Record<string, ShiftValidationTone>;
   activeEmployee: Employee | null;
   onUnassign: (shift: Shift, employeeId: string) => void;
-  // Tap-to-assign (mobile):
-  selectedEmployeeId?: string | null;
-  onTapAssign?: (shift: Shift) => void;
+  /**
+   * Shift-first assignment trigger. When the user taps a shift card (or its
+   * "+ הוסף עובד" affordance), the parent opens an employee picker for that
+   * shift. Works on both mobile and desktop.
+   */
+  onRequestAssign?: (shift: Shift) => void;
 }
 
 export function ScheduleBoard({
@@ -58,8 +61,7 @@ export function ScheduleBoard({
   validationByShift,
   activeEmployee,
   onUnassign,
-  selectedEmployeeId,
-  onTapAssign,
+  onRequestAssign,
 }: Props) {
   const employeesById = React.useMemo(
     () => Object.fromEntries(employees.map((e) => [e.id, e])),
@@ -170,7 +172,7 @@ export function ScheduleBoard({
                   lockedByName={lockedByOther ? shift.lockedByName ?? undefined : undefined}
                   ghostEmployee={activeEmployee}
                   onUnassign={(empId) => onUnassign(shift, empId)}
-                  onTapAssign={selectedEmployeeId ? () => onTapAssign?.(shift) : undefined}
+                  onTapAssign={onRequestAssign ? () => onRequestAssign(shift) : undefined}
                 />
               );
             })
@@ -250,7 +252,7 @@ export function ScheduleBoard({
                         lockedByName={lockedByOther ? shift.lockedByName ?? undefined : undefined}
                         ghostEmployee={activeEmployee}
                         onUnassign={(empId) => onUnassign(shift, empId)}
-                        onTapAssign={selectedEmployeeId ? () => onTapAssign?.(shift) : undefined}
+                        onTapAssign={onRequestAssign ? () => onRequestAssign(shift) : undefined}
                       />
                     );
                   })}

@@ -6,7 +6,7 @@ import { computeWeeklyCost } from './labor-cost.service';
 import { HttpError } from '../../shared/errors';
 import { prisma, withOrgContext } from '../../db/prisma';
 import type { PrismaClient } from '@prisma/client';
-import { locationScope } from '../../shared/location-scope';
+import { locationScope, isBranchManager } from '../../shared/location-scope';
 
 // ---------------------------------------------------------------------------
 // In-memory rate limiter for expensive auto-schedule endpoint.
@@ -351,6 +351,198 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
             copied++;
           }
           return { copied, skipped: 0, existingBefore: existing };
+        });
+        return reply.send(result);
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Schedule approval workflow (branch-manager → owner/manager)
+  // ─────────────────────────────────────────────────────────────────────
+
+  const RejectBody = z.object({ note: z.string().max(500).optional() });
+  const ApproveBody = z.object({}).optional();
+
+  function userRole(req: { user?: { role?: string } }): string {
+    return (req.user?.role ?? '').toLowerCase();
+  }
+
+  // BRANCH_MANAGER submits a DRAFT schedule for owner approval.
+  app.post(
+    '/schedules/:scheduleId/submit',
+    { schema: { params: ScheduleIdParam }, preHandler: authHandlers },
+    async (req, reply) => {
+      const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
+      const orgId = orgIdFor(req);
+      const role = userRole(req);
+      // Owner/manager can also self-submit (no-op transition) but mainly branch_manager.
+      if (!['owner', 'manager', 'branch_manager'].includes(role)) {
+        return reply.code(403).send({ code: 'FORBIDDEN', message: 'Forbidden' });
+      }
+
+      try {
+        const result = await dbFor(req).query(async (tx) => {
+          const schedule = await tx.schedule.findFirst({
+            where: { id: scheduleId, organizationId: orgId },
+            select: { id: true, status: true, locationId: true },
+          });
+          if (!schedule) {
+            throw new HttpError(404, 'NOT_FOUND', 'Schedule not found');
+          }
+          // BRANCH_MANAGER can only submit their own branch's schedule.
+          if (
+            isBranchManager(req.user ?? { role: '' }) &&
+            schedule.locationId !== req.user!.locationId
+          ) {
+            throw new HttpError(403, 'FORBIDDEN', 'Schedule belongs to a different branch');
+          }
+          if (schedule.status !== 'DRAFT') {
+            throw new HttpError(
+              409,
+              'INVALID_STATE',
+              `Schedule must be DRAFT to submit (current: ${schedule.status})`,
+            );
+          }
+          const updated = await tx.schedule.update({
+            where: { id: scheduleId },
+            data: {
+              status: 'PENDING_APPROVAL',
+              submittedAt: new Date(),
+              submittedByUserId: req.user!.id,
+            },
+          });
+          await tx.scheduleAuditLog.create({
+            data: {
+              organizationId: orgId,
+              scheduleId,
+              userId: req.user!.id,
+              actionType: 'UPDATE',
+              entityType: 'Schedule',
+              entityId: scheduleId,
+              afterDataJsonb: { status: 'PENDING_APPROVAL' },
+            },
+          });
+          return updated;
+        });
+        return reply.send(result);
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
+
+  // OWNER / MANAGER approves a PENDING_APPROVAL schedule.
+  app.post(
+    '/schedules/:scheduleId/approve',
+    { schema: { params: ScheduleIdParam, body: ApproveBody }, preHandler: authHandlers },
+    async (req, reply) => {
+      const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
+      const orgId = orgIdFor(req);
+      const role = userRole(req);
+      if (!['owner', 'manager'].includes(role)) {
+        return reply
+          .code(403)
+          .send({ code: 'FORBIDDEN', message: 'Only owner or manager can approve' });
+      }
+
+      try {
+        const result = await dbFor(req).query(async (tx) => {
+          const schedule = await tx.schedule.findFirst({
+            where: { id: scheduleId, organizationId: orgId },
+            select: { id: true, status: true },
+          });
+          if (!schedule) {
+            throw new HttpError(404, 'NOT_FOUND', 'Schedule not found');
+          }
+          if (schedule.status !== 'PENDING_APPROVAL') {
+            throw new HttpError(
+              409,
+              'INVALID_STATE',
+              `Schedule must be PENDING_APPROVAL to approve (current: ${schedule.status})`,
+            );
+          }
+          const updated = await tx.schedule.update({
+            where: { id: scheduleId },
+            data: {
+              status: 'APPROVED',
+              approvedAt: new Date(),
+              approvedByUserId: req.user!.id,
+              rejectionNote: null,
+            },
+          });
+          await tx.scheduleAuditLog.create({
+            data: {
+              organizationId: orgId,
+              scheduleId,
+              userId: req.user!.id,
+              actionType: 'UPDATE',
+              entityType: 'Schedule',
+              entityId: scheduleId,
+              afterDataJsonb: { status: 'APPROVED' },
+            },
+          });
+          return updated;
+        });
+        return reply.send(result);
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
+
+  // OWNER / MANAGER rejects a PENDING_APPROVAL schedule, sending it back to DRAFT.
+  app.post(
+    '/schedules/:scheduleId/reject',
+    { schema: { params: ScheduleIdParam, body: RejectBody }, preHandler: authHandlers },
+    async (req, reply) => {
+      const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
+      const orgId = orgIdFor(req);
+      const role = userRole(req);
+      if (!['owner', 'manager'].includes(role)) {
+        return reply
+          .code(403)
+          .send({ code: 'FORBIDDEN', message: 'Only owner or manager can reject' });
+      }
+      const body = req.body as z.infer<typeof RejectBody>;
+
+      try {
+        const result = await dbFor(req).query(async (tx) => {
+          const schedule = await tx.schedule.findFirst({
+            where: { id: scheduleId, organizationId: orgId },
+            select: { id: true, status: true },
+          });
+          if (!schedule) {
+            throw new HttpError(404, 'NOT_FOUND', 'Schedule not found');
+          }
+          if (schedule.status !== 'PENDING_APPROVAL') {
+            throw new HttpError(
+              409,
+              'INVALID_STATE',
+              `Schedule must be PENDING_APPROVAL to reject (current: ${schedule.status})`,
+            );
+          }
+          const updated = await tx.schedule.update({
+            where: { id: scheduleId },
+            data: {
+              status: 'DRAFT',
+              rejectionNote: body.note ?? null,
+            },
+          });
+          await tx.scheduleAuditLog.create({
+            data: {
+              organizationId: orgId,
+              scheduleId,
+              userId: req.user!.id,
+              actionType: 'UPDATE',
+              entityType: 'Schedule',
+              entityId: scheduleId,
+              afterDataJsonb: { status: 'DRAFT', rejectionNote: body.note ?? null },
+            },
+          });
+          return updated;
         });
         return reply.send(result);
       } catch (err) {

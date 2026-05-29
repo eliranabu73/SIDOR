@@ -5,6 +5,33 @@ import { applyAssignment, validateOnly } from './assignments.service.js';
 import { HttpError } from '../../shared/errors.js';
 import { prisma } from '../../db/prisma.js';
 import type { PrismaClient } from '@prisma/client';
+import { isBranchManager } from '../../shared/location-scope.js';
+
+/**
+ * Reject assignment ops when the BRANCH_MANAGER is acting on a shift outside
+ * their branch. Returns the offending response, or null when the call is
+ * allowed to proceed.
+ */
+async function enforceBranchScope(
+  req: { user?: { role?: string; locationId?: string | null; orgId?: string } },
+  shiftId: string,
+  reply: import('fastify').FastifyReply,
+): Promise<import('fastify').FastifyReply | null> {
+  if (!isBranchManager({ role: req.user?.role ?? '', locationId: req.user?.locationId ?? null })) return null;
+  const orgId = req.user?.orgId;
+  if (!orgId) return null;
+  const shift = await prisma.shift.findFirst({
+    where: { id: shiftId, organizationId: orgId },
+    select: { locationId: true },
+  });
+  if (!shift || shift.locationId !== req.user?.locationId) {
+    return reply.code(403).send({
+      code: 'BRANCH_SCOPE_VIOLATION',
+      message: 'Shift does not belong to your branch',
+    });
+  }
+  return null;
+}
 
 /** RLS-aware DB handle (falls back to direct prisma in AUTH_DISABLED mode). */
 function dbFor(req: { orgPrisma?: { query: <T>(fn: (tx: PrismaClient) => Promise<T>) => Promise<T> } }) {
@@ -35,6 +62,9 @@ export async function assignmentsRoutes(app: FastifyInstance): Promise<void> {
 
       const actingUserId = req.user!.id;
       const organizationId = req.user?.orgId;
+
+      const blocked = await enforceBranchScope(req, shiftId, reply);
+      if (blocked) return blocked;
 
       try {
         const result = await dbFor(req).query((tx) =>
@@ -72,6 +102,9 @@ export async function assignmentsRoutes(app: FastifyInstance): Promise<void> {
 
       const actingUserId = req.user!.id;
       const organizationId = req.user?.orgId;
+
+      const blocked = await enforceBranchScope(req, shiftId, reply);
+      if (blocked) return blocked;
 
       try {
         const result = await dbFor(req).query((tx) =>

@@ -21,6 +21,7 @@ DECLARE
   r RECORD;
   policy_name TEXT := 'tenant_isolation';
   org_col TEXT;
+  has_org_col BOOLEAN;
 BEGIN
   FOR r IN
     SELECT schemaname, tablename
@@ -28,13 +29,28 @@ BEGIN
      WHERE policyname = policy_name
        AND schemaname = 'public'
   LOOP
-    EXECUTE format('DROP POLICY %I ON %I.%I', policy_name, r.schemaname, r.tablename);
-
     IF r.tablename = 'organizations' THEN
       org_col := 'id';
+      has_org_col := TRUE;
     ELSE
       org_col := 'organizationId';
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = r.schemaname
+          AND table_name = r.tablename
+          AND column_name = org_col
+      ) INTO has_org_col;
     END IF;
+
+    -- Skip tables that don't have an organizationId column (they isolate
+    -- via a related table, e.g. employee_availability_rules → employees).
+    -- Their existing policy stays untouched; the wildcard isn't needed
+    -- because admin reads on these tables go through the parent.
+    IF NOT has_org_col THEN
+      CONTINUE;
+    END IF;
+
+    EXECUTE format('DROP POLICY %I ON %I.%I', policy_name, r.schemaname, r.tablename);
 
     EXECUTE format(
       'CREATE POLICY %I ON %I.%I USING ('

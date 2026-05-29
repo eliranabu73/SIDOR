@@ -3,7 +3,8 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { DateTime } from "luxon";
-import { ArrowLeft, Copy, Filter, MessageCircle, Printer, Search, Sparkles, Upload, Users as UsersIcon } from "lucide-react";
+import { ArrowLeft, Check, ClipboardList, Copy, Filter, MessageCircle, Printer, Search, Send, Sparkles, Upload, Users as UsersIcon, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import {
   DndContext,
   DragOverlay,
@@ -17,7 +18,13 @@ import {
   type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { ApiError } from "@/lib/api";
+import {
+  ApiError,
+  approveSchedule,
+  fetchMe,
+  rejectSchedule,
+  submitScheduleForApproval,
+} from "@/lib/api";
 import { useAssignMutation, useValidateAssignment } from "@/lib/queries";
 import { ConfirmWarningsDialog } from "@/components/schedule/ConfirmWarningsDialog";
 import type { AssignBody, ApiErrorBody, Employee, RuleResult, Shift } from "@/lib/types";
@@ -68,6 +75,13 @@ import { PublishWhatsAppDialog } from "@/components/schedule/PublishWhatsAppDial
 import { ConfirmationStatus } from "@/components/schedule/ConfirmationStatus";
 import { ExportDialog } from "@/components/schedule/ExportDialog";
 import { CreateShiftDialog } from "@/components/schedule/CreateShiftDialog";
+import { AssignEmployeeSheet } from "@/components/schedule/AssignEmployeeSheet";
+import { QuickAddEmployeesDialog } from "@/components/schedule/dialogs/QuickAddEmployeesDialog";
+import {
+  SetupChecklist,
+  clearSetupChecklistDismissal,
+  isSetupChecklistDismissed,
+} from "@/components/schedule/SetupChecklist";
 import { LaborCostBar } from "@/components/schedule/LaborCostBar";
 import { CostMeter } from "@/components/schedule/CostMeter";
 import { ComplianceBanner } from "@/components/schedule/ComplianceBanner";
@@ -126,6 +140,10 @@ function ScheduleInner() {
   const [publishOpen, setPublishOpen] = React.useState(false);
   const [exportOpen, setExportOpen] = React.useState(false);
   const [createShiftOpen, setCreateShiftOpen] = React.useState(false);
+  const [createShiftPreset, setCreateShiftPreset] = React.useState<string | undefined>(
+    undefined,
+  );
+  const [quickAddEmployeesOpen, setQuickAddEmployeesOpen] = React.useState(false);
   const [signupPromptOpen, setSignupPromptOpen] = React.useState(false);
   const [pendingProposals, setPendingProposals] = React.useState<
     AssignmentProposal[] | null
@@ -143,14 +161,31 @@ function ScheduleInner() {
   const publish = usePublishSchedule();
   const copyWeek = useCopyFromPreviousWeek();
 
+  // Current-user query — drives which approval action buttons are shown.
+  // We rely on /v1/me which returns the active role (lowercased) along with
+  // the membership list, so we don't need to re-derive it from the JWT.
+  const meQ = useQuery({
+    queryKey: ["me"],
+    queryFn: fetchMe,
+    enabled: !isDemo,
+    staleTime: 5 * 60_000,
+  });
+  const role = (meQ.data?.user.role ?? "").toLowerCase();
+  const isOwner = role === "owner";
+  const isManager = role === "manager";
+  const isBranchManager = role === "branch_manager";
+  const canApprove = isOwner || isManager;
+
+  const [approving, setApproving] = React.useState(false);
+
   // ── DnD state (lifted from ScheduleBoard so EmployeeCard sources live INSIDE DndContext)
   const [activeEmployeeId, setActiveEmployeeId] = React.useState<string | null>(null);
   const [validationByShift, setValidationByShift] = React.useState<
     Record<string, ShiftValidationTone>
   >({});
   const [pendingDrop, setPendingDrop] = React.useState<PendingDrop | null>(null);
-  // Tap-to-assign (mobile)
-  const [selectedEmployeeId, setSelectedEmployeeId] = React.useState<string | null>(null);
+  // Shift-first assignment — when set, the AssignEmployeeSheet shows for this shift.
+  const [assignShift, setAssignShift] = React.useState<Shift | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -211,6 +246,54 @@ function ScheduleInner() {
     setSignupPromptOpen(true);
     return true;
   }, [isDemo]);
+
+  const scheduleStatus = scheduleQuery.data?.status ?? null;
+
+  const submitForApproval = async () => {
+    if (!scheduleQuery.data) return;
+    if (blockIfDemo()) return;
+    setApproving(true);
+    try {
+      await submitScheduleForApproval(scheduleQuery.data.id);
+      toast.success("הסידור נשלח לאישור הבעלים");
+      scheduleQueryReal.refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "שליחה לאישור נכשלה");
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const approve = async () => {
+    if (!scheduleQuery.data) return;
+    if (blockIfDemo()) return;
+    setApproving(true);
+    try {
+      await approveSchedule(scheduleQuery.data.id);
+      toast.success("הסידור אושר");
+      scheduleQueryReal.refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "האישור נכשל");
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const reject = async () => {
+    if (!scheduleQuery.data) return;
+    if (blockIfDemo()) return;
+    const note = window.prompt("הערה למנהל הסניף (אופציונלי):") ?? undefined;
+    setApproving(true);
+    try {
+      await rejectSchedule(scheduleQuery.data.id, note);
+      toast.success("הסידור הוחזר לעריכה");
+      scheduleQueryReal.refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "הדחייה נכשלה");
+    } finally {
+      setApproving(false);
+    }
+  };
 
   const allRoles = React.useMemo(() => {
     const set = new Set<string>();
@@ -363,22 +446,26 @@ function ScheduleInner() {
     });
   };
 
-  const handleTapAssign = (shift: Shift) => {
-    if (!selectedEmployeeId) return;
+  const handleRequestAssign = (shift: Shift) => {
+    setAssignShift(shift);
+  };
+
+  const handleSheetAssign = (employee: Employee) => {
+    if (!assignShift) return;
     if (
-      shift.assignments.some(
-        (a) => a.employeeId === selectedEmployeeId && a.status === "assigned",
+      assignShift.assignments.some(
+        (a) => a.employeeId === employee.id && a.status === "assigned",
       )
     ) {
       toast.info("העובד/ת כבר משובץ/ת במשמרת זו");
       return;
     }
     void performAssign({
-      shift,
-      employeeId: selectedEmployeeId,
+      shift: assignShift,
+      employeeId: employee.id,
       acknowledgeWarnings: false,
     });
-    setSelectedEmployeeId(null);
+    setAssignShift(null);
   };
 
   const activeEmployee = activeEmployeeId
@@ -425,6 +512,23 @@ function ScheduleInner() {
 
   const [filtersOpen, setFiltersOpen] = React.useState(false);
   const [employeesPanelOpen, setEmployeesPanelOpen] = React.useState(false);
+  // Tracks whether the setup checklist was dismissed (so we can show a
+  // "הצג רשימת התקנה" button in the toolbar that brings it back).
+  const [checklistDismissed, setChecklistDismissed] = React.useState(false);
+  React.useEffect(() => {
+    setChecklistDismissed(isSetupChecklistDismissed());
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "setupChecklistDismissed") {
+        setChecklistDismissed(e.newValue === "true");
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+  const showSetupChecklist = () => {
+    clearSetupChecklistDismissal();
+    setChecklistDismissed(false);
+  };
 
   const publishNow = async () => {
     if (!scheduleQuery.data) return;
@@ -484,6 +588,19 @@ function ScheduleInner() {
           <UsersIcon className="h-4 w-4" />
           עובדים
         </Button>
+        {checklistDismissed && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={showSetupChecklist}
+            className="h-11 sm:h-10"
+            aria-label="הצג רשימת התקנה"
+            title="הצג רשימת התקנה"
+          >
+            <ClipboardList className="h-4 w-4" />
+            <span className="hidden sm:inline">רשימת התקנה</span>
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
@@ -540,15 +657,55 @@ function ScheduleInner() {
           <MessageCircle className="h-4 w-4" />
           <span className="hidden sm:inline">פרסום ב-WhatsApp</span>
         </Button>
-        <Button
-          onClick={publishNow}
-          disabled={publish.isPending || !scheduleQuery.data}
-          className="h-11 sm:h-10"
-          title="שמירה כסידור פורסם + פתיחת חלון שיתוף"
-        >
-          <Upload className="h-4 w-4" />
-          {publish.isPending ? "מפרסם…" : "פרסם ושתף"}
-        </Button>
+        {/* Approval workflow buttons — replace publish for branch managers, add review actions for owners. */}
+        {isBranchManager && scheduleStatus === "draft" ? (
+          <Button
+            onClick={submitForApproval}
+            disabled={approving || !scheduleQuery.data}
+            className="h-11 sm:h-10"
+            title="שלח את הסידור לאישור הבעלים"
+          >
+            <Send className="h-4 w-4" />
+            {approving ? "שולח…" : "שלח לאישור"}
+          </Button>
+        ) : isBranchManager && scheduleStatus === "pending_approval" ? (
+          <Button disabled className="h-11 sm:h-10">
+            ממתין לאישור הבעלים…
+          </Button>
+        ) : canApprove && scheduleStatus === "pending_approval" ? (
+          <>
+            <Button
+              variant="outline"
+              onClick={reject}
+              disabled={approving}
+              className="h-11 sm:h-10"
+              title="החזר את הסידור לעריכה למנהל הסניף"
+            >
+              <X className="h-4 w-4" />
+              <span className="hidden sm:inline">החזר לעריכה</span>
+            </Button>
+            <Button
+              variant="glow"
+              onClick={approve}
+              disabled={approving}
+              className="h-11 sm:h-10"
+              title="אשר את הסידור"
+            >
+              <Check className="h-4 w-4" />
+              {approving ? "מאשר…" : "אשר סידור"}
+            </Button>
+          </>
+        ) : (
+          <Button
+            onClick={publishNow}
+            disabled={publish.isPending || !scheduleQuery.data}
+            className="h-11 sm:h-10"
+            title="שמירה כסידור פורסם + פתיחת חלון שיתוף"
+          >
+            <Upload className="h-4 w-4" />
+            {publish.isPending ? "מפרסם…" : "פרסם ושתף"}
+          </Button>
+        )}
       </div>
 
       {/* Labor cost bar — always visible above the board */}
@@ -575,27 +732,6 @@ function ScheduleInner() {
         onDragOver={onDragOver}
         onDragEnd={onDragEnd}
       >
-        {/* Selected-employee bar (mobile only) */}
-        {selectedEmployeeId && (() => {
-          const selEmp = employees.find((e) => e.id === selectedEmployeeId);
-          if (!selEmp) return null;
-          return (
-            <div className="sm:hidden sticky top-14 z-20 flex items-center gap-3 px-4 py-2.5 bg-primary text-primary-foreground border-b">
-              <span className="text-sm font-medium flex-1 truncate">
-                שיבוץ: {selEmp.fullName} — הקש על משמרת
-              </span>
-              <button
-                type="button"
-                onClick={() => setSelectedEmployeeId(null)}
-                className="text-primary-foreground/70 hover:text-primary-foreground text-lg leading-none"
-                aria-label="בטל בחירת עובד/ת"
-              >
-                ✕
-              </button>
-            </div>
-          );
-        })()}
-
       <div className="flex flex-col sm:flex-row flex-1 min-h-0">
         {/* Left rail — filters (desktop only) */}
         <aside aria-label="סינון וחיפוש" className="hidden sm:block w-60 shrink-0 border-e bg-muted/30 p-3 overflow-y-auto">
@@ -666,11 +802,17 @@ function ScheduleInner() {
               <EmptyScheduleState
                 onCreateFirstShift={() => {
                   if (blockIfDemo()) return;
+                  setCreateShiftPreset(undefined);
                   setCreateShiftOpen(true);
                 }}
                 onAutoSchedule={() => {
                   if (blockIfDemo()) return;
                   setAutoOpen(true);
+                }}
+                onCreateFromPreset={(name) => {
+                  if (blockIfDemo()) return;
+                  setCreateShiftPreset(name || undefined);
+                  setCreateShiftOpen(true);
                 }}
               />
             ) : (
@@ -683,8 +825,7 @@ function ScheduleInner() {
                 validationByShift={validationByShift}
                 activeEmployee={activeEmployee}
                 onUnassign={unassign}
-                selectedEmployeeId={selectedEmployeeId}
-                onTapAssign={handleTapAssign}
+                onRequestAssign={handleRequestAssign}
               />
             )
           ) : null}
@@ -711,12 +852,7 @@ function ScheduleInner() {
                   key={e.id}
                   employee={e}
                   metrics={metricsByEmployee[e.id]}
-                  onSelect={() =>
-                    setSelectedEmployeeId(
-                      e.id === selectedEmployeeId ? null : e.id,
-                    )
-                  }
-                  isSelected={e.id === selectedEmployeeId}
+                  /* Drawer is now a secondary path — main flow is shift-first. */
                 />
               ))}
               {visibleEmployees.length === 0 ? (
@@ -868,13 +1004,7 @@ function ScheduleInner() {
                   key={e.id}
                   employee={e}
                   metrics={metricsByEmployee[e.id]}
-                  onSelect={() => {
-                    setSelectedEmployeeId(
-                      e.id === selectedEmployeeId ? null : e.id,
-                    );
-                    setEmployeesPanelOpen(false);
-                  }}
-                  isSelected={e.id === selectedEmployeeId}
+                  /* Mobile drawer keeps drag-handle for power users; primary flow opens AssignEmployeeSheet from a shift tap. */
                 />
               ))}
               {visibleEmployees.length === 0 ? (
@@ -913,10 +1043,40 @@ function ScheduleInner() {
       />
       <CreateShiftDialog
         open={createShiftOpen}
-        onOpenChange={setCreateShiftOpen}
+        onOpenChange={(open) => {
+          setCreateShiftOpen(open);
+          if (!open) setCreateShiftPreset(undefined);
+        }}
         weekStart={weekStart}
         scheduleId={scheduleQuery.data?.id ?? null}
+        initialTemplateName={createShiftPreset}
       />
+
+      <QuickAddEmployeesDialog
+        open={quickAddEmployeesOpen}
+        onOpenChange={setQuickAddEmployeesOpen}
+      />
+
+      {/* Shift-first assignment sheet — primary path on mobile + desktop. */}
+      <AssignEmployeeSheet
+        shift={assignShift}
+        open={assignShift !== null}
+        onOpenChange={(open) => {
+          if (!open) setAssignShift(null);
+        }}
+        employees={employees}
+        metricsByEmployee={metricsByEmployee}
+        onAssign={handleSheetAssign}
+        locationFilter={locationFilter}
+        onAddFirstEmployee={() => {
+          if (blockIfDemo()) return;
+          setQuickAddEmployeesOpen(true);
+        }}
+      />
+
+      {/* Setup checklist — floating bottom-start on desktop, top banner on mobile.
+         Self-contained: reads useOnboardingProgress() and auto-hides when done. */}
+      {!isDemo && <SetupChecklist />}
 
       {/* Signup prompt — replaces the old toast for demo-mode blocks */}
       <Dialog open={signupPromptOpen} onOpenChange={setSignupPromptOpen}>

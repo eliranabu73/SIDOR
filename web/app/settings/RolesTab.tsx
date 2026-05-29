@@ -100,7 +100,7 @@ export default function RolesTab({ settings, setSettings }: RolesTabProps) {
         {settings?.roles.map((role) => (
           <div
             key={role.id}
-            className="flex items-center gap-2 rounded-md border border-border p-2"
+            className="flex flex-wrap sm:flex-nowrap items-center gap-2 rounded-md border border-border p-2"
           >
             {editingRole === role.id ? (
               <>
@@ -162,7 +162,7 @@ export default function RolesTab({ settings, setSettings }: RolesTabProps) {
           </div>
         ))}
 
-        <div className="flex gap-2 pt-2">
+        <div className="flex flex-col sm:flex-row gap-2 pt-2">
           <Input
             value={newRoleName}
             onChange={(e) => setNewRoleName(e.target.value)}
@@ -176,6 +176,7 @@ export default function RolesTab({ settings, setSettings }: RolesTabProps) {
             variant="outline"
             onClick={addRole}
             disabled={!newRoleName.trim() || addingRole}
+            className="w-full sm:w-auto"
           >
             <PlusCircle className="me-1 h-4 w-4" />
             {addingRole ? "מוסיף…" : "הוסף"}

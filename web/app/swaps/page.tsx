@@ -6,10 +6,12 @@ import {
   AlertCircle,
   ArrowLeftRight,
   CheckCircle2,
+  ChevronLeft,
   Clock,
   MapPin,
   MessageCircle,
   Phone,
+  Users,
   XCircle,
 } from "lucide-react";
 import { DateTime } from "luxon";
@@ -18,6 +20,13 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   approveSwap,
   fetchPendingSwaps,
@@ -48,8 +57,8 @@ function SwapsInner() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
       <header className="mb-6">
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <ArrowLeftRight className="h-6 w-6 text-indigo-500" />
+        <h1 className="flex items-center gap-2 text-xl sm:text-2xl font-bold">
+          <ArrowLeftRight className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-500" />
           בקשות החלפת משמרת
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -90,6 +99,7 @@ function SwapsInner() {
 
 function SwapRow({ swap }: { swap: PendingSwap }) {
   const qc = useQueryClient();
+  const [sheetOpen, setSheetOpen] = React.useState(false);
   const candidatesQ = useQuery({
     queryKey: ["swap-candidates", swap.id],
     queryFn: () => fetchSwapCandidates(swap.id),
@@ -99,6 +109,7 @@ function SwapRow({ swap }: { swap: PendingSwap }) {
     mutationFn: (targetEmployeeId: string) => approveSwap(swap.id, targetEmployeeId),
     onSuccess: async () => {
       toast.success("ההחלפה אושרה");
+      setSheetOpen(false);
       await qc.invalidateQueries({ queryKey: ["swap-requests"] });
       await qc.invalidateQueries({ queryKey: ["schedule"] });
     },
@@ -118,36 +129,62 @@ function SwapRow({ swap }: { swap: PendingSwap }) {
   const tz = "Asia/Jerusalem";
   const start = DateTime.fromISO(swap.shift.startsAt, { zone: tz });
   const end = DateTime.fromISO(swap.shift.endsAt, { zone: tz });
+  const candidateCount = candidatesQ.data?.length ?? 0;
+
+  const candidatesList = (
+    <>
+      {candidatesQ.isLoading ? (
+        <Skeleton className="h-20" />
+      ) : candidateCount === 0 ? (
+        <div className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
+          לא נמצאו עובדים מתאימים. נסה לבטל את המשמרת או לשבץ ידנית.
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {candidatesQ.data!.map((c) => (
+            <CandidateRow
+              key={c.employeeId}
+              candidate={c}
+              pending={approve.isPending && approve.variables === c.employeeId}
+              onApprove={() => approve.mutate(c.employeeId)}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
 
   return (
     <Card className="bento-corner-glow">
-      <CardContent className="space-y-4 p-5">
+      <CardContent className="space-y-4 p-4 sm:p-5">
         <header className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-sm text-muted-foreground">בקשה מ-</div>
-            <div className="text-lg font-semibold">
+          <div className="min-w-0">
+            <div className="text-xs sm:text-sm text-muted-foreground">בקשה מ-</div>
+            <div className="text-base sm:text-lg font-semibold truncate">
               {swap.requester.fullName}
             </div>
             {swap.requester.phone ? (
               <a
                 href={`tel:${swap.requester.phone}`}
-                className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground min-h-[44px] sm:min-h-0 py-2 sm:py-0"
               >
                 <Phone className="h-3 w-3" />
                 {swap.requester.phone}
               </a>
             ) : null}
           </div>
-          <div className="text-end text-xs text-muted-foreground">
+          <div className="text-end text-[11px] sm:text-xs text-muted-foreground shrink-0">
             {DateTime.fromISO(swap.createdAt).setLocale("he").toRelative()}
           </div>
         </header>
 
         <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
           <div className="flex items-center gap-2 font-medium">
-            <Clock className="h-4 w-4 text-indigo-500" />
-            {start.setLocale("he").toFormat("EEEE · d בMMMM")} ·{" "}
-            {start.toFormat("HH:mm")} – {end.toFormat("HH:mm")}
+            <Clock className="h-4 w-4 text-indigo-500 shrink-0" />
+            <span className="min-w-0 break-words">
+              {start.setLocale("he").toFormat("EEEE · d בMMMM")} ·{" "}
+              {start.toFormat("HH:mm")} – {end.toFormat("HH:mm")}
+            </span>
           </div>
           <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
             {swap.shift.role ? <span>תפקיד: {swap.shift.role}</span> : null}
@@ -160,40 +197,61 @@ function SwapRow({ swap }: { swap: PendingSwap }) {
           </div>
         </div>
 
-        <div>
-          <h3 className="mb-2 text-sm font-semibold">מועמדים אפשריים</h3>
-          {candidatesQ.isLoading ? (
-            <Skeleton className="h-20" />
-          ) : (candidatesQ.data?.length ?? 0) === 0 ? (
-            <div className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
-              לא נמצאו עובדים מתאימים. נסה לבטל את המשמרת או לשבץ ידנית.
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              {candidatesQ.data!.map((c) => (
-                <CandidateRow
-                  key={c.employeeId}
-                  candidate={c}
-                  pending={approve.isPending && approve.variables === c.employeeId}
-                  onApprove={() => approve.mutate(c.employeeId)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-end gap-2 pt-1">
+        {/* Mobile: button to open candidates in a sheet */}
+        <div className="sm:hidden">
           <Button
             variant="outline"
-            size="sm"
+            className="w-full justify-between min-h-[44px]"
+            onClick={() => setSheetOpen(true)}
+          >
+            <span className="inline-flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              מועמדים אפשריים
+              {candidateCount > 0 && (
+                <span className="rounded-full bg-indigo-500/15 px-2 py-0.5 text-xs text-indigo-600 dark:text-indigo-400">
+                  {candidateCount}
+                </span>
+              )}
+            </span>
+            <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
+          </Button>
+        </div>
+
+        {/* Desktop: candidates inline */}
+        <div className="hidden sm:block">
+          <h3 className="mb-2 text-sm font-semibold">מועמדים אפשריים</h3>
+          {candidatesList}
+        </div>
+
+        {/* Actions: stacked on mobile, inline on desktop */}
+        <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-1">
+          <Button
+            variant="outline"
             disabled={reject.isPending}
             onClick={() => reject.mutate()}
+            className="w-full sm:w-auto min-h-[44px] sm:min-h-0 sm:h-9"
           >
             <XCircle className="h-4 w-4" />
             דחה בקשה
           </Button>
         </div>
       </CardContent>
+
+      {/* Mobile bottom-sheet for candidates */}
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent
+          side="left"
+          className="!top-auto !bottom-0 !h-auto max-h-[85vh] !w-full !max-w-full rounded-t-2xl border-x-0 border-b-0 pb-[max(env(safe-area-inset-bottom),1rem)] overflow-y-auto sm:!top-0 sm:!bottom-auto sm:!h-full sm:!w-3/4 sm:!max-w-md sm:rounded-none"
+        >
+          <SheetHeader>
+            <SheetTitle>מועמדים אפשריים</SheetTitle>
+            <SheetDescription>
+              {swap.requester.fullName} · {start.setLocale("he").toFormat("EEEE d בMMMM")}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="space-y-2">{candidatesList}</div>
+        </SheetContent>
+      </Sheet>
     </Card>
   );
 }
@@ -209,14 +267,14 @@ function CandidateRow({
 }) {
   return (
     <div
-      className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm ${
+      className={`flex flex-wrap sm:flex-nowrap items-center gap-2 rounded-md px-3 py-2 text-sm ${
         candidate.conflicting
           ? "bg-amber-500/5 border border-amber-500/30"
           : "bg-card/60 border border-border"
       }`}
     >
       <div className="flex-1 min-w-0">
-        <div className="font-medium">{candidate.fullName}</div>
+        <div className="font-medium truncate">{candidate.fullName}</div>
         <div className="text-xs text-muted-foreground">
           {candidate.conflicting ? "⚠️ קונפליקט שיבוצים — בדוק לפני אישור" : "✓ פנוי לתפקיד"}
         </div>
@@ -226,8 +284,9 @@ function CandidateRow({
           href={`https://wa.me/${(candidate.phone || "").replace(/[^\d]/g, "").replace(/^0/, "972")}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-emerald-500 hover:text-emerald-400"
+          className="inline-flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center rounded-md text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10"
           title="פתח שיחה ב-WhatsApp"
+          aria-label="פתח שיחה ב-WhatsApp"
         >
           <MessageCircle className="h-4 w-4" />
         </a>
@@ -237,6 +296,7 @@ function CandidateRow({
         variant={candidate.conflicting ? "outline" : "glow"}
         onClick={onApprove}
         disabled={pending}
+        className="min-h-[44px] sm:min-h-0 sm:h-9 w-full sm:w-auto"
       >
         {pending ? "מאשר…" : "אשר החלפה"}
       </Button>

@@ -21,6 +21,7 @@ import {
   ensureSchedule,
   fetchLocations,
   fetchRoles,
+  listShiftTemplates,
 } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -31,6 +32,11 @@ type Props = {
   weekStart: DateTime;
   /** Existing schedule id (UUID) if one already exists for that week. */
   scheduleId?: string | null;
+  /**
+   * Optional — when the dialog opens, auto-select the template whose name
+   * matches (case-insensitive). Falls through silently if no match exists.
+   */
+  initialTemplateName?: string;
 };
 
 export function CreateShiftDialog({
@@ -38,6 +44,7 @@ export function CreateShiftDialog({
   onOpenChange,
   weekStart,
   scheduleId,
+  initialTemplateName,
 }: Props) {
   const qc = useQueryClient();
   const locationsQ = useQuery({
@@ -52,6 +59,13 @@ export function CreateShiftDialog({
     enabled: open,
     staleTime: 5 * 60_000,
   });
+  const templatesQ = useQuery({
+    queryKey: ["shift-templates"],
+    queryFn: listShiftTemplates,
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const [templateId, setTemplateId] = React.useState("");
 
   // Default: today at 09:00 → 17:00
   const defaultDate = DateTime.now().setZone("Asia/Jerusalem").toFormat("yyyy-MM-dd");
@@ -78,6 +92,26 @@ export function CreateShiftDialog({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Auto-select a template by name when the dialog opens with a preset.
+  React.useEffect(() => {
+    if (!open || !initialTemplateName) return;
+    const list = templatesQ.data;
+    if (!list?.length) return;
+    const needle = initialTemplateName.trim().toLowerCase();
+    if (!needle) {
+      setTemplateId("");
+      return;
+    }
+    const match = list.find((t) => t.name.trim().toLowerCase() === needle);
+    if (!match) return;
+    setTemplateId(match.id);
+    setStartTime(match.startLocalTime);
+    setEndTime(match.endLocalTime);
+    setCount(match.requiredEmployeeCount);
+    if (match.locationId) setLocationId(match.locationId);
+    if (match.roleId) setRoleId(match.roleId);
+  }, [open, initialTemplateName, templatesQ.data]);
 
   const submit = useMutation({
     mutationFn: async () => {
@@ -142,6 +176,36 @@ export function CreateShiftDialog({
           </div>
         ) : (
           <div className="space-y-4">
+            {(templatesQ.data?.length ?? 0) > 0 && (
+              <div className="space-y-1">
+                <Label htmlFor="template">תבנית (אופציונלי)</Label>
+                <select
+                  id="template"
+                  value={templateId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setTemplateId(id);
+                    const t = templatesQ.data?.find((x) => x.id === id);
+                    if (t) {
+                      setStartTime(t.startLocalTime);
+                      setEndTime(t.endLocalTime);
+                      setCount(t.requiredEmployeeCount);
+                      if (t.locationId) setLocationId(t.locationId);
+                      if (t.roleId) setRoleId(t.roleId);
+                    }
+                  }}
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                >
+                  <option value="">— ללא תבנית —</option>
+                  {templatesQ.data?.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.startLocalTime}–{t.endLocalTime}
+                      {t.crossesMidnight ? "+1" : ""})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1 col-span-1">
                 <Label htmlFor="date">תאריך</Label>

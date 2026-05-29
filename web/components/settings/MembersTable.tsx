@@ -107,8 +107,8 @@ export function MembersTable() {
   }
 
   return (
-    <div className="rounded-lg border bg-card overflow-hidden">
-      <table className="w-full text-sm">
+    <div className="rounded-lg border bg-card overflow-x-auto">
+      <table className="w-full min-w-[520px] text-sm">
         <thead>
           <tr className="border-b bg-muted/40 text-muted-foreground">
             <th className="px-4 py-2.5 text-right font-medium">משתמש</th>
@@ -187,7 +187,7 @@ export function MembersTable() {
                         onClick={saveEdit}
                         disabled={saving}
                         aria-label="שמור"
-                        className="rounded p-1 text-green-600 hover:bg-green-50 disabled:opacity-50"
+                        className="rounded p-2 text-green-600 hover:bg-green-50 disabled:opacity-50"
                       >
                         <Check className="h-4 w-4" />
                       </button>
@@ -195,7 +195,7 @@ export function MembersTable() {
                         onClick={cancelEdit}
                         disabled={saving}
                         aria-label="ביטול"
-                        className="rounded p-1 text-muted-foreground hover:bg-muted"
+                        className="rounded p-2 text-muted-foreground hover:bg-muted"
                       >
                         <X className="h-4 w-4" />
                       </button>
@@ -204,7 +204,7 @@ export function MembersTable() {
                     <button
                       onClick={() => startEdit(member)}
                       aria-label="ערוך הרשאות"
-                      className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      className="rounded p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
                     >
                       <Edit2 className="h-4 w-4" />
                     </button>

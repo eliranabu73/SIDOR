@@ -1,14 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Upload } from "lucide-react";
+import Link from "next/link";
+import { Lock, Pencil, Plus, Power, Sliders, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppShell } from "@/components/layout/AppShell";
-import { EmployeeTable } from "@/components/employees/EmployeeTable";
 import { EmployeeForm, type EmployeeFormData } from "@/components/employees/EmployeeForm";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FloatingActionButton } from "@/components/ui/floating-action-button";
 import { Input } from "@/components/ui/input";
+import { MobileTable, type MobileTableColumn } from "@/components/ui/mobile-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Sheet,
@@ -31,6 +34,7 @@ import {
   useCreateEmployee,
   useDeleteEmployee,
   useEmployeesSummary,
+  useLocations,
   useRoles,
   useUpdateEmployee,
 } from "@/lib/queries";
@@ -112,9 +116,27 @@ function errorMessage(e: unknown): string {
   return "אירעה שגיאה";
 }
 
+function ConstraintChip({ count }: { count: number }) {
+  if (count > 0) {
+    return (
+      <Badge variant="secondary" className="gap-1">
+        <Lock className="h-3 w-3" />
+        {count} אילוצים
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="gap-1 text-emerald-600">
+      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+      גמיש
+    </Badge>
+  );
+}
+
 function EmployeesInner() {
   const employeesQuery = useEmployeesSummary();
   const rolesQuery = useRoles();
+  const locationsQuery = useLocations();
   const createMut = useCreateEmployee();
   const updateMut = useUpdateEmployee();
   const deleteMut = useDeleteEmployee();
@@ -225,6 +247,10 @@ function EmployeesInner() {
           defaultLocationId: data.primaryLocationId
             ? data.primaryLocationId
             : null,
+          hourlyRate: data.hourlyRate,
+          hireDate: data.hireDate ? data.hireDate : null,
+          weeklyBudgetHours:
+            data.weeklyBudgetHours != null ? data.weeklyBudgetHours : null,
         };
         await updateMut.mutateAsync({ id: editing.id, body });
         toast.success("העובד/ת עודכן/ה");
@@ -236,6 +262,11 @@ function EmployeesInner() {
           ...(roleIds.length ? { roleIds } : {}),
           ...(data.primaryLocationId
             ? { defaultLocationId: data.primaryLocationId }
+            : {}),
+          hourlyRate: data.hourlyRate,
+          ...(data.hireDate ? { hireDate: data.hireDate } : {}),
+          ...(data.weeklyBudgetHours != null
+            ? { weeklyBudgetHours: data.weeklyBudgetHours }
             : {}),
         };
         await createMut.mutateAsync(body);
@@ -266,11 +297,145 @@ function EmployeesInner() {
     }
   };
 
+  const locationsMap = React.useMemo(
+    () => Object.fromEntries((locationsQuery.data ?? []).map((l) => [l.id, l.name])),
+    [locationsQuery.data],
+  );
+
+  const columns = React.useMemo<ReadonlyArray<MobileTableColumn<Employee>>>(
+    () => [
+      {
+        header: "שם",
+        accessor: (e) => (
+          <div className="min-w-0">
+            <div className="font-semibold truncate">{e.fullName}</div>
+            {e.email ? (
+              <div className="text-xs text-muted-foreground truncate sm:hidden">
+                {e.email}
+              </div>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        header: "דוא״ל",
+        accessor: (e) => (
+          <span className="text-muted-foreground">{e.email ?? "—"}</span>
+        ),
+        mobileHidden: true,
+      },
+      {
+        header: "תפקידים",
+        accessor: (e) =>
+          e.roles.length ? (
+            <div className="flex flex-wrap gap-1 justify-end">
+              {e.roles.map((r) => (
+                <Badge key={r} variant="secondary">
+                  {r}
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
+      {
+        header: "סניף",
+        accessor: (e) => (
+          <span className="text-muted-foreground">
+            {e.primaryLocationId ? locationsMap[e.primaryLocationId] ?? "—" : "—"}
+          </span>
+        ),
+      },
+      {
+        header: "סטטוס",
+        accessor: (e) =>
+          e.active ? (
+            <Badge variant="success">פעיל/ה</Badge>
+          ) : (
+            <Badge variant="outline">לא פעיל/ה</Badge>
+          ),
+      },
+      {
+        header: "אילוצים",
+        accessor: (e) => <ConstraintChip count={constraintCounts[e.id] ?? 0} />,
+      },
+      {
+        header: "פעולות",
+        mobileLabel: false,
+        accessor: (e) => (
+          <div className="inline-flex gap-1 sm:gap-1 w-full sm:w-auto justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 sm:flex-none h-11 sm:h-9"
+              onClick={(ev) => {
+                ev.stopPropagation();
+                startEdit(e);
+              }}
+              aria-label={`ערוך את ${e.fullName}`}
+            >
+              <Pencil className="h-4 w-4" />
+              <span className="sm:hidden">ערוך</span>
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="h-11 sm:h-9"
+              aria-label={`ערוך אילוצים — ${e.fullName}`}
+              onClick={(ev) => ev.stopPropagation()}
+            >
+              <Link href={`/employees/${e.id}?tab=constraints`}>
+                <Sliders className="h-4 w-4" />
+                <span className="sm:hidden">אילוצים</span>
+              </Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-11 w-11 sm:h-9 sm:w-9"
+              onClick={(ev) => {
+                ev.stopPropagation();
+                toggleActive(e);
+              }}
+              aria-label={
+                e.active ? `השבת את ${e.fullName}` : `הפעל את ${e.fullName}`
+              }
+            >
+              <Power className="h-4 w-4" />
+            </Button>
+          </div>
+        ),
+        align: "end",
+      },
+    ],
+    [constraintCounts, locationsMap],
+  );
+
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
-      <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 mb-4">
+      <div className="flex items-center justify-between gap-2 mb-3 sm:mb-4">
         <h1 className="text-xl font-semibold">עובדים</h1>
-        <div className="flex w-full sm:w-auto items-center gap-2">
+        <div className="hidden sm:flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setBulkOpen(true)}
+            className="h-10 shrink-0"
+          >
+            <Upload className="h-4 w-4" />
+            <span>ייבוא מרובה</span>
+          </Button>
+          <Button onClick={startCreate} className="h-10 shrink-0">
+            <Plus className="h-4 w-4" />
+            <span>הוסף עובד/ת</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* Sticky search row on mobile; inline on desktop */}
+      <div className="sticky top-14 z-10 -mx-4 mb-3 bg-background px-4 py-2 sm:static sm:m-0 sm:p-0 sm:mb-4">
+        <div className="flex items-center gap-2">
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -281,16 +446,11 @@ function EmployeesInner() {
           <Button
             variant="outline"
             onClick={() => setBulkOpen(true)}
-            className="h-11 sm:h-10 shrink-0"
+            className="h-11 shrink-0 sm:hidden"
+            aria-label="ייבוא מרובה"
           >
             <Upload className="h-4 w-4" />
-            <span className="hidden sm:inline">ייבוא מרובה</span>
-            <span className="sm:hidden">ייבוא</span>
-          </Button>
-          <Button onClick={startCreate} className="h-11 sm:h-10 shrink-0">
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">הוסף עובד/ת</span>
-            <span className="sm:hidden">הוסף</span>
+            <span>ייבוא</span>
           </Button>
         </div>
       </div>
@@ -306,13 +466,20 @@ function EmployeesInner() {
           טעינת עובדים נכשלה: {errorMessage(employeesQuery.error)}
         </div>
       ) : (
-        <EmployeeTable
-          employees={filtered}
-          onEdit={startEdit}
-          onToggleActive={toggleActive}
-          constraintCounts={constraintCounts}
+        <MobileTable
+          data={filtered}
+          keyFn={(e) => e.id}
+          columns={columns}
+          emptyState={<span>אין עובדים להצגה</span>}
         />
       )}
+
+      {/* Mobile FAB — same handler as the desktop "הוסף עובד/ת" button */}
+      <FloatingActionButton
+        icon={<Plus className="h-6 w-6" />}
+        label="הוסף עובד/ת"
+        onClick={startCreate}
+      />
 
       <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
         <DialogContent className="sm:max-w-lg">

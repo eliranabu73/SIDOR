@@ -99,7 +99,7 @@ function emp(id: string) {
     employmentType: 'FULL_TIME' as const,
     defaultLocationId: null,
     defaultTimezone: 'Asia/Jerusalem',
-    hourlyRate: null,
+    hourlyRate: new (require('@prisma/client/runtime/library').Decimal)(0),
     weeklyBudgetHours: null,
     dateOfBirth: null,
     weeklyRestDay: 'SATURDAY' as const,
@@ -107,6 +107,8 @@ function emp(id: string) {
     isPregnant: false,
     pregnancyWeeks: null,
     isActive: true,
+    userId: null,
+    hireDate: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

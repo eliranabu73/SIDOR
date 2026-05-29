@@ -24,16 +24,23 @@ Overlay.displayName = "SheetOverlay";
 export const SheetContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
-    side?: "left" | "right";
+    side?: "left" | "right" | "bottom";
   }
->(({ className, side = "left", children, ...props }, ref) => (
+>(({ className, side = "left", children, ...props }, ref) => {
+  const sideClass =
+    side === "bottom"
+      ? "inset-x-0 bottom-0 w-full max-w-full rounded-t-2xl border-t pb-[max(1.5rem,env(safe-area-inset-bottom))] max-h-[90vh] overflow-y-auto"
+      : side === "left"
+        ? "top-0 h-full w-3/4 max-w-md start-0 border-e"
+        : "top-0 h-full w-3/4 max-w-md end-0 border-s";
+  return (
   <DialogPrimitive.Portal>
     <Overlay />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed top-0 z-50 h-full w-3/4 max-w-md border bg-background p-6 shadow-lg",
-        side === "left" ? "start-0 border-e" : "end-0 border-s",
+        "fixed z-50 border bg-background p-6 shadow-lg",
+        sideClass,
         className,
       )}
       {...props}
@@ -47,7 +54,8 @@ export const SheetContent = React.forwardRef<
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPrimitive.Portal>
-));
+  );
+});
 SheetContent.displayName = "SheetContent";
 
 export const SheetHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (

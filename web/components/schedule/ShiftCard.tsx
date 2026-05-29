@@ -3,7 +3,7 @@
 import * as React from "react";
 import { DateTime } from "luxon";
 import { useDroppable } from "@dnd-kit/core";
-import { Clock, AlertTriangle, Lock, Sunrise, Sun, Sunset, Moon } from "lucide-react";
+import { Clock, AlertTriangle, Lock, Plus, Sunrise, Sun, Sunset, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EmployeeChip } from "./EmployeeChip";
 import {
@@ -191,10 +191,26 @@ function ShiftCardImpl({
           </div>
         )}
         {empty ? (
-          <span className="text-[11px] italic inline-flex items-center gap-1 opacity-80">
-            {understaffed && !isOpen && <AlertTriangle className="h-3 w-3" />}
-            {isOpen ? "משמרת פתוחה — לעובדים לקחת" : onTapAssign ? "הקש לשיבוץ" : "גרור עובד/ת לכאן"}
-          </span>
+          onTapAssign && !isOpen ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onTapAssign();
+              }}
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-primary/40 bg-primary/5 px-2.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/10 transition-colors"
+              aria-label="הוסף עובד למשמרת"
+            >
+              {understaffed && <AlertTriangle className="h-3 w-3" />}
+              <Plus className="h-3 w-3" />
+              הוסף עובד
+            </button>
+          ) : (
+            <span className="text-[11px] italic inline-flex items-center gap-1 opacity-80">
+              {understaffed && !isOpen && <AlertTriangle className="h-3 w-3" />}
+              {isOpen ? "משמרת פתוחה — לעובדים לקחת" : "גרור עובד/ת לכאן"}
+            </span>
+          )
         ) : (
           assigned.map((a) => {
             const emp = employees[a.employeeId];
@@ -226,6 +242,22 @@ function ShiftCardImpl({
               </DropdownMenu>
             );
           })
+        )}
+        {/* Add-more button on partly-staffed shifts, so users don't need to
+            open a separate selection mode. */}
+        {!empty && understaffed && onTapAssign && !isLocked && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onTapAssign();
+            }}
+            className="inline-flex items-center gap-1 rounded-full border border-dashed border-primary/40 bg-primary/5 px-2 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/10"
+            aria-label="הוסף עוד עובד למשמרת"
+          >
+            <Plus className="h-3 w-3" />
+            הוסף
+          </button>
         )}
       </div>
     </div>

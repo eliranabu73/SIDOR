@@ -57,7 +57,7 @@ export async function computeWeeklyCost(
 
   // Bail early if the whole org has zero rates — cost is meaningless.
   const anyRate = await db.employee.findFirst({
-    where: { organizationId: opts.organizationId, hourlyRate: { not: null } },
+    where: { organizationId: opts.organizationId, hourlyRate: { gt: 0 } },
     select: { id: true },
   });
   if (!anyRate) return null;

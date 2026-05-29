@@ -45,19 +45,19 @@ function FairnessInner() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
       <header className="mb-6">
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <Scale className="h-6 w-6 text-indigo-500" />
+        <h1 className="flex items-center gap-2 text-xl sm:text-2xl font-bold">
+          <Scale className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-500" />
           הוגנות בסידור
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           מי מקבל יותר מדי סופ"שים, לילות וסגירות. השווה מול חציון הצוות.
         </p>
-        <div className="mt-3 inline-flex rounded-lg border border-border bg-card p-1">
+        <div className="mt-3 flex w-full sm:inline-flex sm:w-auto rounded-lg border border-border bg-card p-1">
           {WEEKS_OPTIONS.map((w) => (
             <button
               key={w}
               onClick={() => setWeeks(w)}
-              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+              className={`flex-1 sm:flex-initial rounded-md px-3 py-2 sm:py-1 text-xs font-medium transition-colors min-h-[44px] sm:min-h-0 ${
                 weeks === w
                   ? "bg-gradient-to-r from-indigo-500 to-cyan-400 text-white shadow"
                   : "text-muted-foreground hover:text-foreground"
@@ -98,7 +98,7 @@ function FairnessView({ data }: { data: FairnessResponse }) {
   return (
     <div className="space-y-4">
       {/* Team summary */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <TeamStat icon={Clock} label="חציון שעות" value={data.team.medianHours} />
         <TeamStat icon={Sun} label='חציון סופ"שים' value={data.team.medianWeekend} />
         <TeamStat icon={Moon} label="חציון לילות" value={data.team.medianNight} />
@@ -159,13 +159,13 @@ function EmployeeRow({
           : "border-border"
       }
     >
-      <CardContent className="space-y-3 p-4">
+      <CardContent className="space-y-3 p-3 sm:p-4">
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 text-lg font-semibold">
-              {employee.fullName}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-base sm:text-lg font-semibold">
+              <span className="truncate">{employee.fullName}</span>
               {flagged ? (
-                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
               ) : null}
             </div>
             {employee.flags.length > 0 ? (
@@ -181,8 +181,8 @@ function EmployeeRow({
               </div>
             ) : null}
           </div>
-          <div className="text-end">
-            <div className="text-3xl font-extrabold tabular-nums">
+          <div className="text-end shrink-0">
+            <div className="text-2xl sm:text-3xl font-extrabold tabular-nums">
               <span className={scoreColor(employee.score)}>{employee.score}</span>
             </div>
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -191,7 +191,7 @@ function EmployeeRow({
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-2 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
           <MetricCell
             label="שעות"
             value={employee.hours}

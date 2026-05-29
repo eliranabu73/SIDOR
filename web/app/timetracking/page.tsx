@@ -7,21 +7,33 @@ import {
   CheckCircle2,
   Clock,
   Download,
+  LogIn,
+  LogOut,
   Timer,
   Users,
 } from "lucide-react";
+import { toast } from "sonner";
 import { DemoBoundary, useDemoMode } from "@/components/auth/DemoBoundary";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useTimeEntries, useTimetrackingLive } from "@/lib/queries";
 import {
-  fetchTimeEntries,
-  fetchTimetrackingLive,
+  MobileTable,
+  type MobileTableColumn,
+} from "@/components/ui/mobile-table";
+import {
+  useClockIn,
+  useClockOut,
+  useTimeEntries,
+  useTimetrackingLive,
+  useTimetrackingStatus,
+} from "@/lib/queries";
+import {
   type LiveClockStatus,
   type TimeEntry,
 } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Mock data (shown in demo mode)
@@ -174,17 +186,172 @@ export default function TimetrackingPage() {
 }
 
 // ---------------------------------------------------------------------------
+// Day-picker chip row (mobile entries filter)
+// ---------------------------------------------------------------------------
+
+function DayPickerChips({
+  selected,
+  onSelect,
+}: {
+  selected: string; // yyyy-MM-dd
+  onSelect: (day: string) => void;
+}) {
+  const today = DateTime.now().startOf("day");
+  const days = React.useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, i) => today.minus({ days: 6 - i })),
+    [today],
+  );
+  return (
+    <div className="-mx-4 px-4 overflow-x-auto">
+      <div className="flex gap-2 min-w-max">
+        {days.map((d) => {
+          const value = d.toFormat("yyyy-MM-dd");
+          const active = value === selected;
+          const isToday = d.hasSame(today, "day");
+          return (
+            <button
+              key={value}
+              onClick={() => onSelect(value)}
+              aria-pressed={active}
+              className={cn(
+                "flex flex-col items-center justify-center rounded-xl border min-w-14 min-h-14 px-3 py-2 text-sm transition-colors whitespace-nowrap",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                active
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background text-foreground border-border hover:bg-accent/40",
+              )}
+            >
+              <span className="text-[10px] uppercase opacity-70">
+                {d.setLocale("he").toFormat("ccc")}
+              </span>
+              <span className="text-base font-bold tabular-nums leading-none">
+                {d.toFormat("d")}
+              </span>
+              {isToday && (
+                <span className="text-[10px] mt-0.5 opacity-80">היום</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Mobile clock card (today's status + big primary button)
+// ---------------------------------------------------------------------------
+
+function MobileClockCard() {
+  const statusQ = useTimetrackingStatus();
+  const clockInMut = useClockIn();
+  const clockOutMut = useClockOut();
+  const [, forceUpdate] = React.useReducer((x: number) => x + 1, 0);
+
+  React.useEffect(() => {
+    const id = setInterval(() => forceUpdate(), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const clockedIn = statusQ.data?.clockedIn === true;
+  const clockInAt = statusQ.data?.clockInAt ?? null;
+  const busy = clockInMut.isPending || clockOutMut.isPending;
+
+  if (statusQ.isLoading) {
+    return <Skeleton className="h-44 rounded-2xl" />;
+  }
+
+  const handleClick = () => {
+    if (clockedIn) {
+      clockOutMut.mutate(undefined, {
+        onSuccess: () => toast.success("נרשמה יציאה"),
+        onError: (err) =>
+          toast.error(err instanceof Error ? err.message : "יציאה נכשלה"),
+      });
+    } else {
+      clockInMut.mutate(
+        {},
+        {
+          onSuccess: () => toast.success("נרשמה כניסה"),
+          onError: (err) =>
+            toast.error(err instanceof Error ? err.message : "כניסה נכשלה"),
+        },
+      );
+    }
+  };
+
+  return (
+    <Card
+      className={cn(
+        "p-5 sm:p-6",
+        clockedIn
+          ? "border-emerald-500/40 bg-emerald-500/5"
+          : "border-border",
+      )}
+    >
+      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+        <Clock className="h-4 w-4" />
+        סטטוס נוכחות
+      </div>
+
+      <div className="mt-3 flex items-baseline gap-3">
+        <span
+          className={cn(
+            "text-2xl font-bold",
+            clockedIn ? "text-emerald-600 dark:text-emerald-400" : "text-foreground",
+          )}
+        >
+          {clockedIn ? "במשמרת" : "לא במשמרת"}
+        </span>
+        {clockedIn && clockInAt && (
+          <span className="text-sm tabular-nums text-muted-foreground">
+            כניסה {fmtTime(clockInAt)} · {elapsedStr(clockInAt)}
+          </span>
+        )}
+      </div>
+
+      <Button
+        onClick={handleClick}
+        disabled={busy}
+        className={cn(
+          "mt-5 w-full min-h-14 text-base font-semibold gap-2",
+          clockedIn
+            ? "bg-rose-600 hover:bg-rose-700 text-white"
+            : "",
+        )}
+      >
+        {clockedIn ? (
+          <>
+            <LogOut className="h-5 w-5" />
+            סיים משמרת
+          </>
+        ) : (
+          <>
+            <LogIn className="h-5 w-5" />
+            התחל משמרת
+          </>
+        )}
+      </Button>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main content
 // ---------------------------------------------------------------------------
 
 function TimetrackingContent() {
   const isDemo = useDemoMode();
   const week = weekRange();
+  const today = DateTime.now().toFormat("yyyy-MM-dd");
   const [from, setFrom] = React.useState(week.from);
   const [to, setTo] = React.useState(week.to);
+  const [mobileDay, setMobileDay] = React.useState(today);
 
   const liveQuery = useTimetrackingLive();
   const entriesQuery = useTimeEntries(from, to);
+  const mobileEntriesQuery = useTimeEntries(mobileDay, mobileDay);
 
   const liveData: LiveClockStatus[] = isDemo
     ? MOCK_LIVE
@@ -193,6 +360,10 @@ function TimetrackingContent() {
   const entries: TimeEntry[] = isDemo
     ? MOCK_ENTRIES
     : (entriesQuery.data ?? []);
+
+  const mobileEntries: TimeEntry[] = isDemo
+    ? MOCK_ENTRIES
+    : (mobileEntriesQuery.data ?? []);
 
   const totalScheduled = entries.reduce(
     (s, e) => s + (e.scheduledMinutes ?? 0),
@@ -204,12 +375,60 @@ function TimetrackingContent() {
   );
   const totalDelta = totalActual - totalScheduled;
 
+  const mobileColumns: ReadonlyArray<MobileTableColumn<TimeEntry>> = [
+    {
+      header: "עובד",
+      accessor: (e) => <span className="font-medium">{e.employeeName}</span>,
+    },
+    {
+      header: "כניסה",
+      accessor: (e) => (
+        <span className="tabular-nums">{fmtTime(e.clockInAt)}</span>
+      ),
+    },
+    {
+      header: "יציאה",
+      accessor: (e) => (
+        <span className="tabular-nums">{fmtTime(e.clockOutAt)}</span>
+      ),
+    },
+    {
+      header: "סה״כ",
+      accessor: (e) => (
+        <span className="tabular-nums font-semibold">
+          {fmtHours(e.durationMinutes)}
+        </span>
+      ),
+    },
+    {
+      header: "הפרש",
+      accessor: (e) => {
+        const delta = variance(e);
+        return (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 tabular-nums font-semibold",
+              varianceColor(delta),
+            )}
+          >
+            {varianceIcon(delta)}
+            {delta !== null
+              ? `${delta >= 0 ? "+" : ""}${fmtHours(delta)}`
+              : "—"}
+          </span>
+        );
+      },
+    },
+  ];
+
   return (
-    <div dir="rtl" className="mx-auto max-w-5xl px-4 py-6 space-y-6">
+    <div dir="rtl" className="mx-auto max-w-5xl px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold">נוכחות עובדים</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">שעון נוכחות · מנהל</p>
+          <h1 className="text-xl sm:text-2xl font-bold">נוכחות עובדים</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            שעון נוכחות · מנהל
+          </p>
         </div>
         {isDemo && (
           <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
@@ -218,130 +437,175 @@ function TimetrackingContent() {
         )}
       </div>
 
-      {/* Section A: Live status */}
-      <LiveSection employees={liveData} loading={liveQuery.isLoading && !isDemo} />
+      {/* MOBILE LAYOUT (single column, today-first) */}
+      <div className="sm:hidden space-y-4">
+        {/* Big clock-in/out card */}
+        <MobileClockCard />
 
-      {/* Section B: Date range + entries table */}
-      <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between gap-4 px-5 py-4 flex-wrap border-b border-border">
-          <h2 className="text-base font-semibold flex items-center gap-2">
-            <Timer className="h-4 w-4 text-indigo-500" />
-            רשומות נוכחות
-          </h2>
-          <div className="flex items-center gap-2 flex-wrap">
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              מ:
-              <input
-                type="date"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-                className="h-8 rounded-lg border border-border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </label>
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              עד:
-              <input
-                type="date"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                className="h-8 rounded-lg border border-border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </label>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 gap-1.5"
-              onClick={() =>
-                exportCsv(
-                  entries,
-                  `${from}_${to}`,
-                )
-              }
-              disabled={entries.length === 0}
-            >
-              <Download className="h-3.5 w-3.5" />
-              ייצוא CSV
-            </Button>
+        {/* Live section */}
+        <LiveSection employees={liveData} loading={liveQuery.isLoading && !isDemo} />
+
+        {/* Day picker + today entries */}
+        <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-border">
+            <h2 className="text-sm font-semibold flex items-center gap-2 mb-3">
+              <Timer className="h-4 w-4 text-indigo-500" />
+              רשומות לפי יום
+            </h2>
+            <DayPickerChips selected={mobileDay} onSelect={setMobileDay} />
           </div>
+          {mobileEntriesQuery.isLoading && !isDemo ? (
+            <div className="p-4 space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-16 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : (
+            <div className="p-4">
+              <MobileTable<TimeEntry>
+                data={mobileEntries}
+                keyFn={(e) => e.id}
+                columns={mobileColumns}
+                desktopBreakpoint="lg"
+                emptyState={
+                  <div className="text-sm text-muted-foreground">
+                    <Clock className="mx-auto mb-2 h-6 w-6 opacity-30" />
+                    אין רשומות ביום זה
+                  </div>
+                }
+              />
+            </div>
+          )}
         </div>
-
-        {entriesQuery.isLoading && !isDemo ? (
-          <div className="p-5 space-y-2">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-10 w-full rounded-lg" />
-            ))}
-          </div>
-        ) : entries.length === 0 ? (
-          <div className="py-12 text-center text-sm text-muted-foreground">
-            <Clock className="mx-auto mb-2 h-8 w-8 opacity-30" />
-            אין רשומות נוכחות לתקופה זו
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
-                  <th className="px-4 py-2.5 text-right font-medium">עובד</th>
-                  <th className="px-4 py-2.5 text-right font-medium">כניסה</th>
-                  <th className="px-4 py-2.5 text-right font-medium">יציאה</th>
-                  <th className="px-4 py-2.5 text-right font-medium">סה&quot;כ שעות</th>
-                  <th className="px-4 py-2.5 text-right font-medium">
-                    משמרת מתוכננת
-                  </th>
-                  <th className="px-4 py-2.5 text-right font-medium">הפרש</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {entries.map((entry) => {
-                  const delta = variance(entry);
-                  return (
-                    <tr
-                      key={entry.id}
-                      className="hover:bg-muted/30 transition-colors"
-                    >
-                      <td className="px-4 py-3 font-medium">
-                        {entry.employeeName}
-                      </td>
-                      <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                        {fmtTime(entry.clockInAt)}
-                      </td>
-                      <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                        {fmtTime(entry.clockOutAt)}
-                      </td>
-                      <td className="px-4 py-3 tabular-nums font-semibold">
-                        {fmtHours(entry.durationMinutes)}
-                      </td>
-                      <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                        {fmtHours(entry.scheduledMinutes)}
-                      </td>
-                      <td
-                        className={`px-4 py-3 tabular-nums font-semibold ${varianceColor(delta)}`}
-                      >
-                        <span className="inline-flex items-center gap-1">
-                          {varianceIcon(delta)}
-                          {delta !== null
-                            ? `${delta >= 0 ? "+" : ""}${fmtHours(delta)}`
-                            : "—"}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
 
-      {/* Section C: Variance summary */}
-      {entries.length > 0 && (
-        <VarianceSummary
-          scheduled={totalScheduled}
-          actual={totalActual}
-          delta={totalDelta}
-          label={`${from} – ${to}`}
+      {/* DESKTOP LAYOUT (preserve original) */}
+      <div className="hidden sm:block space-y-6">
+        {/* Section A: Live status */}
+        <LiveSection
+          employees={liveData}
+          loading={liveQuery.isLoading && !isDemo}
         />
-      )}
+
+        {/* Section B: Date range + entries table */}
+        <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between gap-4 px-5 py-4 flex-wrap border-b border-border">
+            <h2 className="text-base font-semibold flex items-center gap-2">
+              <Timer className="h-4 w-4 text-indigo-500" />
+              רשומות נוכחות
+            </h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                מ:
+                <input
+                  type="date"
+                  value={from}
+                  onChange={(e) => setFrom(e.target.value)}
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                עד:
+                <input
+                  type="date"
+                  value={to}
+                  onChange={(e) => setTo(e.target.value)}
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </label>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5"
+                onClick={() => exportCsv(entries, `${from}_${to}`)}
+                disabled={entries.length === 0}
+              >
+                <Download className="h-3.5 w-3.5" />
+                ייצוא CSV
+              </Button>
+            </div>
+          </div>
+
+          {entriesQuery.isLoading && !isDemo ? (
+            <div className="p-5 space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-10 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : entries.length === 0 ? (
+            <div className="py-12 text-center text-sm text-muted-foreground">
+              <Clock className="mx-auto mb-2 h-8 w-8 opacity-30" />
+              אין רשומות נוכחות לתקופה זו
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
+                    <th className="px-4 py-2.5 text-right font-medium">עובד</th>
+                    <th className="px-4 py-2.5 text-right font-medium">כניסה</th>
+                    <th className="px-4 py-2.5 text-right font-medium">יציאה</th>
+                    <th className="px-4 py-2.5 text-right font-medium">
+                      סה&quot;כ שעות
+                    </th>
+                    <th className="px-4 py-2.5 text-right font-medium">
+                      משמרת מתוכננת
+                    </th>
+                    <th className="px-4 py-2.5 text-right font-medium">הפרש</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {entries.map((entry) => {
+                    const delta = variance(entry);
+                    return (
+                      <tr
+                        key={entry.id}
+                        className="hover:bg-muted/30 transition-colors"
+                      >
+                        <td className="px-4 py-3 font-medium">
+                          {entry.employeeName}
+                        </td>
+                        <td className="px-4 py-3 tabular-nums text-muted-foreground">
+                          {fmtTime(entry.clockInAt)}
+                        </td>
+                        <td className="px-4 py-3 tabular-nums text-muted-foreground">
+                          {fmtTime(entry.clockOutAt)}
+                        </td>
+                        <td className="px-4 py-3 tabular-nums font-semibold">
+                          {fmtHours(entry.durationMinutes)}
+                        </td>
+                        <td className="px-4 py-3 tabular-nums text-muted-foreground">
+                          {fmtHours(entry.scheduledMinutes)}
+                        </td>
+                        <td
+                          className={`px-4 py-3 tabular-nums font-semibold ${varianceColor(delta)}`}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            {varianceIcon(delta)}
+                            {delta !== null
+                              ? `${delta >= 0 ? "+" : ""}${fmtHours(delta)}`
+                              : "—"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Section C: Variance summary */}
+        {entries.length > 0 && (
+          <VarianceSummary
+            scheduled={totalScheduled}
+            actual={totalActual}
+            delta={totalDelta}
+            label={`${from} – ${to}`}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -371,9 +635,9 @@ function LiveSection({
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
+      <div className="flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-4 border-b border-border">
         <Users className="h-4 w-4 text-emerald-500" />
-        <h2 className="text-base font-semibold">
+        <h2 className="text-sm sm:text-base font-semibold">
           {employees.length > 0
             ? `${employees.length} עובד${employees.length > 1 ? "ים" : ""} במשמרת כרגע`
             : "אין עובדים במשמרת כרגע"}
@@ -387,7 +651,7 @@ function LiveSection({
       </div>
 
       {employees.length === 0 ? (
-        <div className="py-8 text-center text-sm text-muted-foreground">
+        <div className="py-6 sm:py-8 text-center text-sm text-muted-foreground">
           <Clock className="mx-auto mb-2 h-6 w-6 opacity-30" />
           לא נרשמה כניסה לאף עובד כרגע
         </div>
@@ -396,18 +660,20 @@ function LiveSection({
           {employees.map((emp) => (
             <li
               key={emp.employeeId}
-              className="flex items-center gap-4 px-5 py-3"
+              className="flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 min-h-14"
             >
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/10 text-sm font-bold text-emerald-600 dark:text-emerald-400">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/10 text-sm font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
                 {emp.employeeName.charAt(0)}
               </div>
-              <div className="flex-1">
-                <div className="font-medium text-sm">{emp.employeeName}</div>
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm truncate">
+                  {emp.employeeName}
+                </div>
                 <div className="text-xs text-muted-foreground">
                   כניסה: {fmtTime(emp.clockInAt)}
                 </div>
               </div>
-              <div className="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+              <div className="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400 shrink-0">
                 ⏱ {elapsedStr(emp.clockInAt)}
               </div>
             </li>
