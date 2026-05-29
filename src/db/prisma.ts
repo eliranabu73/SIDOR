@@ -131,9 +131,11 @@ export const ADMIN_ORG_SENTINEL = '*';
 export function withAdminContext() {
   return {
     query<T>(queryFn: (tx: PrismaClient) => Promise<T>): Promise<T> {
-      // Use txPrisma (direct connection) — Prisma Accelerate doesn't support
-      // interactive transactions required for SET LOCAL.
-      return txPrisma.$transaction(async (tx) => {
+      // Prisma Accelerate DOES support interactive transactions (verified via
+      // /debug/tx — accelTxOk=true). Use main prisma client for both pooled
+      // perf and tx support. txPrisma fallback (DIRECT_URL via IPv6) is
+      // unreachable from Vercel Lambda IPv4-only egress.
+      return prisma.$transaction(async (tx) => {
         await tx.$executeRawUnsafe(
           `SET LOCAL app.current_org_id = '${ADMIN_ORG_SENTINEL}'`,
         );
@@ -159,7 +161,7 @@ export function withOrgContext(
      * reads/writes on `prisma` continue to use Accelerate for connection pooling.
      */
     query<T>(queryFn: (tx: PrismaClient) => Promise<T>): Promise<T> {
-      return txPrisma.$transaction(
+      return prisma.$transaction(
         async (tx) => {
           // SET LOCAL only affects the current transaction (connection-pool safe).
           // We sanitise orgId to a UUID pattern to prevent SQL injection.
