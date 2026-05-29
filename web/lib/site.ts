@@ -22,8 +22,8 @@ export const SOCIAL = {
   linkedin: "https://www.linkedin.com/company/sidor4s",
 } as const;
 
-/** Default OG image path (served by app/opengraph-image.tsx at /opengraph-image). */
-export const OG_IMAGE_PATH = "/opengraph-image";
+/** Default OG image — the static logo served directly from /public. */
+export const OG_IMAGE_PATH = "/logo2.png";
 
 /** Absolute URL for the default OG image. */
 export const OG_IMAGE_URL = `${SITE_URL}${OG_IMAGE_PATH}`;
