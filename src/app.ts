@@ -146,6 +146,22 @@ export async function buildApp(): Promise<FastifyInstance> {
       out['txError'] = err instanceof Error ? err.message : String(err);
       out['txErrorName'] = err instanceof Error ? err.name : null;
     }
+    // Probe 2: does Accelerate (the main prisma client) support interactive
+    // transactions? If yes, we can drop the DIRECT_URL pooler dependency.
+    try {
+      const t0 = Date.now();
+      const rows = await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`SET LOCAL app.current_org_id = '*'`);
+        return tx.$queryRawUnsafe(`SELECT current_setting('app.current_org_id', true) AS org`);
+      });
+      out['accelTxOk'] = true;
+      out['accelTxMs'] = Date.now() - t0;
+      out['accelTxRows'] = rows;
+    } catch (err) {
+      out['accelTxOk'] = false;
+      out['accelTxError'] = err instanceof Error ? err.message : String(err);
+      out['accelTxErrorName'] = err instanceof Error ? err.name : null;
+    }
     return reply.send(out);
   });
 
