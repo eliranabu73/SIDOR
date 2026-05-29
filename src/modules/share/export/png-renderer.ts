@@ -1,4 +1,4 @@
-// satori is ESM-only — load dynamically so CJS jest can still import this module.
+// satori + @resvg/resvg-js are ESM-only — imported dynamically (module:NodeNext preserves import()).
 import { buildScheduleTemplate } from './templates/satori-template';
 import type { ExportStyle, ScheduleExportData } from './types';
 
@@ -81,17 +81,10 @@ export async function renderPng(
 ): Promise<Buffer> {
   const fonts = await loadFonts();
   const element = buildScheduleTemplate(data, style);
-  // Use Function() to escape both ts-jest's CJS rewriting and jest VM hooks
-  // so we get a real Node ESM dynamic import for these ESM-only packages.
-  const dynImport = new Function('s', 'return import(s)') as (
-    s: string,
-  ) => Promise<unknown>;
-  const satoriMod = (await dynImport('satori')) as {
-    default: typeof import('satori').default;
-  };
-  const satori = satoriMod.default;
-  const resvgMod = (await dynImport('@resvg/resvg-js')) as typeof import('@resvg/resvg-js');
-  const Resvg = resvgMod.Resvg;
+  // module:NodeNext preserves import() natively — no Function() wrapper needed.
+  // (The wrapper was invisible to nft and caused "Cannot find package" in prod.)
+  const { default: satori } = await import('satori');
+  const { Resvg } = await import('@resvg/resvg-js');
   const svg = await satori(element, {
     width: 1200,
     height: 675,
