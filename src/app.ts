@@ -107,10 +107,15 @@ export async function buildApp(): Promise<FastifyInstance> {
   // Temporary debug: show which columns exist in employees/schedules tables
   app.get('/debug/columns', async (_req, reply) => {
     try {
-      const rows = await prisma.$queryRawUnsafe<{ table_name: string; column_name: string }[]>(
-        `SELECT table_name, column_name FROM information_schema.columns WHERE table_name IN ('employees','schedules','organizations') AND column_name IN ('hireDate','submittedAt','logoUrl','userId') ORDER BY table_name, column_name`
-      );
-      return reply.send({ columns: rows, prismaVersion: (prisma as unknown as { _engineConfig?: { prismaVersion?: string } })._engineConfig?.prismaVersion ?? 'unknown' });
+      const [cols, meta] = await Promise.all([
+        prisma.$queryRawUnsafe<{ table_name: string; column_name: string }[]>(
+          `SELECT table_name, column_name FROM information_schema.columns WHERE table_name IN ('employees','schedules','organizations') AND column_name IN ('hireDate','submittedAt','logoUrl','userId') ORDER BY table_name, column_name`
+        ),
+        prisma.$queryRawUnsafe<{ current_user: string; current_schema: string; db_url_host: string }[]>(
+          `SELECT current_user, current_schema(), inet_server_addr()::text AS db_url_host`
+        ),
+      ]);
+      return reply.send({ columns: cols, meta, databaseUrl: (process.env['DATABASE_URL'] ?? '').replace(/:\/\/[^@]+@/, '://***@') });
     } catch (err) {
       return reply.code(500).send({ error: err instanceof Error ? err.message : String(err) });
     }
