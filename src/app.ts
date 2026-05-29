@@ -121,6 +121,34 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
   });
 
+  // Temporary debug: probe whether interactive transactions work via txPrisma.
+  // Hits the exact same code path as withOrgContext / withAdminContext.
+  app.get('/debug/tx', async (_req, reply) => {
+    const { withAdminContext } = await import('./db/prisma.js') as typeof import('./db/prisma');
+    const out: Record<string, unknown> = {
+      hasDirectUrl: Boolean(process.env['DIRECT_URL']),
+      directUrlHost: process.env['DIRECT_URL']
+        ? (process.env['DIRECT_URL'].match(/@([^:/?]+)/) || [])[1]
+        : null,
+      databaseUrlPrefix: (process.env['DATABASE_URL'] ?? '').slice(0, 20),
+    };
+    try {
+      const t0 = Date.now();
+      const rows = await withAdminContext().query(async (tx) => {
+        const r = await tx.$queryRawUnsafe(`SELECT 1 AS ok`);
+        return r;
+      });
+      out['txOk'] = true;
+      out['txMs'] = Date.now() - t0;
+      out['txRows'] = rows;
+    } catch (err) {
+      out['txOk'] = false;
+      out['txError'] = err instanceof Error ? err.message : String(err);
+      out['txErrorName'] = err instanceof Error ? err.name : null;
+    }
+    return reply.send(out);
+  });
+
   // monitors can tell a stale deploy from a live one.
   app.get('/ready', async (_req, reply) => {
     const checks: Record<string, { ok: boolean; ms?: number; error?: string }> = {};
