@@ -112,7 +112,7 @@ export default function GeneralTab({
   };
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const currentLogo = settings?.logoUrl ?? null;
+  const currentLogo: string | null = null; // logoUrl field not yet in DB
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

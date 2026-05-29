@@ -828,7 +828,6 @@ export interface OrgSettings {
   defaultTimezone: string;
   weekStartDay: number;
   plan: string;
-  logoUrl: string | null;
   laborRules: LaborRules;
   roles: OrgRole[];
   locations: OrgLocation[];
@@ -846,44 +845,27 @@ export function patchSettings(body: Partial<Omit<OrgSettings, "id" | "plan" | "r
 }
 
 /**
- * Upload a logo file to Supabase Storage and persist the public URL via PATCH /v1/settings.
- * Returns the new settings with logoUrl populated.
+ * Logo upload — disabled until logoUrl column is added to DB.
+ * @deprecated
  */
 export async function uploadOrgLogo(
-  orgId: string,
-  file: File,
-  getSupabaseClient: () => import("@supabase/supabase-js").SupabaseClient,
+  _orgId: string,
+  _file: File,
+  _getSupabaseClient: () => import("@supabase/supabase-js").SupabaseClient,
 ): Promise<OrgSettings> {
-  const ext = file.name.split(".").pop() ?? "png";
-  const path = `${orgId}/logo.${ext}`;
-  const supabase = getSupabaseClient();
-  const { error } = await supabase.storage
-    .from("logos")
-    .upload(path, file, { upsert: true, contentType: file.type });
-  if (error) throw new Error(error.message);
-  const { data } = supabase.storage.from("logos").getPublicUrl(path);
-  // Bust browser cache on re-upload by appending a timestamp query param.
-  const logoUrl = `${data.publicUrl}?t=${Date.now()}`;
-  return patchSettings({ logoUrl });
+  throw new Error("Logo upload not yet available");
 }
 
 /**
- * Remove the org logo: delete from storage and clear the DB field.
+ * Logo removal — disabled until logoUrl column is added to DB.
+ * @deprecated
  */
 export async function removeOrgLogo(
   _orgId: string,
-  logoUrl: string | null,
-  getSupabaseClient: () => import("@supabase/supabase-js").SupabaseClient,
+  _logoUrl: string | null,
+  _getSupabaseClient: () => import("@supabase/supabase-js").SupabaseClient,
 ): Promise<OrgSettings> {
-  if (logoUrl) {
-    const supabase = getSupabaseClient();
-    // Extract path (everything after /object/public/logos/)
-    const match = logoUrl.match(/\/object\/public\/logos\/(.+?)(\?|$)/);
-    if (match?.[1]) {
-      await supabase.storage.from("logos").remove([match[1]]);
-    }
-  }
-  return patchSettings({ logoUrl: null });
+  throw new Error("Logo removal not yet available");
 }
 
 export function updateOrgRole(id: ID, name: string, description?: string | null): Promise<OrgRole> {

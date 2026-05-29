@@ -130,7 +130,7 @@ function SettingsContent() {
     if (!settings?.id) return;
     setLogoUploading(true);
     try {
-      const updated = await removeOrgLogo(settings.id, settings.logoUrl ?? null, getSupabase);
+      const updated = await removeOrgLogo(settings.id, null, getSupabase);
       setSettings(updated);
       toast.success("הלוגו הוסר");
     } catch {
@@ -138,7 +138,7 @@ function SettingsContent() {
     } finally {
       setLogoUploading(false);
     }
-  }, [settings?.id, settings?.logoUrl]);
+  }, [settings?.id]);
 
   const saveLaborRules = async () => {
     setSaving(true);

@@ -176,8 +176,6 @@ model Organization {
   laborRulesJsonb Json     @default("{}")
   ownerUserId     String?  @db.Uuid // = auth.users.id of founding manager
   industry        String?  // restaurant | retail | other (free-form for now)
-  logoUrl         String?  // Public Supabase Storage URL for the org logo
-
   // Billing — Stripe Subscriptions in ILS. FREE tier has no Stripe customer.
   stripeCustomerId     String?     @unique
   stripeSubscriptionId String?     @unique

@@ -47,7 +47,7 @@ export async function loadScheduleExportData(
 
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { name: true, logoUrl: true },
+    select: { name: true },
   });
 
   const employees = await prisma.employee.findMany({
@@ -78,7 +78,7 @@ export async function loadScheduleExportData(
 
   return {
     orgName: org?.name ?? 'הארגון שלי',
-    orgLogoDataUrl: await fetchLogoDataUrl((org as { logoUrl?: string | null } | null)?.logoUrl ?? null),
+    orgLogoDataUrl: await fetchLogoDataUrl(null),
     weekStart: weekStartDate.toISOString().slice(0, 10),
     weekEnd: weekEndDate.toISOString().slice(0, 10),
     scheduleId: schedule.id,

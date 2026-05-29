@@ -19,7 +19,6 @@ export interface OrgSettings {
   defaultTimezone: string;
   weekStartDay: number;
   plan: string;
-  logoUrl: string | null;
   laborRules: LaborRules;
   roles: Array<{ id: string; name: string; description: string | null }>;
   locations: Array<{ id: string; name: string; timezone: string | null; address: string | null }>;
@@ -46,7 +45,6 @@ export async function getOrgSettings(orgId: string, db: Db = defaultPrisma): Pro
     defaultTimezone: org.defaultTimezone,
     weekStartDay: org.weekStartDay,
     plan: org.plan,
-    logoUrl: (org as { logoUrl?: string | null }).logoUrl ?? null,
     laborRules,
     roles: org.roles.map((r) => ({ id: r.id, name: r.name, description: r.description ?? null })),
     locations: org.locations.map((l) => ({
@@ -63,7 +61,6 @@ export interface PatchOrgInput {
   industry?: string;
   defaultTimezone?: string;
   weekStartDay?: number;
-  logoUrl?: string | null;
   laborRules?: LaborRules;
 }
 
@@ -77,7 +74,6 @@ export async function patchOrgSettings(
   if (input.industry !== undefined) update['industry'] = input.industry;
   if (input.defaultTimezone !== undefined) update['defaultTimezone'] = input.defaultTimezone;
   if (input.weekStartDay !== undefined) update['weekStartDay'] = input.weekStartDay;
-  if ('logoUrl' in input) update['logoUrl'] = input.logoUrl ?? null;
   if (input.laborRules !== undefined) {
     // Merge with existing rules instead of replace, so partial patches work.
     const existing = await db.organization.findUniqueOrThrow({
