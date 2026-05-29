@@ -47,7 +47,7 @@ export async function loadScheduleExportData(
 
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { name: true },
+    select: { name: true, logoUrl: true },
   });
 
   const employees = await prisma.employee.findMany({
@@ -78,6 +78,7 @@ export async function loadScheduleExportData(
 
   return {
     orgName: org?.name ?? 'הארגון שלי',
+    orgLogoDataUrl: await fetchLogoDataUrl((org as { logoUrl?: string | null } | null)?.logoUrl ?? null),
     weekStart: weekStartDate.toISOString().slice(0, 10),
     weekEnd: weekEndDate.toISOString().slice(0, 10),
     scheduleId: schedule.id,
@@ -145,10 +146,29 @@ function buildDemoFixture(scheduleId: string): ScheduleExportData {
 
   return {
     orgName: 'סידור4S — דמו',
+    orgLogoDataUrl: null,
     weekStart: weekStart.toISOString().slice(0, 10),
     weekEnd: weekEnd.toISOString().slice(0, 10),
     scheduleId,
     shifts,
     employees,
   };
+}
+
+/**
+ * Fetch a logo URL and return it as a base64 data URL that satori can render.
+ * Returns null on any failure (logo is optional — export still works without it).
+ */
+async function fetchLogoDataUrl(url: string | null): Promise<string | null> {
+  if (!url) return null;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return null;
+    const contentType = res.headers.get('content-type') ?? 'image/png';
+    const buf = await res.arrayBuffer();
+    const b64 = Buffer.from(buf).toString('base64');
+    return `data:${contentType};base64,${b64}`;
+  } catch {
+    return null;
+  }
 }

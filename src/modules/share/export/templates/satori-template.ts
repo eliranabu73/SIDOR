@@ -116,6 +116,24 @@ export function buildScheduleTemplate(
   const theme = THEMES[style];
   const buckets = groupShiftsByDay(data.shifts, data.weekStart);
 
+  // Logo element — rendered only when a data URL is available.
+  const logoEl = data.orgLogoDataUrl
+    ? createElement('img', {
+        src: data.orgLogoDataUrl,
+        width: 64,
+        height: 64,
+        style: {
+          display: 'flex',
+          width: 64,
+          height: 64,
+          objectFit: 'contain' as const,
+          borderRadius: 8,
+          marginRight: 16,
+          background: style === 'dark' ? '#1e293b' : '#ffffff',
+        },
+      })
+    : null;
+
   // Header bar
   const header = createElement(
     'div',
@@ -126,31 +144,38 @@ export function buildScheduleTemplate(
         alignItems: 'center',
         justifyContent: 'space-between',
         width: '100%',
-        padding: '24px 32px',
+        padding: '20px 32px',
         background: theme.headerBg,
         color: theme.headerText,
       },
     },
+    // Left: logo (optional) + org name + subtitle
     createElement(
       'div',
-      { style: { display: 'flex', flexDirection: 'column' } },
+      { style: { display: 'flex', flexDirection: 'row', alignItems: 'center' } },
+      logoEl,
       createElement(
         'div',
-        { style: { fontSize: 28, fontWeight: 700, color: theme.headerText } },
-        vis(data.orgName),
-      ),
-      createElement(
-        'div',
-        {
-          style: {
-            fontSize: 18,
-            marginTop: 4,
-            color: style === 'branded' ? '#e0e7ff' : theme.textMuted,
+        { style: { display: 'flex', flexDirection: 'column' } },
+        createElement(
+          'div',
+          { style: { fontSize: 26, fontWeight: 700, color: theme.headerText } },
+          vis(data.orgName),
+        ),
+        createElement(
+          'div',
+          {
+            style: {
+              fontSize: 16,
+              marginTop: 4,
+              color: style === 'branded' ? '#e0e7ff' : theme.textMuted,
+            },
           },
-        },
-        vis(`סידור עבודה לשבוע ${data.weekStart} – ${data.weekEnd}`),
+          vis(`סידור עבודה לשבוע ${data.weekStart} – ${data.weekEnd}`),
+        ),
       ),
     ),
+    // Right: brand pill
     createElement(
       'div',
       {

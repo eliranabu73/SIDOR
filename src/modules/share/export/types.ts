@@ -19,6 +19,8 @@ export interface ExportEmployeeRow {
 
 export interface ScheduleExportData {
   orgName: string;
+  /** Base64 data URL of the org logo, pre-fetched server-side for satori. */
+  orgLogoDataUrl: string | null;
   weekStart: string; // YYYY-MM-DD
   weekEnd: string; // YYYY-MM-DD
   scheduleId: string;

@@ -124,6 +124,9 @@ export interface CreateEmployeeBody {
   employmentType?: EmploymentType;
   roleIds?: ID[];
   defaultLocationId?: ID;
+  hourlyRate?: number;
+  hireDate?: string | null;
+  weeklyBudgetHours?: number | null;
 }
 
 export interface UpdateEmployeeBody {
@@ -133,6 +136,9 @@ export interface UpdateEmployeeBody {
   employmentType?: EmploymentType;
   roleIds?: ID[];
   defaultLocationId?: ID | null;
+  hourlyRate?: number;
+  hireDate?: string | null;
+  weeklyBudgetHours?: number | null;
 }
 
 export function createEmployee(body: CreateEmployeeBody): Promise<Employee> {
@@ -205,7 +211,7 @@ export function createRole(body: CreateRoleBody): Promise<RoleItem> {
 export interface MeMembership {
   orgId: ID;
   orgName: string;
-  role: "OWNER" | "MANAGER";
+  role: "OWNER" | "MANAGER" | "BRANCH_MANAGER";
 }
 export interface MeResponse {
   user: { id: string; role: string };
@@ -822,6 +828,7 @@ export interface OrgSettings {
   defaultTimezone: string;
   weekStartDay: number;
   plan: string;
+  logoUrl: string | null;
   laborRules: LaborRules;
   roles: OrgRole[];
   locations: OrgLocation[];
@@ -836,6 +843,47 @@ export function patchSettings(body: Partial<Omit<OrgSettings, "id" | "plan" | "r
     method: "PATCH",
     body: JSON.stringify(body),
   });
+}
+
+/**
+ * Upload a logo file to Supabase Storage and persist the public URL via PATCH /v1/settings.
+ * Returns the new settings with logoUrl populated.
+ */
+export async function uploadOrgLogo(
+  orgId: string,
+  file: File,
+  getSupabaseClient: () => import("@supabase/supabase-js").SupabaseClient,
+): Promise<OrgSettings> {
+  const ext = file.name.split(".").pop() ?? "png";
+  const path = `${orgId}/logo.${ext}`;
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.storage
+    .from("logos")
+    .upload(path, file, { upsert: true, contentType: file.type });
+  if (error) throw new Error(error.message);
+  const { data } = supabase.storage.from("logos").getPublicUrl(path);
+  // Bust browser cache on re-upload by appending a timestamp query param.
+  const logoUrl = `${data.publicUrl}?t=${Date.now()}`;
+  return patchSettings({ logoUrl });
+}
+
+/**
+ * Remove the org logo: delete from storage and clear the DB field.
+ */
+export async function removeOrgLogo(
+  orgId: string,
+  logoUrl: string | null,
+  getSupabaseClient: () => import("@supabase/supabase-js").SupabaseClient,
+): Promise<OrgSettings> {
+  if (logoUrl) {
+    const supabase = getSupabaseClient();
+    // Extract path (everything after /object/public/logos/)
+    const match = logoUrl.match(/\/object\/public\/logos\/(.+?)(\?|$)/);
+    if (match?.[1]) {
+      await supabase.storage.from("logos").remove([match[1]]);
+    }
+  }
+  return patchSettings({ logoUrl: null });
 }
 
 export function updateOrgRole(id: ID, name: string, description?: string | null): Promise<OrgRole> {
@@ -885,6 +933,101 @@ export function patchMemberRole(
   return request<OrgMember>(`/v1/settings/members/${userId}/role`, {
     method: "PATCH",
     body: JSON.stringify({ role, locationId }),
+  });
+}
+
+// --------- Promote employee to manager (owner only) ---------
+
+export interface PromoteEmployeeBody {
+  employeeId: ID;
+  password: string;
+  role: "MANAGER" | "BRANCH_MANAGER";
+  locationId?: ID;
+}
+
+export interface PromoteEmployeeResponse {
+  member: OrgMember;
+  credentials: { email: string; password: string };
+}
+
+export function promoteEmployeeToManager(
+  body: PromoteEmployeeBody,
+): Promise<PromoteEmployeeResponse> {
+  return request<PromoteEmployeeResponse>(`/v1/settings/members/from-employee`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+// --------- Shift templates (owner/manager) ---------
+
+export interface ShiftTemplate {
+  id: ID;
+  name: string;
+  startLocalTime: string;
+  endLocalTime: string;
+  requiredEmployeeCount: number;
+  crossesMidnight: boolean;
+  locationId: ID | null;
+  roleId: ID | null;
+  timezone: string;
+}
+
+export interface ShiftTemplateInput {
+  name: string;
+  startLocalTime: string;
+  endLocalTime: string;
+  requiredEmployeeCount?: number;
+  locationId?: ID | null;
+  roleId?: ID | null;
+}
+
+export function listShiftTemplates(): Promise<ShiftTemplate[]> {
+  return request<ShiftTemplate[]>(`/v1/settings/shift-templates`);
+}
+
+export function createShiftTemplate(input: ShiftTemplateInput): Promise<ShiftTemplate> {
+  return request<ShiftTemplate>(`/v1/settings/shift-templates`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateShiftTemplate(
+  id: ID,
+  input: Partial<ShiftTemplateInput>,
+): Promise<ShiftTemplate> {
+  return request<ShiftTemplate>(`/v1/settings/shift-templates/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteShiftTemplate(id: ID): Promise<void> {
+  return request<void>(`/v1/settings/shift-templates/${id}`, { method: "DELETE" });
+}
+
+// --------- Schedule approval workflow ---------
+
+export function submitScheduleForApproval(scheduleId: ID): Promise<{ status: string }> {
+  return request<{ status: string }>(`/v1/schedules/${scheduleId}/submit`, {
+    method: "POST",
+  });
+}
+
+export function approveSchedule(scheduleId: ID): Promise<{ status: string }> {
+  return request<{ status: string }>(`/v1/schedules/${scheduleId}/approve`, {
+    method: "POST",
+  });
+}
+
+export function rejectSchedule(
+  scheduleId: ID,
+  note?: string,
+): Promise<{ status: string }> {
+  return request<{ status: string }>(`/v1/schedules/${scheduleId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ note: note ?? undefined }),
   });
 }
 

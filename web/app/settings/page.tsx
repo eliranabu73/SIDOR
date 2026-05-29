@@ -3,24 +3,29 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { Building2, MapPin, Shield, Tag, Users } from "lucide-react";
+import { Building2, MapPin, Users } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import {
   fetchSettings,
   patchSettings,
+  uploadOrgLogo,
+  removeOrgLogo,
   type OrgSettings,
   type LaborRules,
 } from "@/lib/api";
+import { getSupabase } from "@/lib/supabase";
 
-type Tab = "general" | "roles" | "locations" | "compliance" | "members";
+type Tab = "general" | "branches-roles" | "managers";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "general", label: "כללי", icon: <Building2 className="h-4 w-4" /> },
-  { id: "roles", label: "תפקידים", icon: <Tag className="h-4 w-4" /> },
-  { id: "locations", label: "סניפים", icon: <MapPin className="h-4 w-4" /> },
-  { id: "compliance", label: "כללי עבודה", icon: <Shield className="h-4 w-4" /> },
-  { id: "members", label: "הרשאות צוות", icon: <Users className="h-4 w-4" /> },
+  {
+    id: "branches-roles",
+    label: "סניפים ותפקידים",
+    icon: <MapPin className="h-4 w-4" />,
+  },
+  { id: "managers", label: "הגדרת מנהלים", icon: <Users className="h-4 w-4" /> },
 ];
 
 function TabSkeleton() {
@@ -34,19 +39,11 @@ const GeneralTab = dynamic(() => import("./GeneralTab"), {
   ssr: false,
   loading: () => <TabSkeleton />,
 });
-const RolesTab = dynamic(() => import("./RolesTab"), {
+const BranchesRolesTab = dynamic(() => import("./BranchesRolesTab"), {
   ssr: false,
   loading: () => <TabSkeleton />,
 });
-const LocationsTab = dynamic(() => import("./LocationsTab"), {
-  ssr: false,
-  loading: () => <TabSkeleton />,
-});
-const ComplianceTab = dynamic(() => import("./ComplianceTab"), {
-  ssr: false,
-  loading: () => <TabSkeleton />,
-});
-const MembersTab = dynamic(() => import("./MembersTab"), {
+const ManagersTab = dynamic(() => import("./ManagersTab"), {
   ssr: false,
   loading: () => <TabSkeleton />,
 });
@@ -56,21 +53,20 @@ function SettingsContent() {
   const [settings, setSettings] = React.useState<OrgSettings | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
+  const [logoUploading, setLogoUploading] = React.useState(false);
 
-  // General form state
+  // General — org basics
   const [orgName, setOrgName] = React.useState("");
   const [industry, setIndustry] = React.useState("");
   const [timezone, setTimezone] = React.useState("Asia/Jerusalem");
   const [weekStartDay, setWeekStartDay] = React.useState(0);
 
-  // Compliance form state
+  // General — labor rules (formerly compliance tab)
   const [maxHoursDay, setMaxHoursDay] = React.useState("");
   const [maxHoursWeek, setMaxHoursWeek] = React.useState("");
   const [minRestHours, setMinRestHours] = React.useState("");
-  const [shiftTypesRaw, setShiftTypesRaw] = React.useState("");
   const [bizStart, setBizStart] = React.useState("");
   const [bizEnd, setBizEnd] = React.useState("");
-  const [roleRates, setRoleRates] = React.useState<Record<string, string>>({});
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -85,16 +81,8 @@ function SettingsContent() {
       setMaxHoursDay(lr.maxHoursDay?.toString() ?? "");
       setMaxHoursWeek(lr.maxHoursWeek?.toString() ?? "");
       setMinRestHours(lr.minRestHours?.toString() ?? "");
-      setShiftTypesRaw(lr.shiftTypes?.join(", ") ?? "");
       setBizStart(lr.businessHoursStart ?? "");
       setBizEnd(lr.businessHoursEnd ?? "");
-      const rates: Record<string, string> = {};
-      if (lr.roleRates) {
-        for (const [k, v] of Object.entries(lr.roleRates)) {
-          rates[k] = v.toString();
-        }
-      }
-      setRoleRates(rates);
     } catch {
       toast.error("שגיאה בטעינת הגדרות");
     } finally {
@@ -124,31 +112,55 @@ function SettingsContent() {
     }
   };
 
-  const saveCompliance = async () => {
+  const handleLogoUpload = React.useCallback(async (file: File) => {
+    if (!settings?.id) return;
+    setLogoUploading(true);
+    try {
+      const updated = await uploadOrgLogo(settings.id, file, getSupabase);
+      setSettings(updated);
+      toast.success("הלוגו הועלה בהצלחה");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "העלאת הלוגו נכשלה");
+    } finally {
+      setLogoUploading(false);
+    }
+  }, [settings?.id]);
+
+  const handleLogoRemove = React.useCallback(async () => {
+    if (!settings?.id) return;
+    setLogoUploading(true);
+    try {
+      const updated = await removeOrgLogo(settings.id, settings.logoUrl ?? null, getSupabase);
+      setSettings(updated);
+      toast.success("הלוגו הוסר");
+    } catch {
+      toast.error("הסרת הלוגו נכשלה");
+    } finally {
+      setLogoUploading(false);
+    }
+  }, [settings?.id, settings?.logoUrl]);
+
+  const saveLaborRules = async () => {
     setSaving(true);
     try {
-      const rates: Record<string, number> = {};
-      for (const [k, v] of Object.entries(roleRates)) {
-        const n = parseFloat(v);
-        if (!isNaN(n)) rates[k] = n;
-      }
-      const shiftTypes = shiftTypesRaw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const lr: LaborRules = {};
+      // Preserve any existing labor-rule fields we don't surface in the UI
+      // (e.g. roleRates, shiftTypes) by merging on top of the loaded snapshot.
+      const lr: LaborRules = { ...(settings?.laborRules ?? {}) };
       if (maxHoursDay) lr.maxHoursDay = parseFloat(maxHoursDay);
+      else delete lr.maxHoursDay;
       if (maxHoursWeek) lr.maxHoursWeek = parseFloat(maxHoursWeek);
+      else delete lr.maxHoursWeek;
       if (minRestHours) lr.minRestHours = parseFloat(minRestHours);
-      if (shiftTypes.length) lr.shiftTypes = shiftTypes;
+      else delete lr.minRestHours;
       if (bizStart) lr.businessHoursStart = bizStart;
+      else delete lr.businessHoursStart;
       if (bizEnd) lr.businessHoursEnd = bizEnd;
-      if (Object.keys(rates).length) lr.roleRates = rates;
+      else delete lr.businessHoursEnd;
       const s = await patchSettings({ laborRules: lr });
       setSettings(s);
-      toast.success("כללי עבודה נשמרו");
+      toast.success("שעות פעילות נשמרו");
     } catch {
-      toast.error("שמירת כללי העבודה נכשלה");
+      toast.error("שמירת שעות הפעילות נכשלה");
     } finally {
       setSaving(false);
     }
@@ -167,7 +179,7 @@ function SettingsContent() {
       <div>
         <h1 className="text-2xl font-bold">הגדרות</h1>
         <p className="text-sm text-muted-foreground">
-          הגדר את העסק שלך — תפקידים, כללי עבודה, ופרמטרים לבניית הסידור.
+          הגדר את העסק שלך — תפקידים, סניפים, ופרמטרים לבניית הסידור.
         </p>
       </div>
 
@@ -233,51 +245,39 @@ function SettingsContent() {
             setTimezone={setTimezone}
             weekStartDay={weekStartDay}
             setWeekStartDay={setWeekStartDay}
-            saving={saving}
-            onSave={saveGeneral}
-          />
-        </div>
-      )}
-
-      {tab === "roles" && (
-        <div role="tabpanel" id="tabpanel-roles" aria-labelledby="tab-roles">
-          <RolesTab settings={settings} setSettings={setSettings} />
-        </div>
-      )}
-
-      {tab === "locations" && (
-        <div role="tabpanel" id="tabpanel-locations" aria-labelledby="tab-locations">
-          <LocationsTab settings={settings} setSettings={setSettings} />
-        </div>
-      )}
-
-      {tab === "compliance" && (
-        <div role="tabpanel" id="tabpanel-compliance" aria-labelledby="tab-compliance">
-          <ComplianceTab
-            settings={settings}
+            bizStart={bizStart}
+            setBizStart={setBizStart}
+            bizEnd={bizEnd}
+            setBizEnd={setBizEnd}
             maxHoursDay={maxHoursDay}
             setMaxHoursDay={setMaxHoursDay}
             maxHoursWeek={maxHoursWeek}
             setMaxHoursWeek={setMaxHoursWeek}
             minRestHours={minRestHours}
             setMinRestHours={setMinRestHours}
-            shiftTypesRaw={shiftTypesRaw}
-            setShiftTypesRaw={setShiftTypesRaw}
-            bizStart={bizStart}
-            setBizStart={setBizStart}
-            bizEnd={bizEnd}
-            setBizEnd={setBizEnd}
-            roleRates={roleRates}
-            setRoleRates={setRoleRates}
             saving={saving}
-            onSave={saveCompliance}
+            onSave={saveGeneral}
+            onSaveLaborRules={saveLaborRules}
+            onLogoUpload={handleLogoUpload}
+            onLogoRemove={handleLogoRemove}
+            logoUploading={logoUploading}
           />
         </div>
       )}
 
-      {tab === "members" && (
-        <div role="tabpanel" id="tabpanel-members" aria-labelledby="tab-members">
-          <MembersTab />
+      {tab === "branches-roles" && (
+        <div
+          role="tabpanel"
+          id="tabpanel-branches-roles"
+          aria-labelledby="tab-branches-roles"
+        >
+          <BranchesRolesTab settings={settings} setSettings={setSettings} />
+        </div>
+      )}
+
+      {tab === "managers" && (
+        <div role="tabpanel" id="tabpanel-managers" aria-labelledby="tab-managers">
+          <ManagersTab />
         </div>
       )}
     </div>
