@@ -8,7 +8,8 @@
   "functions": {
     "api/index.ts": {
       "runtime": "@vercel/node@3.2.24",
-      "maxDuration": 30
+      "maxDuration": 30,
+      "includeFiles": "node_modules/satori/**,node_modules/@resvg/resvg-js/**,node_modules/yoga-wasm-web/**"
     }
   },
   "rewrites": [

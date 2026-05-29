@@ -139,13 +139,18 @@ export async function shareScheduleImage(
   // -------- 3. Download + open wa.me (text only) --------
   try {
     const url = getScheduleExportUrl(scheduleId, "png", style);
+    // Fetch as blob → same-origin blob URL → download attribute honoured.
+    const res = await fetch(url, { credentials: "include" });
+    if (!res.ok) throw new Error(`שגיאת שרת ${res.status}`);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
+    a.href = blobUrl;
     a.download = `schedule-${weekStart}-${style}.png`;
-    a.rel = "noopener";
     document.body.appendChild(a);
     a.click();
     a.remove();
+    URL.revokeObjectURL(blobUrl);
     window.open(
       buildWaUrl(toPhone, message),
       "_blank",
