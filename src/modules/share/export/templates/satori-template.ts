@@ -310,6 +310,7 @@ export function buildScheduleTemplate(
         background: theme.bg,
         color: theme.text,
         fontFamily: 'Heebo, system-ui, sans-serif',
+        direction: 'rtl',
       },
     },
     header,
