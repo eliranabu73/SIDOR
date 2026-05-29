@@ -30,6 +30,9 @@ export interface Employee {
   maxHoursPerWeek?: number | null;
   minHoursPerWeek?: number | null;
   avatarUrl?: string | null;
+  hourlyRate: number;
+  hireDate?: string | null;
+  weeklyBudgetHours?: number | null;
 }
 
 export interface ShiftAssignment {
@@ -62,7 +65,7 @@ export interface Schedule {
   id: ID;
   orgId: ID;
   weekStart: ISODateTime; // ISO date for Sunday start
-  status: "draft" | "published";
+  status: "draft" | "pending_approval" | "approved" | "published" | "archived" | "locked";
   shifts: Shift[];
 }
 
