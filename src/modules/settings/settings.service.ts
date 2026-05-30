@@ -106,7 +106,7 @@ export async function updateRole(
   if (!role) throw new HttpError(404, 'NOT_FOUND', 'Role not found');
 
   const updated = await db.role.update({
-    where: { id: roleId },
+    where: { id: roleId, organizationId: orgId },
     data: { name, ...(description !== undefined ? { description } : {}) },
   });
   return { id: updated.id, name: updated.name, description: updated.description ?? null };
@@ -138,7 +138,7 @@ export async function deleteRole(
       `לא ניתן למחוק תפקיד המשובץ ב-${shiftUsage} משמרת/ות`,
     );
 
-  await db.role.delete({ where: { id: roleId } });
+  await db.role.delete({ where: { id: roleId, organizationId: orgId } });
 }
 
 export async function updateLocation(
@@ -154,7 +154,7 @@ export async function updateLocation(
   if (!loc) throw new HttpError(404, 'NOT_FOUND', 'Location not found');
 
   const updated = await db.location.update({
-    where: { id: locationId },
+    where: { id: locationId, organizationId: orgId },
     data: {
       name,
       ...(timezone !== undefined
@@ -175,7 +175,7 @@ export async function deleteLocation(
   });
   if (!loc) throw new HttpError(404, 'NOT_FOUND', 'Location not found');
 
-  await db.location.delete({ where: { id: locationId } });
+  await db.location.delete({ where: { id: locationId, organizationId: orgId } });
 }
 
 // =========================================================
@@ -283,7 +283,7 @@ export async function updateShiftTemplate(
   const newEnd = input.endLocalTime ?? existing.endLocalTime;
 
   const updated = await db.shiftTemplate.update({
-    where: { id: templateId },
+    where: { id: templateId, organizationId: orgId },
     data: {
       ...(input.name !== undefined ? { name: input.name.trim() } : {}),
       ...(input.startLocalTime !== undefined ? { startLocalTime: input.startLocalTime } : {}),
@@ -312,5 +312,5 @@ export async function deleteShiftTemplate(
   });
   if (!existing) throw new HttpError(404, 'NOT_FOUND', 'Shift template not found');
 
-  await db.shiftTemplate.delete({ where: { id: templateId } });
+  await db.shiftTemplate.delete({ where: { id: templateId, organizationId: orgId } });
 }
