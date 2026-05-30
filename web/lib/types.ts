@@ -39,7 +39,7 @@ export interface ShiftAssignment {
   id: ID;
   shiftId: ID;
   employeeId: ID;
-  status: "assigned" | "tentative" | "swapped" | "cancelled";
+  status: "assigned" | "confirmed" | "tentative" | "swapped" | "cancelled";
   createdAt: ISODateTime;
 }
 
