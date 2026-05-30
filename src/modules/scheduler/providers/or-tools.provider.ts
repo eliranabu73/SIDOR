@@ -180,7 +180,7 @@ export function optimize(
   }
   const slots: Slot[] = [];
   for (const shift of shifts) {
-    const need = Math.max(1, shift.requiredEmployeeCount);
+    const need = shift.requiredEmployeeCount;
     const cands = byShift.get(shift.id) ?? [];
     for (let i = 0; i < need; i++) {
       slots.push({
@@ -290,7 +290,7 @@ export function optimize(
   const proposals: AssignmentProposal[] = [];
   const unfilledMap = new Map<string, number>();
   for (const shift of shifts) {
-    unfilledMap.set(shift.id, Math.max(1, shift.requiredEmployeeCount));
+    unfilledMap.set(shift.id, shift.requiredEmployeeCount);
   }
 
   for (const slot of slots) {

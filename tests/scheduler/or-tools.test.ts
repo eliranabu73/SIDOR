@@ -166,7 +166,7 @@ function greedyRun(candidates: Candidate[]): AssignmentProposal[] {
   const proposals: AssignmentProposal[] = [];
 
   for (const shift of orderedShifts) {
-    const slots = Math.max(1, shift.requiredEmployeeCount);
+    const slots = shift.requiredEmployeeCount;
     const ranked = byShift.get(shift.id) ?? [];
     let filled = 0;
     const usedHere = new Set<string>();

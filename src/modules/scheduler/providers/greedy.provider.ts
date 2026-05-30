@@ -62,7 +62,7 @@ export class GreedySchedulerProvider implements SchedulerProvider {
     const unfilled: string[] = [];
 
     for (const shift of orderedShifts) {
-      const slots = Math.max(1, shift.requiredEmployeeCount);
+      const slots = shift.requiredEmployeeCount;
       const ranked = byShift.get(shift.id) ?? [];
       let filled = 0;
 
