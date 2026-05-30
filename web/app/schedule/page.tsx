@@ -76,6 +76,8 @@ import { ConfirmationStatus } from "@/components/schedule/ConfirmationStatus";
 import { ExportDialog } from "@/components/schedule/ExportDialog";
 import { CreateShiftDialog } from "@/components/schedule/CreateShiftDialog";
 import { AssignEmployeeSheet } from "@/components/schedule/AssignEmployeeSheet";
+import { WeeklyGrid } from "@/components/schedule/WeeklyGrid";
+import { QuickAddShiftSheet } from "@/components/schedule/QuickAddShiftSheet";
 import { QuickAddEmployeesDialog } from "@/components/schedule/dialogs/QuickAddEmployeesDialog";
 import {
   SetupChecklist,
@@ -513,6 +515,19 @@ function ScheduleInner() {
 
   const [filtersOpen, setFiltersOpen] = React.useState(false);
   const [employeesPanelOpen, setEmployeesPanelOpen] = React.useState(false);
+  // Weekly vs daily view toggle — weekly is the new default
+  const [viewMode, setViewMode] = React.useState<"weekly" | "daily">("weekly");
+  // Quick-add sheet state — opened when user taps an empty cell in WeeklyGrid
+  const [quickAddEmployee, setQuickAddEmployee] = React.useState<Employee | null>(null);
+  const [quickAddDate, setQuickAddDate] = React.useState<DateTime | null>(null);
+  const [quickAddOpen, setQuickAddOpen] = React.useState(false);
+
+  const handleQuickAdd = React.useCallback((employeeId: string, date: DateTime) => {
+    const emp = employees.find((e) => e.id === employeeId) ?? null;
+    setQuickAddEmployee(emp);
+    setQuickAddDate(date);
+    setQuickAddOpen(true);
+  }, [employees]);
   // Tracks whether the setup checklist was dismissed (so we can show a
   // "הצג רשימת התקנה" button in the toolbar that brings it back).
   const [checklistDismissed, setChecklistDismissed] = React.useState(false);
@@ -567,6 +582,31 @@ function ScheduleInner() {
       <div className="flex items-center gap-2 sm:gap-3 border-b bg-card px-3 sm:px-4 py-2 flex-wrap">
         <div className="font-semibold truncate max-w-[140px] sm:max-w-none">{mockOrg.name}</div>
         <WeekSelector weekStart={weekStart} onChange={setWeekStart} />
+        {/* View mode toggle — weekly / daily */}
+        <div className="flex rounded-md border overflow-hidden text-sm h-9 shrink-0">
+          <button
+            type="button"
+            onClick={() => setViewMode("weekly")}
+            className={`px-3 py-1 transition-colors ${
+              viewMode === "weekly"
+                ? "bg-indigo-500 text-white font-medium"
+                : "bg-background text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            שבועי
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("daily")}
+            className={`px-3 py-1 border-s transition-colors ${
+              viewMode === "daily"
+                ? "bg-indigo-500 text-white font-medium"
+                : "bg-background text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            יומי
+          </button>
+        </div>
         <div className="me-auto" />
         {/* Mobile-only: filter + employees drawer triggers */}
         <Button
@@ -817,6 +857,17 @@ function ScheduleInner() {
                   setCreateShiftOpen(true);
                 }}
               />
+            ) : viewMode === "weekly" ? (
+              <WeeklyGrid
+                schedule={scheduleQuery.data}
+                employees={visibleEmployees}
+                weekStart={weekStart}
+                locationFilter={locationFilter}
+                roleFilter={roleFilter}
+                onQuickAdd={handleQuickAdd}
+                onUnassign={unassign}
+                onRequestAssign={handleRequestAssign}
+              />
             ) : (
               <ScheduleBoard
                 schedule={scheduleQuery.data}
@@ -1057,6 +1108,19 @@ function ScheduleInner() {
       <QuickAddEmployeesDialog
         open={quickAddEmployeesOpen}
         onOpenChange={setQuickAddEmployeesOpen}
+      />
+
+      {/* Quick-add shift sheet — opened from WeeklyGrid empty cell tap. */}
+      <QuickAddShiftSheet
+        open={quickAddOpen}
+        onOpenChange={(v) => {
+          setQuickAddOpen(v);
+          if (!v) { setQuickAddEmployee(null); setQuickAddDate(null); }
+        }}
+        employee={quickAddEmployee}
+        date={quickAddDate}
+        weekStart={weekStart}
+        scheduleId={scheduleQuery.data?.id}
       />
 
       {/* Shift-first assignment sheet — primary path on mobile + desktop. */}
