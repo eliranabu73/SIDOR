@@ -179,6 +179,16 @@ function ScheduleInner() {
   const isBranchManager = role === "branch_manager";
   const canApprove = isOwner || isManager;
 
+  // Org name for the top-bar. Demo mode shows the mock label; a logged-in user
+  // shows their active organization's real name from /v1/me (never the demo
+  // placeholder).
+  const orgLabel = isDemo
+    ? mockOrg.name
+    : meQ.data?.memberships.find((m) => m.orgId === meQ.data?.activeOrgId)
+        ?.orgName ??
+      meQ.data?.memberships[0]?.orgName ??
+      "סידור עבודה";
+
   const [approving, setApproving] = React.useState(false);
 
   // ── DnD state (lifted from ScheduleBoard so EmployeeCard sources live INSIDE DndContext)
@@ -598,7 +608,7 @@ function ScheduleInner() {
       <h1 className="sr-only">סידור עבודה</h1>
       {/* Top bar */}
       <div className="flex items-center gap-2 sm:gap-3 border-b bg-card px-3 sm:px-4 py-2 flex-wrap">
-        <div className="font-semibold truncate max-w-[140px] sm:max-w-none">{mockOrg.name}</div>
+        <div className="font-semibold truncate max-w-[140px] sm:max-w-none">{orgLabel}</div>
         <WeekSelector weekStart={weekStart} onChange={setWeekStart} />
         {/* View mode toggle — weekly / daily */}
         <div className="flex rounded-md border overflow-hidden text-sm h-9 shrink-0">
