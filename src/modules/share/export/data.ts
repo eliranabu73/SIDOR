@@ -1,4 +1,5 @@
 import { prisma } from '../../../db/prisma';
+import { NotFoundError } from '../../../shared/errors';
 import type {
   ScheduleExportData,
   ExportShiftRow,
@@ -10,9 +11,10 @@ import type {
  * schedule, scoped to an organization. Returns a shape the templates can
  * consume without further DB hits.
  *
- * If the schedule does not exist OR the id is not a UUID (e.g. demo pseudo
- * ids like "sched_2026-05-17"), returns a demo-shaped fixture so the
- * export endpoints still produce something useful for screenshots.
+ * If the id is not a UUID (e.g. demo pseudo ids like "sched_2026-05-17", used
+ * by the public marketing board), returns a demo-shaped fixture. If the id is a
+ * real UUID but no schedule matches the org, throws NotFoundError — a logged-in
+ * manager must never be shown demo data.
  */
 export async function loadScheduleExportData(
   scheduleId: string,
@@ -42,7 +44,9 @@ export async function loadScheduleExportData(
   });
 
   if (!schedule) {
-    return buildDemoFixture(scheduleId);
+    // Real UUID but no matching schedule for this org — never silently swap to
+    // the demo fixture for a logged-in manager. Surface a clear 404 instead.
+    throw new NotFoundError('הסידור לא נמצא או שאין הרשאה');
   }
 
   const org = await prisma.organization.findUnique({

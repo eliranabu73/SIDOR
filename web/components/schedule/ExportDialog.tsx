@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  exportAuthHeaders,
   getScheduleExportUrl,
   getSchedulePosterLink,
   type ScheduleExportFormat,
@@ -216,7 +217,9 @@ export function ExportDialog({
         // (A plain <a href="…" download> is ignored for cross-origin URLs —
         // the browser navigates instead of saving. Blob URLs are always
         // same-origin so the download attribute is honoured.)
-        const res = await fetch(url, { credentials: "include" });
+        // Bearer header (not cookies) — the export route is JWT-authed so the
+        // real org's schedule is rendered, not the demo fixture.
+        const res = await fetch(url, { headers: await exportAuthHeaders() });
         if (!res.ok) throw new Error(`שגיאת שרת ${res.status}`);
         const blob = await res.blob();
         const blobUrl = URL.createObjectURL(blob);

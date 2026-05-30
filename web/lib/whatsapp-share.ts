@@ -10,7 +10,11 @@
  *                           User then drags the file into the chat manually.
  */
 
-import { getScheduleExportUrl, type ScheduleExportStyle } from "./api";
+import {
+  exportAuthHeaders,
+  getScheduleExportUrl,
+  type ScheduleExportStyle,
+} from "./api";
 
 export type ShareMethod = "native_share" | "wa_with_url" | "download_fallback";
 export type ShareResult = { method: ShareMethod; ok: boolean; error?: string };
@@ -95,7 +99,7 @@ export async function shareScheduleImage(
   if (canNativeShareFiles()) {
     try {
       const res = await fetch(getScheduleExportUrl(scheduleId, "png", style), {
-        credentials: "include",
+        headers: await exportAuthHeaders(),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
@@ -140,7 +144,7 @@ export async function shareScheduleImage(
   try {
     const url = getScheduleExportUrl(scheduleId, "png", style);
     // Fetch as blob → same-origin blob URL → download attribute honoured.
-    const res = await fetch(url, { credentials: "include" });
+    const res = await fetch(url, { headers: await exportAuthHeaders() });
     if (!res.ok) throw new Error(`שגיאת שרת ${res.status}`);
     const blob = await res.blob();
     const blobUrl = URL.createObjectURL(blob);

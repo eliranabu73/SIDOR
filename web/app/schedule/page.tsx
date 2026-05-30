@@ -252,6 +252,17 @@ function ScheduleInner() {
 
   const scheduleStatus = scheduleQuery.data?.status ?? null;
 
+  // A schedule is real (exportable) only when it has a UUID id. The reads route
+  // returns an empty shell with a pseudo id ("sched_<date>") for weeks that have
+  // no saved schedule — exporting that would render the demo fixture. In demo
+  // mode the mock id is intentionally pseudo, so allow it there.
+  const isUuid = (v: string | null | undefined): boolean =>
+    !!v && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+  const exportScheduleId =
+    isDemo || isUuid(scheduleQuery.data?.id)
+      ? scheduleQuery.data?.id ?? null
+      : null;
+
   const submitForApproval = async () => {
     if (!scheduleQuery.data) return;
     if (blockIfDemo()) return;
@@ -682,8 +693,12 @@ function ScheduleInner() {
           variant="outline"
           size="sm"
           onClick={() => setExportOpen(true)}
-          disabled={!scheduleQuery.data}
-          title="ייצוא ושיתוף — תמונה או PDF"
+          disabled={!exportScheduleId}
+          title={
+            exportScheduleId
+              ? "ייצוא ושיתוף — תמונה או PDF"
+              : "אין סידור לשבוע זה — צרו משמרות תחילה"
+          }
           className="h-11 sm:h-10"
           aria-label="ייצוא ושיתוף"
         >
@@ -1099,7 +1114,7 @@ function ScheduleInner() {
       <ExportDialog
         open={exportOpen}
         onOpenChange={setExportOpen}
-        scheduleId={scheduleQuery.data?.id ?? `sched_${weekStart.toISODate()}`}
+        scheduleId={exportScheduleId}
         weekStart={weekStart.toISODate() ?? ""}
       />
       <CreateShiftDialog

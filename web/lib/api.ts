@@ -49,6 +49,17 @@ async function authHeaders(): Promise<HeadersInit> {
   return headers;
 }
 
+/**
+ * Auth headers for binary GET fetches (export.png / export.pdf, native share).
+ * These endpoints require the same Bearer JWT as request(), but must NOT send
+ * `content-type: application/json` (no body) — Fastify rejects that combo.
+ */
+export async function exportAuthHeaders(): Promise<Record<string, string>> {
+  const headers = (await authHeaders()) as Record<string, string>;
+  delete headers["content-type"];
+  return headers;
+}
+
 async function request<T>(
   path: string,
   init: RequestInit = {},

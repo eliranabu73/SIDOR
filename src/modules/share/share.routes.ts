@@ -251,7 +251,10 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // MANAGER: download a styled PNG/PDF of a schedule for WhatsApp/email share.
-  // Auth-optional: falls back to DEMO_ORG_ID (and demo fixture if not found).
+  // Authenticated — org resolved from req.user.orgId so the real schedule is
+  // rendered (not the demo fixture). Public marketing demo runs with
+  // AUTH_DISABLED=true, where authHandlers is [] and non-UUID ids still serve
+  // the demo board.
   const ExportParams = z.object({ scheduleId: z.string() });
   const ExportQuery = z.object({ style: z.string().optional() });
 
@@ -261,7 +264,7 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
 
   app.get(
     '/v1/schedules/:scheduleId/export.png',
-    { schema: { params: ExportParams, querystring: ExportQuery } },
+    { schema: { params: ExportParams, querystring: ExportQuery }, preHandler: authHandlers },
     async (req, reply) => {
       const { scheduleId } = req.params as z.infer<typeof ExportParams>;
       const { style } = req.query as z.infer<typeof ExportQuery>;
@@ -288,7 +291,7 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
 
   app.get(
     '/v1/schedules/:scheduleId/export.pdf',
-    { schema: { params: ExportParams, querystring: ExportQuery } },
+    { schema: { params: ExportParams, querystring: ExportQuery }, preHandler: authHandlers },
     async (req, reply) => {
       const { scheduleId } = req.params as z.infer<typeof ExportParams>;
       const { style } = req.query as z.infer<typeof ExportQuery>;
