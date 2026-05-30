@@ -120,24 +120,7 @@ export async function deleteRole(
   const role = await db.role.findFirst({ where: { id: roleId, organizationId: orgId } });
   if (!role) throw new HttpError(404, 'NOT_FOUND', 'Role not found');
 
-  // Check if any employee is assigned this role before deleting.
-  const employeeUsage = await db.employeeRole.count({ where: { roleId } });
-  if (employeeUsage > 0)
-    throw new HttpError(
-      409,
-      'ROLE_IN_USE',
-      `לא ניתן למחוק תפקיד שמוגדר ל-${employeeUsage} עובד/ים`,
-    );
-
-  // Check if any active shift is using this role.
-  const shiftUsage = await db.shift.count({ where: { roleId } });
-  if (shiftUsage > 0)
-    throw new HttpError(
-      409,
-      'ROLE_IN_USE',
-      `לא ניתן למחוק תפקיד המשובץ ב-${shiftUsage} משמרת/ות`,
-    );
-
+  // DB handles cleanup: EmployeeRole cascades, Shift.roleId becomes null (onDelete: SetNull).
   await db.role.delete({ where: { id: roleId, organizationId: orgId } });
 }
 
