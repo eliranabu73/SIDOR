@@ -124,9 +124,11 @@ export default function BusinessStepPage() {
 
   const orgAlreadyExists = progress.hasOrg;
 
+  // branchName falls back to orgName if left empty — don't block the wizard.
+  const effectiveBranchName = branchName.trim() || orgName.trim();
+
   const canAdvance =
     orgName.trim().length >= 2 &&
-    branchName.trim().length >= 2 &&
     /^\d{2}:\d{2}$/.test(bizStart) &&
     /^\d{2}:\d{2}$/.test(bizEnd) &&
     activeDays.length > 0 &&
@@ -173,7 +175,7 @@ export default function BusinessStepPage() {
 
       // 4. Ensure first location exists / matches the typed branch name.
       if (fresh.locations.length === 0) {
-        await createLocation({ name: branchName.trim(), timezone });
+        await createLocation({ name: effectiveBranchName, timezone });
       }
 
       // 5. Invalidate the progress hook so the next step sees fresh data.
