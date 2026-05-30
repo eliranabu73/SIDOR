@@ -4,11 +4,11 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  ArrowLeftRight,
+  // ArrowLeftRight, // swaps hidden for small-business simplicity
   CalendarDays,
   CircleDollarSign,
   Clock,
-  Scale,
+  // Scale, // fairness hidden for small-business simplicity
   Settings,
   ShieldCheck,
   Users,
@@ -64,8 +64,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const nav: NavItem[] = [
     { href: "/schedule", label: "סידור עבודה", icon: <CalendarDays className="h-5 w-5" /> },
     { href: "/employees", label: "עובדים", icon: <Users className="h-5 w-5" /> },
-    { href: "/swaps", label: "החלפות", icon: <ArrowLeftRight className="h-5 w-5" /> },
-    { href: "/fairness", label: "הוגנות", icon: <Scale className="h-5 w-5" /> },
+    // Swaps and fairness hidden for small-business simplicity
+    // { href: "/swaps", label: "החלפות", icon: <ArrowLeftRight className="h-5 w-5" /> },
+    // { href: "/fairness", label: "הוגנות", icon: <Scale className="h-5 w-5" /> },
     ...(showTips
       ? [{ href: "/tips", label: "חלוקת טיפים", icon: <CircleDollarSign className="h-5 w-5" /> }]
       : []),
@@ -146,7 +147,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         aria-label="ניווט תחתון"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <ul className={cn("grid", showTips ? "grid-cols-7" : "grid-cols-6")}>
+        <ul className={cn("grid", showTips ? "grid-cols-5" : "grid-cols-4")}>
           {nav.map((item) => {
             const active = pathname?.startsWith(item.href);
             return (

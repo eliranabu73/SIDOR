@@ -70,9 +70,10 @@ function EmployeeCardImpl({ employee, metrics, onSelect, isSelected }: Props) {
         <span className="text-xs tabular-nums text-muted-foreground">
           {hoursAssigned}/{hoursTarget}ש'
         </span>
-        <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-medium", fair.className)}>
+        {/* Fairness score badge hidden for small-business simplicity */}
+        {/* <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-medium", fair.className)}>
           {fair.label}
-        </span>
+        </span> */}
       </div>
     </div>
   );

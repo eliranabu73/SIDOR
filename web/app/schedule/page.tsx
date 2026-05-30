@@ -82,9 +82,10 @@ import {
   clearSetupChecklistDismissal,
   isSetupChecklistDismissed,
 } from "@/components/schedule/SetupChecklist";
-import { LaborCostBar } from "@/components/schedule/LaborCostBar";
-import { CostMeter } from "@/components/schedule/CostMeter";
-import { ComplianceBanner } from "@/components/schedule/ComplianceBanner";
+// LaborCostBar, CostMeter, ComplianceBanner hidden for small-business simplicity
+// import { LaborCostBar } from "@/components/schedule/LaborCostBar";
+// import { CostMeter } from "@/components/schedule/CostMeter";
+// import { ComplianceBanner } from "@/components/schedule/ComplianceBanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -708,11 +709,11 @@ function ScheduleInner() {
         )}
       </div>
 
-      {/* Labor cost bar — always visible above the board */}
-      <LaborCostBar weekStart={weekStart} />
+      {/* Labor cost bar — hidden for small-business simplicity */}
+      {/* <LaborCostBar weekStart={weekStart} /> */}
 
-      {/* WS-E: IL labor-compliance status above the grid */}
-      <ComplianceBanner scheduleId={scheduleQuery.data?.id ?? null} />
+      {/* Compliance banner — hidden for small-business simplicity */}
+      {/* <ComplianceBanner scheduleId={scheduleQuery.data?.id ?? null} /> */}
 
       {/* Confirmation status — visible only when schedule is published */}
       {scheduleQuery.data?.status === "published" && scheduleQuery.data.id && (
@@ -786,7 +787,8 @@ function ScheduleInner() {
 
         {/* Center — board */}
         <section className="relative flex-1 min-w-0 overflow-auto p-2 sm:p-3">
-          <CostMeter scheduleId={scheduleQuery.data?.id ?? null} />
+          {/* CostMeter hidden for small-business simplicity */}
+          {/* <CostMeter scheduleId={scheduleQuery.data?.id ?? null} /> */}
           {scheduleQuery.isLoading ? (
             <div className="flex flex-col gap-2 sm:grid sm:grid-cols-7">
               {Array.from({ length: 7 }).map((_, i) => (
