@@ -1,4 +1,4 @@
-import { prisma } from '../../../db/prisma';
+import { withOrgContext } from '../../../db/prisma';
 import { NotFoundError } from '../../../shared/errors';
 import type {
   ScheduleExportData,
@@ -27,39 +27,50 @@ export async function loadScheduleExportData(
     return buildDemoFixture(scheduleId);
   }
 
-  const schedule = await prisma.schedule.findFirst({
-    where: { id: scheduleId, organizationId },
-    include: {
-      shifts: {
-        include: {
-          role: true,
-          location: true,
-          assignments: {
-            include: { employee: { select: { id: true, fullName: true } } },
+  // Run all reads inside the org RLS context. The export routes use the bare
+  // module-level prisma client otherwise, which has no `app.current_org_id`
+  // set — under the production RLS policy that hides every row, so findFirst
+  // returns null and the manager's real schedule looks "missing" (previously
+  // masked as the demo fixture, now a 404). withOrgContext opens a transaction
+  // and SET LOCALs the org id so the policy admits the tenant's rows, exactly
+  // like the authenticated reads route (req.orgPrisma).
+  const loaded = await withOrgContext(organizationId).query(async (tx) => {
+    const schedule = await tx.schedule.findFirst({
+      where: { id: scheduleId, organizationId },
+      include: {
+        shifts: {
+          include: {
+            role: true,
+            location: true,
+            assignments: {
+              include: { employee: { select: { id: true, fullName: true } } },
+            },
           },
+          orderBy: { startAtUtc: 'asc' },
         },
-        orderBy: { startAtUtc: 'asc' },
       },
-    },
+    });
+    if (!schedule) return null;
+
+    const org = await tx.organization.findUnique({
+      where: { id: organizationId },
+      select: { name: true, logoUrl: true },
+    });
+    const employees = await tx.employee.findMany({
+      where: { organizationId, isActive: true },
+      select: { id: true, fullName: true },
+      orderBy: { fullName: 'asc' },
+    });
+    return { schedule, org, employees };
   });
 
-  if (!schedule) {
+  if (!loaded) {
     // Real UUID but no matching schedule for this org — never silently swap to
     // the demo fixture for a logged-in manager. Surface a clear 404 instead.
     throw new NotFoundError('הסידור לא נמצא או שאין הרשאה');
   }
 
-  const org = await prisma.organization.findUnique({
-    where: { id: organizationId },
-    select: { name: true, logoUrl: true },
-  });
-
-  const employees = await prisma.employee.findMany({
-    where: { organizationId, isActive: true },
-    select: { id: true, fullName: true },
-    orderBy: { fullName: 'asc' },
-  });
-
+  const { schedule, org, employees } = loaded;
   const weekStartDate = schedule.periodStartDate;
   const weekEndDate = new Date(weekStartDate.getTime() + 6 * 86400000);
 
