@@ -18,6 +18,7 @@ import {
   fetchRoles,
   patchAssignment,
 } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type { Employee, ID } from "@/lib/types";
 
 interface PresetTime {
@@ -35,19 +36,30 @@ const PRESETS: PresetTime[] = [
   { label: "17–23", start: "17:00", end: "23:00" },
 ];
 
-/** Convert a local HH:MM on a given date to a UTC ISO string. */
-function toUtcIso(date: DateTime, localTime: string, tz: string): string {
-  const [hStr, mStr] = localTime.split(":") as [string, string];
-  const h = parseInt(hStr, 10);
-  const m = parseInt(mStr, 10);
-  const local = date.setZone(tz).set({ hour: h, minute: m, second: 0, millisecond: 0 });
-  return local.toUTC().toISO()!;
+const AVATAR_COLORS = [
+  "bg-violet-100 text-violet-700",
+  "bg-sky-100 text-sky-700",
+  "bg-emerald-100 text-emerald-700",
+  "bg-rose-100 text-rose-700",
+  "bg-amber-100 text-amber-700",
+  "bg-fuchsia-100 text-fuchsia-700",
+];
+
+function empColor(name: string) {
+  return AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length]!;
+}
+
+function initials(name: string) {
+  return name.trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2);
 }
 
 export interface QuickAddShiftSheetProps {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  /** Pre-selected employee (from cell click). Null = day "+" button, show picker. */
   employee: Employee | null;
+  /** Full list of active employees for the picker (used when employee=null). */
+  employees?: Employee[];
   date: DateTime | null;
   weekStart: DateTime;
   /** If we already have the schedule DB id, skip the ensure call. */
@@ -62,6 +74,7 @@ export function QuickAddShiftSheet({
   open,
   onOpenChange,
   employee,
+  employees = [],
   date,
   weekStart,
   scheduleId,
@@ -93,31 +106,37 @@ export function QuickAddShiftSheet({
   const [selectedRoleId, setSelectedRoleId] = React.useState<string>("");
   const [selectedLocationId, setSelectedLocationId] = React.useState<string>("");
   const [saving, setSaving] = React.useState(false);
+  /** Employee chosen inside the picker (when employee prop is null). */
+  const [pickedEmployee, setPickedEmployee] = React.useState<Employee | null>(null);
 
-  // Set defaults once data loads
+  /** The employee we'll actually assign — either pre-selected or picker choice. */
+  const effectiveEmployee = employee ?? pickedEmployee;
+
+  // Set role default once data loads
   React.useEffect(() => {
     if (roles.length > 0 && !selectedRoleId) {
       setSelectedRoleId(roles[0]!.id);
     }
   }, [roles, selectedRoleId]);
 
+  // Prefer employee's primary location
   React.useEffect(() => {
-    // Prefer employee's primary location
-    const preferred = employee?.primaryLocationId;
+    const preferred = effectiveEmployee?.primaryLocationId;
     if (preferred && locations.some((l) => l.id === preferred)) {
       setSelectedLocationId(preferred);
     } else if (locations.length > 0 && !selectedLocationId) {
       setSelectedLocationId(locations[0]!.id);
     }
-  }, [locations, employee?.primaryLocationId, selectedLocationId]);
+  }, [locations, effectiveEmployee?.primaryLocationId, selectedLocationId]);
 
-  // Reset selection state each time the sheet opens for a new cell
+  // Reset selection state each time the sheet opens
   React.useEffect(() => {
     if (open) {
       setPreset(null);
       setUseCustom(false);
       setCustomStart("09:00");
       setCustomEnd("17:00");
+      setPickedEmployee(null);
       // Don't reset role/location — keep user's last choice as default
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -127,7 +146,7 @@ export function QuickAddShiftSheet({
   const effectiveEnd   = useCustom ? customEnd   : (preset?.end   ?? "");
 
   const isValid =
-    !!employee &&
+    !!effectiveEmployee &&
     !!date &&
     effectiveStart !== "" &&
     effectiveEnd !== "" &&
@@ -138,7 +157,7 @@ export function QuickAddShiftSheet({
   const dayLabel = date ? (DAYS_HE_LONG[date.weekday % 7] ?? "") : "";
 
   const handleSave = async () => {
-    if (!employee || !date || !effectiveStart || !effectiveEnd || !selectedLocationId || !selectedRoleId) return;
+    if (!effectiveEmployee || !date || !effectiveStart || !effectiveEnd || !selectedLocationId || !selectedRoleId) return;
     setSaving(true);
     try {
       // 1. Ensure schedule exists for this week
@@ -146,9 +165,15 @@ export function QuickAddShiftSheet({
       if (!weekStartISO) throw new Error("שבוע לא תקין");
       const ensured = await ensureSchedule(weekStartISO);
       const schedId = ensured.id;
+      void scheduleId; // parent may have it, but we always ensure to get fresh id
 
       // 2. Convert local times to UTC — handle midnight-crossing shifts
-      let startUtc = toUtcIso(date, effectiveStart, timezone);
+      const startDt = date.setZone(timezone).set({
+        hour: parseInt(effectiveStart.split(":")[0]!, 10),
+        minute: parseInt(effectiveStart.split(":")[1]!, 10),
+        second: 0,
+        millisecond: 0,
+      });
       let endDt = date.setZone(timezone).set({
         hour: parseInt(effectiveEnd.split(":")[0]!, 10),
         minute: parseInt(effectiveEnd.split(":")[1]!, 10),
@@ -156,17 +181,10 @@ export function QuickAddShiftSheet({
         millisecond: 0,
       });
       // If end ≤ start → shift crosses midnight
-      const startDt = date.setZone(timezone).set({
-        hour: parseInt(effectiveStart.split(":")[0]!, 10),
-        minute: parseInt(effectiveStart.split(":")[1]!, 10),
-        second: 0,
-        millisecond: 0,
-      });
       if (endDt <= startDt) endDt = endDt.plus({ days: 1 });
-      const endUtc = endDt.toUTC().toISO()!;
 
-      void startUtc; // already computed
-      startUtc = startDt.toUTC().toISO()!;
+      const startUtc = startDt.toUTC().toISO()!;
+      const endUtc   = endDt.toUTC().toISO()!;
 
       // 3. Create the shift
       const shift = await createShift({
@@ -181,12 +199,12 @@ export function QuickAddShiftSheet({
       // 4. Assign the employee
       await patchAssignment(shift.id, {
         action: "assign",
-        employeeId: employee.id,
+        employeeId: effectiveEmployee.id,
         expectedShiftVersion: shift.version,
         acknowledgeWarnings: true,
       });
 
-      toast.success(`משמרת נוספה ל${employee.fullName}`);
+      toast.success(`משמרת נוספה ל${effectiveEmployee.fullName}`);
       await qc.invalidateQueries({ queryKey: ["schedule"] });
       onOpenChange(false);
     } catch (err) {
@@ -196,24 +214,65 @@ export function QuickAddShiftSheet({
     }
   };
 
+  /** Whether we're in "day +" mode — need to show employee picker. */
+  const needEmployeePicker = employee === null;
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        className="rounded-t-xl pb-safe max-h-[85dvh] overflow-y-auto"
+        className="rounded-t-xl pb-safe max-h-[90dvh] overflow-y-auto"
       >
         <SheetHeader className="mb-4">
           <SheetTitle className="text-base">
             הוסף משמרת
-            {employee && date && (
+            {date && (
               <span className="text-muted-foreground font-normal text-sm ms-2">
-                {employee.fullName} · יום {dayLabel} {date.day}/{date.month}
+                {effectiveEmployee ? `${effectiveEmployee.fullName} · ` : ""}יום {dayLabel} {date.day}/{date.month}
               </span>
             )}
           </SheetTitle>
         </SheetHeader>
 
         <div className="space-y-5">
+          {/* Employee picker — only shown when no employee was pre-selected */}
+          {needEmployeePicker && (
+            <div>
+              <p className="text-xs font-semibold mb-2 text-muted-foreground">בחר עובד/ת</p>
+              {employees.length === 0 ? (
+                <p className="text-sm text-muted-foreground">אין עובדים זמינים</p>
+              ) : (
+                <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto">
+                  {employees.filter((e) => e.active).map((emp) => (
+                    <button
+                      key={emp.id}
+                      type="button"
+                      onClick={() => setPickedEmployee(emp)}
+                      className={cn(
+                        "flex items-center gap-3 rounded-xl border px-3 py-2.5 text-start transition-colors",
+                        pickedEmployee?.id === emp.id
+                          ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30"
+                          : "border-border bg-background hover:border-indigo-300 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20",
+                      )}
+                    >
+                      {/* Avatar */}
+                      <div className={cn(
+                        "shrink-0 h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold",
+                        empColor(emp.fullName),
+                      )}>
+                        {initials(emp.fullName)}
+                      </div>
+                      <span className="text-sm font-medium flex-1">{emp.fullName}</span>
+                      {pickedEmployee?.id === emp.id && (
+                        <span className="text-indigo-500 text-xs font-semibold">✓</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Preset time buttons */}
           <div>
             <p className="text-xs font-semibold mb-2 text-muted-foreground">בחר שעות</p>

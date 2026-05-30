@@ -528,6 +528,13 @@ function ScheduleInner() {
     setQuickAddDate(date);
     setQuickAddOpen(true);
   }, [employees]);
+
+  /** Day-level "+" button — no employee pre-selected, picker shown inside sheet. */
+  const handleAddForDay = React.useCallback((date: DateTime) => {
+    setQuickAddEmployee(null);
+    setQuickAddDate(date);
+    setQuickAddOpen(true);
+  }, []);
   // Tracks whether the setup checklist was dismissed (so we can show a
   // "הצג רשימת התקנה" button in the toolbar that brings it back).
   const [checklistDismissed, setChecklistDismissed] = React.useState(false);
@@ -865,6 +872,7 @@ function ScheduleInner() {
                 locationFilter={locationFilter}
                 roleFilter={roleFilter}
                 onQuickAdd={handleQuickAdd}
+                onAddForDay={handleAddForDay}
                 onUnassign={unassign}
                 onRequestAssign={handleRequestAssign}
               />
@@ -1118,6 +1126,7 @@ function ScheduleInner() {
           if (!v) { setQuickAddEmployee(null); setQuickAddDate(null); }
         }}
         employee={quickAddEmployee}
+        employees={visibleEmployees}
         date={quickAddDate}
         weekStart={weekStart}
         scheduleId={scheduleQuery.data?.id}
