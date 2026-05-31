@@ -12,6 +12,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
           queries: {
             retry: 1,
             refetchOnWindowFocus: false,
+            // Treat data as fresh for 30s so navigating between pages doesn't
+            // refetch everything on every mount. Mutations still invalidate
+            // explicitly, so this only suppresses redundant network round-trips.
+            staleTime: 30_000,
           },
         },
       }),

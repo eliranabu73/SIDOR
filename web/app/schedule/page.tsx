@@ -27,6 +27,7 @@ import {
 } from "@/lib/api";
 import { useAssignMutation, useValidateAssignment } from "@/lib/queries";
 import { ConfirmWarningsDialog } from "@/components/schedule/ConfirmWarningsDialog";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import type { AssignBody, ApiErrorBody, Employee, RuleResult, Shift } from "@/lib/types";
 import type { ShiftValidationTone } from "@/components/schedule/ShiftCard";
 import {
@@ -101,6 +102,7 @@ import {
   useApplyProposals,
   useAutoSchedule,
   useCopyFromPreviousWeek,
+  useDeleteShift,
   useEmployeeMetrics,
   useEmployees,
   useLocations,
@@ -163,6 +165,7 @@ function ScheduleInner() {
   const applyProposals = useApplyProposals();
   const publish = usePublishSchedule();
   const copyWeek = useCopyFromPreviousWeek();
+  const deleteShiftMut = useDeleteShift();
 
   // Current-user query — drives which approval action buttons are shown.
   // We rely on /v1/me which returns the active role (lowercased) along with
@@ -197,6 +200,8 @@ function ScheduleInner() {
     Record<string, ShiftValidationTone>
   >({});
   const [pendingDrop, setPendingDrop] = React.useState<PendingDrop | null>(null);
+  // Hard (blocking) violations — shown in a dialog that explains each law + fix.
+  const [blockedViolations, setBlockedViolations] = React.useState<RuleResult[] | null>(null);
   // Shift-first assignment — when set, the AssignEmployeeSheet shows for this shift.
   const [assignShift, setAssignShift] = React.useState<Shift | null>(null);
 
@@ -218,8 +223,9 @@ function ScheduleInner() {
       // WARNINGS_REQUIRE_ACK is handled via dialog — suppress the toast.
       if (status === 409 && body?.code === "WARNINGS_REQUIRE_ACK") return;
       if (status === 422 && body?.code === "CONSTRAINTS_VIOLATED") {
-        const lines = (body.violations ?? []).map((v) => v.message).join(", ");
-        toast.error(`השיבוץ נכשל: ${lines || "הפרות חוקים"}`);
+        // Show a dialog that explains each broken law + how to fix it, instead
+        // of a cryptic one-line toast.
+        setBlockedViolations(body.violations ?? []);
         return;
       }
       toast.error((err as Error).message || "השיבוץ נכשל");
@@ -468,6 +474,42 @@ function ScheduleInner() {
         expectedShiftVersion: shift.version,
       },
     });
+  };
+
+  // ── Confirm flows for destructive grid actions ──────────────────────────────
+  const [deleteShiftTarget, setDeleteShiftTarget] = React.useState<Shift | null>(null);
+  const [unassignTarget, setUnassignTarget] = React.useState<
+    { shift: Shift; employeeId: string; name: string } | null
+  >(null);
+
+  const requestUnassign = (shift: Shift, employeeId: string) => {
+    if (blockIfDemo()) return;
+    const name =
+      employees.find((e) => e.id === employeeId)?.fullName ?? "העובד/ת";
+    setUnassignTarget({ shift, employeeId, name });
+  };
+
+  const confirmUnassign = () => {
+    if (!unassignTarget) return;
+    unassign(unassignTarget.shift, unassignTarget.employeeId);
+    setUnassignTarget(null);
+  };
+
+  const requestDeleteShift = (shift: Shift) => {
+    if (blockIfDemo()) return;
+    setDeleteShiftTarget(shift);
+  };
+
+  const confirmDeleteShift = async () => {
+    if (!deleteShiftTarget) return;
+    try {
+      await deleteShiftMut.mutateAsync(deleteShiftTarget.id);
+      toast.success("המשמרת נמחקה");
+    } catch {
+      toast.error("מחיקת המשמרת נכשלה");
+    } finally {
+      setDeleteShiftTarget(null);
+    }
   };
 
   const handleRequestAssign = (shift: Shift) => {
@@ -898,8 +940,9 @@ function ScheduleInner() {
                 roleFilter={roleFilter}
                 onQuickAdd={handleQuickAdd}
                 onAddForDay={handleAddForDay}
-                onUnassign={unassign}
+                onUnassign={requestUnassign}
                 onRequestAssign={handleRequestAssign}
+                onDeleteShift={requestDeleteShift}
               />
             ) : (
               <ScheduleBoard
@@ -910,7 +953,7 @@ function ScheduleInner() {
                 roleFilter={roleFilter}
                 validationByShift={validationByShift}
                 activeEmployee={activeEmployee}
-                onUnassign={unassign}
+                onUnassign={requestUnassign}
                 onRequestAssign={handleRequestAssign}
               />
             )
@@ -974,6 +1017,40 @@ function ScheduleInner() {
           onConfirm={() => void confirmWarnings()}
           onCancel={() => setPendingDrop(null)}
           pending={assign.isPending}
+        />
+
+        <ConfirmWarningsDialog
+          open={blockedViolations !== null}
+          warnings={blockedViolations ?? []}
+          variant="blocking"
+          onConfirm={() => setBlockedViolations(null)}
+          onCancel={() => setBlockedViolations(null)}
+        />
+
+        <ConfirmDialog
+          open={deleteShiftTarget !== null}
+          onOpenChange={(o) => { if (!o) setDeleteShiftTarget(null); }}
+          title="למחוק את המשמרת?"
+          description="פעולה זו תמחק את המשמרת וכל השיבוצים בה. לא ניתן לבטל."
+          confirmLabel="מחק משמרת"
+          destructive
+          pending={deleteShiftMut.isPending}
+          onConfirm={() => void confirmDeleteShift()}
+        />
+
+        <ConfirmDialog
+          open={unassignTarget !== null}
+          onOpenChange={(o) => { if (!o) setUnassignTarget(null); }}
+          title="להסיר מהמשמרת?"
+          description={
+            unassignTarget
+              ? `${unassignTarget.name} יוסר/תוסר מהמשמרת. המשמרת תישאר.`
+              : undefined
+          }
+          confirmLabel="הסר"
+          destructive
+          pending={assign.isPending}
+          onConfirm={confirmUnassign}
         />
       </DndContext>
 
@@ -1108,6 +1185,8 @@ function ScheduleInner() {
         onOpenChange={setAutoOpen}
         onPreview={onPreviewAuto}
         onApply={onApplyAuto}
+        employees={employees}
+        shifts={scheduleQuery.data?.shifts ?? []}
         loading={autoSchedule.isPending}
       />
       <ProposalOverlay

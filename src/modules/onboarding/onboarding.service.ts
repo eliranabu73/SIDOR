@@ -9,7 +9,7 @@
  * fallback for environments where the hook isn't installed yet).
  */
 import { randomUUID } from 'node:crypto';
-import { prisma, type Db } from '../../db/prisma.js';
+import { prisma, withAdminContext, type Db } from '../../db/prisma.js';
 
 export interface CreateOrgInput {
   userId: string;
@@ -55,7 +55,47 @@ export async function listMemberships(userId: string, db: Db = prisma): Promise<
   }));
 }
 
+/**
+ * One-org-per-user invariant. Returns the user's existing organization (and a
+ * schedule to land on) if they already have a membership, else null. Uses the
+ * admin RLS context because the caller has no org context set yet — without it
+ * the membership row is filtered out by RLS and we'd wrongly create a 2nd org.
+ */
+export async function findExistingOrgForUser(
+  userId: string,
+): Promise<{ orgId: string; scheduleId: string | null; membershipId: string } | null> {
+  return withAdminContext().query(async (tx) => {
+    const membership = await tx.membership.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!membership) return null;
+    const schedule = await tx.schedule.findFirst({
+      where: { organizationId: membership.organizationId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    return {
+      orgId: membership.organizationId,
+      scheduleId: schedule?.id ?? null,
+      membershipId: membership.id,
+    };
+  });
+}
+
 export async function createOrgForUser(input: CreateOrgInput): Promise<CreateOrgResult> {
+  // Idempotency: one organization per user. If the user already onboarded
+  // (possibly from another device), return that org instead of creating a new
+  // one — otherwise a flaky /v1/me or a second device spawns a duplicate org.
+  const existing = await findExistingOrgForUser(input.userId);
+  if (existing) {
+    return {
+      orgId: existing.orgId,
+      scheduleId: existing.scheduleId ?? '',
+      membershipId: existing.membershipId,
+    };
+  }
+
   const tz = input.defaultTimezone || 'Asia/Jerusalem';
   const week = currentWeekRange();
 

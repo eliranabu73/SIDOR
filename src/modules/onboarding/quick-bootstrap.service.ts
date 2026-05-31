@@ -13,6 +13,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../../db/prisma.js';
 import { SCHEDULE_TEMPLATES, type ScheduleTemplate } from '../templates/schedule-templates.js';
 import { SchedulerService } from '../scheduler/scheduler.service.js';
+import { findExistingOrgForUser } from './onboarding.service.js';
 import { startOfWeek, addDays, format } from 'date-fns';
 
 export interface QuickBootstrapInput {
@@ -76,6 +77,15 @@ export async function quickBootstrap(
   input: QuickBootstrapInput,
 ): Promise<QuickBootstrapResult> {
   const { userId, name, industry, employeeCount } = input;
+
+  // Idempotency: one organization per user. A returning user (or a second
+  // device whose JWT lacks the org id) must land on their existing org+schedule
+  // instead of bootstrapping a fresh duplicate.
+  const existing = await findExistingOrgForUser(userId);
+  if (existing && existing.scheduleId) {
+    return { organizationId: existing.orgId, scheduleId: existing.scheduleId };
+  }
+
   const tpl = resolveTemplate(industry);
   const tz = 'Asia/Jerusalem';
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 0 });

@@ -173,6 +173,10 @@ export function deleteEmployee(id: ID): Promise<Employee> {
   return request<Employee>(`/v1/employees/${id}`, { method: "DELETE" });
 }
 
+export function deleteShift(id: ID): Promise<void> {
+  return request<void>(`/v1/shifts/${id}`, { method: "DELETE" });
+}
+
 // --------- Locations & Roles ---------
 
 export interface LocationItem {

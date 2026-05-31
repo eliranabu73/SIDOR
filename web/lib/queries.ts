@@ -14,6 +14,7 @@ import {
   createLocation,
   createRole,
   deleteEmployee,
+  deleteShift,
   fetchEmployees,
   fetchEmployeesSummary,
   fetchFairness,
@@ -327,6 +328,20 @@ export function useApplyProposals() {
       return applyProposals(scheduleId, proposals);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["schedule"] }),
+  });
+}
+
+export function useDeleteShift() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, ID>({
+    mutationFn: async (shiftId) => {
+      if (USE_MOCKS) return;
+      return deleteShift(shiftId);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["schedule"] });
+      qc.invalidateQueries({ queryKey: ["shifts"] });
+    },
   });
 }
 

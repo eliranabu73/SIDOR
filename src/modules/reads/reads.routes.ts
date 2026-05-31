@@ -199,6 +199,9 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
         const schedScope = locationScope(req.user ?? { role: '' });
         const includeShifts = {
           shifts: {
+            // Cancelled shifts are soft-deleted — exclude them so a deleted
+            // shift disappears from the grid (DELETE /shifts/:id sets CANCELLED).
+            where: { status: { not: 'CANCELLED' as const } },
             include: { role: true, assignments: true },
             orderBy: { startAtUtc: 'asc' as const },
           },

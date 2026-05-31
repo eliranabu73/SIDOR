@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { prisma as defaultPrisma, ensureTx } from '../../db/prisma.js';
 import type { Db } from '../../db/prisma.js';
 import { NotFoundError } from '../../shared/errors.js';
@@ -20,6 +21,9 @@ export type EmployeeResponse = {
   roles: string[];
   primaryLocationId: string | null;
   active: boolean;
+  hourlyRate: number;
+  hireDate: string | null;
+  weeklyBudgetHours: number | null;
 };
 
 type EmployeeWithRoles = {
@@ -30,6 +34,9 @@ type EmployeeWithRoles = {
   phone: string | null;
   defaultLocationId: string | null;
   isActive: boolean;
+  hourlyRate: Prisma.Decimal;
+  hireDate: Date | null;
+  weeklyBudgetHours: number | null;
   roles: Array<{ role: { name: string } }>;
 };
 
@@ -43,6 +50,9 @@ function mapEmployee(e: EmployeeWithRoles): EmployeeResponse {
     roles: e.roles.map((er) => er.role.name),
     primaryLocationId: e.defaultLocationId,
     active: e.isActive,
+    hourlyRate: Number(e.hourlyRate),
+    hireDate: e.hireDate ? e.hireDate.toISOString().slice(0, 10) : null,
+    weeklyBudgetHours: e.weeklyBudgetHours,
   };
 }
 
@@ -54,6 +64,9 @@ export type CreateEmployeeInput = {
   employmentType?: EmploymentTypeLiteral | undefined;
   roleIds?: string[] | undefined;
   defaultLocationId?: string | undefined;
+  hourlyRate?: number | undefined;
+  hireDate?: string | null | undefined;
+  weeklyBudgetHours?: number | null | undefined;
 };
 
 export async function createEmployee(
@@ -84,6 +97,13 @@ export async function createEmployee(
       phone: input.phone ?? null,
       employmentType: input.employmentType ?? 'FULL_TIME',
       defaultLocationId: input.defaultLocationId ?? null,
+      ...(input.hourlyRate !== undefined ? { hourlyRate: input.hourlyRate } : {}),
+      ...(input.hireDate !== undefined
+        ? { hireDate: input.hireDate ? new Date(input.hireDate) : null }
+        : {}),
+      ...(input.weeklyBudgetHours !== undefined
+        ? { weeklyBudgetHours: input.weeklyBudgetHours }
+        : {}),
       roles: roleIds.length
         ? { create: roleIds.map((roleId) => ({ roleId })) }
         : undefined,
@@ -103,6 +123,9 @@ export type UpdateEmployeeInput = {
   employmentType?: EmploymentTypeLiteral | undefined;
   roleIds?: string[] | undefined;
   defaultLocationId?: string | null | undefined;
+  hourlyRate?: number | undefined;
+  hireDate?: string | null | undefined;
+  weeklyBudgetHours?: number | null | undefined;
 };
 
 export async function updateEmployee(
@@ -137,6 +160,11 @@ export async function updateEmployee(
   if (input.phone !== undefined) data['phone'] = input.phone;
   if (input.employmentType !== undefined) data['employmentType'] = input.employmentType;
   if (input.defaultLocationId !== undefined) data['defaultLocationId'] = input.defaultLocationId;
+  if (input.hourlyRate !== undefined) data['hourlyRate'] = input.hourlyRate;
+  if (input.hireDate !== undefined)
+    data['hireDate'] = input.hireDate ? new Date(input.hireDate) : null;
+  if (input.weeklyBudgetHours !== undefined)
+    data['weeklyBudgetHours'] = input.weeklyBudgetHours;
 
   await ensureTx(db, async (tx) => {
     if (Object.keys(data).length > 0) {

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { DateTime } from "luxon";
-import { ChevronDown, Plus, X } from "lucide-react";
+import { ChevronDown, Plus, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Employee, Schedule, Shift } from "@/lib/types";
 
@@ -123,6 +123,8 @@ export interface WeeklyGridProps {
   onAddForDay: (date: DateTime) => void;
   onUnassign: (shift: Shift, employeeId: string) => void;
   onRequestAssign?: (shift: Shift) => void;
+  /** Delete the whole shift (all assignments). */
+  onDeleteShift?: (shift: Shift) => void;
 }
 
 // ─── MOBILE: Agenda view ─────────────────────────────────────────────────────
@@ -135,6 +137,7 @@ function AgendaDay({
   onAdd,
   onUnassign,
   onRequestAssign,
+  onDeleteShift,
   isToday,
 }: {
   dayIdx: number;
@@ -143,6 +146,7 @@ function AgendaDay({
   onAdd: () => void;
   onUnassign: (shift: Shift, empId: string) => void;
   onRequestAssign?: (shift: Shift) => void;
+  onDeleteShift?: (shift: Shift) => void;
   isToday: boolean;
 }) {
   const hasContent = agendaShifts.length > 0;
@@ -232,6 +236,19 @@ function AgendaDay({
                   </div>
                 )}
               </div>
+
+              {/* Delete whole shift */}
+              {onDeleteShift && (
+                <button
+                  type="button"
+                  onClick={() => onDeleteShift(shift)}
+                  aria-label={`מחק משמרת ${fmt(shift.startsAt)}`}
+                  title="מחק משמרת"
+                  className="shrink-0 rounded-md p-1.5 text-muted-foreground/50 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -246,13 +263,38 @@ function AgendaDay({
 
 // ─── DESKTOP: employee × day grid ────────────────────────────────────────────
 
-function ShiftPill({ shift, onRemove }: { shift: Shift; onRemove?: () => void }) {
+function ShiftPill({
+  shift,
+  onRemove,
+  onDelete,
+}: {
+  shift: Shift;
+  onRemove?: () => void;
+  onDelete?: () => void;
+}) {
   return (
     <div className="group flex items-center gap-0.5 rounded-md bg-indigo-500/10 border border-indigo-300/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 text-[10px] font-medium">
       <span dir="ltr" className="tabular-nums">{fmt(shift.startsAt)}–{fmt(shift.endsAt)}</span>
       {onRemove && (
-        <button type="button" onClick={(e) => { e.stopPropagation(); onRemove(); }} className="hidden group-hover:flex text-indigo-400 hover:text-red-500">
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          aria-label="הסר עובד/ת מהמשמרת"
+          title="הסר עובד/ת"
+          className="hidden group-hover:flex text-indigo-400 hover:text-red-500"
+        >
           <X className="h-2.5 w-2.5" />
+        </button>
+      )}
+      {onDelete && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          aria-label="מחק משמרת"
+          title="מחק משמרת"
+          className="hidden group-hover:flex text-indigo-400 hover:text-red-600"
+        >
+          <Trash2 className="h-2.5 w-2.5" />
         </button>
       )}
     </div>
@@ -263,10 +305,12 @@ function UnassignedAccordion({
   shifts,
   weekStart,
   onRequestAssign,
+  onDeleteShift,
 }: {
   shifts: Shift[];
   weekStart: DateTime;
   onRequestAssign?: (shift: Shift) => void;
+  onDeleteShift?: (shift: Shift) => void;
 }) {
   const [open, setOpen] = React.useState(false);
   if (!shifts.length) return null;
@@ -307,6 +351,17 @@ function UnassignedAccordion({
                 >
                   שבץ עובד +
                 </button>
+                {onDeleteShift && (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteShift(s)}
+                    aria-label="מחק משמרת"
+                    title="מחק משמרת"
+                    className="rounded-md p-1 text-muted-foreground/50 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             );
           })}
@@ -324,6 +379,7 @@ function DesktopGrid({
   onQuickAdd,
   onUnassign,
   onRequestAssign,
+  onDeleteShift,
 }: {
   weekStart: DateTime;
   employees: Employee[];
@@ -332,6 +388,7 @@ function DesktopGrid({
   onQuickAdd: (id: string, date: DateTime) => void;
   onUnassign: (shift: Shift, empId: string) => void;
   onRequestAssign?: (shift: Shift) => void;
+  onDeleteShift?: (shift: Shift) => void;
 }) {
   const days = Array.from({ length: 7 }, (_, i) => weekStart.plus({ days: i }));
   const todayIdx = DateTime.now().weekday % 7;
@@ -390,7 +447,12 @@ function DesktopGrid({
                     <td key={dayIdx} className={cn("py-1 px-1 align-top border-s min-w-[5rem]", dayIdx === todayIdx && "bg-indigo-500/3")}>
                       <div className="group/cell flex flex-col gap-0.5 min-h-[2rem]">
                         {dayShifts.map((s) => (
-                          <ShiftPill key={s.id} shift={s} onRemove={() => onUnassign(s, emp.id)} />
+                          <ShiftPill
+                            key={s.id}
+                            shift={s}
+                            onRemove={() => onUnassign(s, emp.id)}
+                            onDelete={onDeleteShift ? () => onDeleteShift(s) : undefined}
+                          />
                         ))}
                         <button
                           type="button"
@@ -410,7 +472,7 @@ function DesktopGrid({
         </table>
       </div>
 
-      <UnassignedAccordion shifts={unassigned} weekStart={weekStart} onRequestAssign={onRequestAssign} />
+      <UnassignedAccordion shifts={unassigned} weekStart={weekStart} onRequestAssign={onRequestAssign} onDeleteShift={onDeleteShift} />
     </>
   );
 }
@@ -427,6 +489,7 @@ export function WeeklyGrid({
   onAddForDay,
   onUnassign,
   onRequestAssign,
+  onDeleteShift,
 }: WeeklyGridProps) {
   const employeesById = React.useMemo(
     () => Object.fromEntries(employees.map((e) => [e.id, e])),
@@ -464,6 +527,7 @@ export function WeeklyGrid({
             onAdd={() => onAddForDay(dt)}
             onUnassign={onUnassign}
             onRequestAssign={onRequestAssign}
+            onDeleteShift={onDeleteShift}
             isToday={dayIdx === todayIdx}
           />
         ))}
@@ -479,6 +543,7 @@ export function WeeklyGrid({
           onQuickAdd={onQuickAdd}
           onUnassign={onUnassign}
           onRequestAssign={onRequestAssign}
+          onDeleteShift={onDeleteShift}
         />
       </div>
     </>

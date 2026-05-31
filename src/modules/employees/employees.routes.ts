@@ -48,6 +48,9 @@ const CreateEmployeeBody = z.object({
   employmentType: EmploymentTypeEnum.optional(),
   roleIds: z.array(z.string().uuid()).optional(),
   defaultLocationId: z.string().uuid().optional(),
+  hourlyRate: z.coerce.number().min(0).max(500).optional(),
+  hireDate: z.string().date().nullable().optional(),
+  weeklyBudgetHours: z.coerce.number().int().min(0).max(80).nullable().optional(),
 });
 
 const UpdateEmployeeBody = z.object({
@@ -57,6 +60,9 @@ const UpdateEmployeeBody = z.object({
   employmentType: EmploymentTypeEnum.optional(),
   roleIds: z.array(z.string().uuid()).optional(),
   defaultLocationId: z.string().uuid().nullable().optional(),
+  hourlyRate: z.coerce.number().min(0).max(500).optional(),
+  hireDate: z.string().date().nullable().optional(),
+  weeklyBudgetHours: z.coerce.number().int().min(0).max(80).nullable().optional(),
 });
 
 const IdParam = z.object({ id: z.string().uuid() });
@@ -86,6 +92,9 @@ export async function employeesRoutes(app: FastifyInstance): Promise<void> {
               employmentType: body.employmentType,
               roleIds: body.roleIds,
               defaultLocationId: body.defaultLocationId,
+              hourlyRate: body.hourlyRate,
+              hireDate: body.hireDate,
+              weeklyBudgetHours: body.weeklyBudgetHours,
             },
             tx,
           ),
@@ -115,6 +124,9 @@ export async function employeesRoutes(app: FastifyInstance): Promise<void> {
               employmentType: body.employmentType,
               roleIds: body.roleIds,
               defaultLocationId: body.defaultLocationId,
+              hourlyRate: body.hourlyRate,
+              hireDate: body.hireDate,
+              weeklyBudgetHours: body.weeklyBudgetHours,
             },
             tx,
           ),

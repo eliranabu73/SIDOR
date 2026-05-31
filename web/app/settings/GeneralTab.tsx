@@ -5,6 +5,7 @@ import { Save, Upload, X, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TimeSelect } from "@/components/ui/TimeSelect";
 import {
   Card,
   CardContent,
@@ -321,22 +322,20 @@ export default function GeneralTab({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="biz-start">פתיחה</Label>
-              <Input
+              <TimeSelect
                 id="biz-start"
-                type="time"
                 value={bizStart}
-                onChange={(e) => setBizStart(e.target.value)}
-                placeholder="08:00"
+                onChange={setBizStart}
+                aria-label="שעת פתיחה"
               />
             </div>
             <div className="space-y-1">
               <Label htmlFor="biz-end">סגירה</Label>
-              <Input
+              <TimeSelect
                 id="biz-end"
-                type="time"
                 value={bizEnd}
-                onChange={(e) => setBizEnd(e.target.value)}
-                placeholder="23:00"
+                onChange={setBizEnd}
+                aria-label="שעת סגירה"
               />
             </div>
           </div>

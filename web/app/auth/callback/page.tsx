@@ -38,17 +38,33 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        try {
-          const me = await fetchMe();
-          if (cancelled) return;
-          if (!me.memberships || me.memberships.length === 0) {
-            router.replace("/onboarding");
-          } else {
-            router.replace("/schedule");
+        // Resolve membership with retries — the backend may be cold and a
+        // transient /v1/me failure must NOT route an already-onboarded user to
+        // /onboarding, where a second org would be bootstrapped (one-org-per-user).
+        let me: Awaited<ReturnType<typeof fetchMe>> | null = null;
+        let lastErr: unknown = null;
+        for (let attempt = 0; attempt < 4 && !cancelled; attempt++) {
+          try {
+            me = await fetchMe();
+            break;
+          } catch (err) {
+            lastErr = err;
+            await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
           }
-        } catch {
-          // If /v1/me fails, fall back to onboarding (safer than schedule).
-          if (!cancelled) router.replace("/onboarding");
+        }
+        if (cancelled) return;
+
+        if (!me) {
+          // Still failing after retries — send to login rather than risk
+          // duplicate-org onboarding for a user who may already have one.
+          console.error("auth callback: /v1/me unreachable", lastErr);
+          router.replace("/login?error=session_check_failed");
+          return;
+        }
+        if (!me.memberships || me.memberships.length === 0) {
+          router.replace("/onboarding");
+        } else {
+          router.replace("/schedule");
         }
       } catch {
         if (!cancelled) router.replace("/login?error=auth_failed");
