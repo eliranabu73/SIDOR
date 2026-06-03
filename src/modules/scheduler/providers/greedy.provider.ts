@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { DateTime } from 'luxon';
 import { prisma as defaultPrisma } from '../../../db/prisma';
 import { generateCandidates } from '../candidate-generation.service';
 import { scoreCandidate } from '../scoring.service';
@@ -59,14 +60,44 @@ export class GreedySchedulerProvider implements SchedulerProvider {
 
     const proposals: AssignmentProposal[] = [];
     const employeeBusy = new Map<string, Array<{ start: Date; end: Date }>>();
+    // Spread the load: track how much each employee has already been given in
+    // THIS run and penalise their score accordingly. Without this the greedy
+    // hands every shift to the single highest-static-scoring employee (whose
+    // fairness/preference signals are identical to everyone's at week start),
+    // and the labor rules then reject the impossible 60-70h schedule — leaving
+    // the week mostly empty. The penalty makes a less-loaded employee win the
+    // next shift, distributing work across the team.
+    const assignedCount = new Map<string, number>();
+    // employeeId -> set of local day keys already worked (avoid 2 shifts/day,
+    // which usually blows the daily-hours cap and gets rejected at apply time).
+    const assignedDays = new Map<string, Set<string>>();
+    const SPREAD_PENALTY = 0.2; // per shift already held this run
+    const SAME_DAY_PENALTY = 1.0; // strongly prefer someone not already on that day
     const unfilled: string[] = [];
+
+    const dayKey = (start: Date, tz: string): string =>
+      DateTime.fromJSDate(start).setZone(tz).toFormat('yyyy-MM-dd');
 
     for (const shift of orderedShifts) {
       const slots = shift.requiredEmployeeCount;
       const ranked = byShift.get(shift.id) ?? [];
+      const shiftDay = dayKey(shift.startAtUtc, shift.timezone);
       let filled = 0;
 
-      for (const row of ranked) {
+      // Re-rank dynamically: spread by total load AND avoid stacking two shifts
+      // on one employee in a single day.
+      const dynamic = ranked
+        .map((row) => {
+          const empId = row.candidate.employee.id;
+          const sameDay = assignedDays.get(empId)?.has(shiftDay) ? SAME_DAY_PENALTY : 0;
+          return {
+            row,
+            adjusted: row.score - SPREAD_PENALTY * (assignedCount.get(empId) ?? 0) - sameDay,
+          };
+        })
+        .sort((a, b) => b.adjusted - a.adjusted);
+
+      for (const { row } of dynamic) {
         if (filled >= slots) break;
         const empId = row.candidate.employee.id;
         if (overlapsExisting(employeeBusy.get(empId), shift.startAtUtc, shift.endAtUtc)) {
@@ -81,6 +112,10 @@ export class GreedySchedulerProvider implements SchedulerProvider {
           reason: `greedy pick — score ${row.score.toFixed(3)}`,
         });
         rememberBusy(employeeBusy, empId, shift.startAtUtc, shift.endAtUtc);
+        assignedCount.set(empId, (assignedCount.get(empId) ?? 0) + 1);
+        const days = assignedDays.get(empId) ?? new Set<string>();
+        days.add(shiftDay);
+        assignedDays.set(empId, days);
         filled++;
       }
       if (filled < slots) unfilled.push(shift.id);

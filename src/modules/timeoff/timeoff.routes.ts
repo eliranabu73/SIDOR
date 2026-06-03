@@ -67,6 +67,50 @@ export async function timeoffRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // Manager "requests inbox" summary — drives the schedule top-bar badge.
+  // Counts open time-off requests + availability rules updated in the last 7
+  // days (the signal that employees submitted constraints via their link).
+  app.get(
+    '/requests/summary',
+    { preHandler: authHandlers },
+    async (req, reply) => {
+      const orgId = orgIdFor(req);
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const data = await dbFor(req).query(async (tx) => {
+        const [pendingTimeOff, recentTimeOff, recentAvailabilityUpdates] = await Promise.all([
+          tx.employeeTimeOffRequest.count({
+            where: { employee: { organizationId: orgId }, status: 'PENDING' },
+          }),
+          tx.employeeTimeOffRequest.findMany({
+            where: { employee: { organizationId: orgId }, status: 'PENDING' },
+            include: { employee: { select: { id: true, fullName: true } } },
+            orderBy: { createdAt: 'desc' },
+            take: 50,
+          }),
+          tx.employeeAvailabilityRule.count({
+            where: { employee: { organizationId: orgId }, updatedAt: { gte: since } },
+          }),
+        ]);
+        return { pendingTimeOff, recentAvailabilityUpdates, recentTimeOff };
+      });
+      return reply.send({
+        pendingTimeOff: data.pendingTimeOff,
+        recentAvailabilityUpdates: data.recentAvailabilityUpdates,
+        total: data.pendingTimeOff + data.recentAvailabilityUpdates,
+        items: data.recentTimeOff.map((r) => ({
+          id: r.id,
+          employeeId: r.employeeId,
+          employeeName: r.employee.fullName,
+          startAtUtc: r.startAtUtc.toISOString(),
+          endAtUtc: r.endAtUtc.toISOString(),
+          reason: r.reason,
+          status: r.status,
+          createdAt: r.createdAt.toISOString(),
+        })),
+      });
+    },
+  );
+
   app.post(
     '/timeoff/:id/approve',
     { schema: { params: IdParam }, preHandler: authHandlers },

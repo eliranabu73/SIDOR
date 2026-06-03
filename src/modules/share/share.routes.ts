@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   buildPublishBundle,
+  buildRequestLinksBundle,
   fetchEmployeeView,
   verifyEmployeeToken,
 } from './share.service';
@@ -63,6 +64,26 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
         return reply
           .code(status)
           .send({ code: 'PUBLISH_FAILED', message: (err as Error).message });
+      }
+    },
+  );
+
+  // MANAGER — per-employee "requests" links to collect availability/time-off
+  // before building the schedule. No schedule required.
+  app.get(
+    '/v1/share/request-links',
+    { preHandler: authHandlers },
+    async (req, reply) => {
+      try {
+        const bundle = await dbFor(req).query((tx) =>
+          buildRequestLinksBundle({ organizationId: orgIdFor(req) }, tx),
+        );
+        return reply.send(bundle);
+      } catch (err) {
+        const status = (err as { statusCode?: number }).statusCode ?? 500;
+        return reply
+          .code(status)
+          .send({ code: 'REQUEST_LINKS_FAILED', message: (err as Error).message });
       }
     },
   );

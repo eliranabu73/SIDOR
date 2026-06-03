@@ -756,6 +756,8 @@ export function publishSchedule(scheduleId: ID): Promise<Schedule> {
 
 export interface CopyFromPreviousWeekResult {
   copied: number;
+  /** Number of employee assignments carried over (0 when withAssignments=false). */
+  assignmentsCopied?: number;
   skipped: number;
   message?: string;
   existingBefore?: number;
@@ -763,10 +765,11 @@ export interface CopyFromPreviousWeekResult {
 
 export function copyFromPreviousWeek(
   scheduleId: ID,
+  withAssignments = true,
 ): Promise<CopyFromPreviousWeekResult> {
   return request<CopyFromPreviousWeekResult>(
     `/v1/schedules/${scheduleId}/copy-from-previous-week`,
-    { method: "POST" },
+    { method: "POST", body: JSON.stringify({ withAssignments }) },
   );
 }
 
@@ -1669,4 +1672,137 @@ export function recordTipPool(body: RecordTipBody): Promise<TipPoolItem> {
 
 export function deleteTipPool(id: string): Promise<void> {
   return request<void>(`/v1/tips/${id}`, { method: "DELETE" });
+}
+
+// --------- Weekly recurring templates (WS3) ---------
+
+export interface WeeklyTemplateShift {
+  id: string;
+  dayOfWeek: number;
+  startLocalTime: string;
+  endLocalTime: string;
+  timezone: string;
+  roleId: string | null;
+  requiredEmployeeCount: number;
+  defaultEmployeeIds: string[];
+}
+
+export interface WeeklyTemplate {
+  id: string;
+  organizationId: string;
+  locationId: string | null;
+  name: string;
+  isActive: boolean;
+  shifts: WeeklyTemplateShift[];
+}
+
+export interface WeeklyTemplateInput {
+  name: string;
+  locationId?: string | null;
+  shifts: Array<{
+    dayOfWeek: number;
+    startLocalTime: string;
+    endLocalTime: string;
+    timezone?: string;
+    roleId?: string | null;
+    requiredEmployeeCount?: number;
+    defaultEmployeeIds?: string[];
+  }>;
+}
+
+export function fetchWeeklyTemplates(): Promise<WeeklyTemplate[]> {
+  return request<WeeklyTemplate[]>(`/v1/weekly-templates`);
+}
+
+export function createWeeklyTemplate(body: WeeklyTemplateInput): Promise<WeeklyTemplate> {
+  return request<WeeklyTemplate>(`/v1/weekly-templates`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateWeeklyTemplate(
+  id: ID,
+  body: WeeklyTemplateInput,
+): Promise<WeeklyTemplate> {
+  return request<WeeklyTemplate>(`/v1/weekly-templates/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteWeeklyTemplate(id: ID): Promise<void> {
+  return request<void>(`/v1/weekly-templates/${id}`, { method: "DELETE" });
+}
+
+export interface ApplyTemplateResult {
+  shiftsCreated: number;
+  assignmentsCreated: number;
+  message?: string;
+}
+
+export function applyWeeklyTemplate(
+  scheduleId: ID,
+  templateId: ID,
+): Promise<ApplyTemplateResult> {
+  return request<ApplyTemplateResult>(
+    `/v1/schedules/${scheduleId}/apply-template`,
+    { method: "POST", body: JSON.stringify({ templateId }) },
+  );
+}
+
+export interface GenerateFromHoursResult {
+  shiftsCreated: number;
+  openDays: number[];
+  message?: string;
+}
+
+/** Auto-create the week's shifts from the org's operating hours (no setup). */
+export function generateFromHours(scheduleId: ID): Promise<GenerateFromHoursResult> {
+  return request<GenerateFromHoursResult>(
+    `/v1/schedules/${scheduleId}/generate-from-hours`,
+    { method: "POST" },
+  );
+}
+
+// --------- Manager requests inbox (WS4) ---------
+
+export interface RequestsSummaryItem {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  startAtUtc: string;
+  endAtUtc: string;
+  reason: string | null;
+  status: string;
+  createdAt: string;
+}
+
+export interface RequestsSummary {
+  pendingTimeOff: number;
+  recentAvailabilityUpdates: number;
+  total: number;
+  items: RequestsSummaryItem[];
+}
+
+export function fetchRequestsSummary(): Promise<RequestsSummary> {
+  return request<RequestsSummary>(`/v1/requests/summary`);
+}
+
+export interface RequestLink {
+  employeeId: string;
+  fullName: string;
+  phone: string | null;
+  url: string;
+  whatsapp: string;
+}
+
+export interface RequestLinksBundle {
+  count: number;
+  links: RequestLink[];
+}
+
+/** Per-employee links to collect availability/time-off before building a schedule. */
+export function fetchRequestLinks(): Promise<RequestLinksBundle> {
+  return request<RequestLinksBundle>(`/v1/share/request-links`);
 }

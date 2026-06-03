@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { SchedulerService, type ProviderName } from './scheduler.service';
 import { persistCandidates } from './candidate-generation.service';
+import { generateShiftsFromOperatingHours } from './operating-hours.service';
 import { computeWeeklyCost } from './labor-cost.service';
 import { HttpError } from '../../shared/errors';
 import { prisma, withOrgContext } from '../../db/prisma';
@@ -27,6 +28,8 @@ function checkAutoScheduleRateLimit(orgId: string): boolean {
 }
 
 const DEMO_ORG_ID = '10000000-0000-0000-0000-000000000001';
+// Used as the actor when no authenticated user is present (AUTH_DISABLED mode).
+const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
 function orgIdFor(req: { user?: { orgId?: string } }): string {
   return req.user?.orgId ?? DEMO_ORG_ID;
 }
@@ -122,7 +125,9 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
       const body = req.body as z.infer<typeof ApplyProposalsBody>;
-      const actingUserId = req.user!.id;
+      // req.user is absent in AUTH_DISABLED mode; fall back to a system
+      // sentinel uuid so the route never 500s on the optional actor id.
+      const actingUserId = req.user?.id ?? SYSTEM_USER_ID;
 
       try {
         // The service runs each applyAssignment inside its own short
@@ -146,7 +151,7 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req, reply) => {
       const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
-      const actingUserId = req.user!.id;
+      const actingUserId = req.user?.id ?? SYSTEM_USER_ID;
 
       try {
         const updated = await dbFor(req).query((tx) => {
@@ -272,14 +277,43 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // MANAGER — copy shift skeleton (no assignments) from the previous week.
-  // POST /v1/schedules/:scheduleId/copy-from-previous-week
-  // Used by the "העתק שבוע קודם" button in the schedule top-bar.
+  // MANAGER — auto-generate the week's shift skeleton from the org's operating
+  // hours (business hours + open days in laborRulesJsonb). Zero setup: the
+  // business already declared its hours, so every week fills itself.
+  // POST /v1/schedules/:scheduleId/generate-from-hours
   app.post(
-    '/schedules/:scheduleId/copy-from-previous-week',
+    '/schedules/:scheduleId/generate-from-hours',
     { schema: { params: ScheduleIdParam }, preHandler: authHandlers },
     async (req, reply) => {
       const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
+      try {
+        const result = await dbFor(req).query((tx) =>
+          generateShiftsFromOperatingHours(
+            { scheduleId, organizationId: orgIdFor(req) },
+            tx,
+          ),
+        );
+        return reply.send(result);
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
+
+  // MANAGER — copy the previous week into this schedule.
+  // POST /v1/schedules/:scheduleId/copy-from-previous-week
+  // Body { withAssignments?: boolean } (default true) — when true, the same
+  // employees are carried over too, so a stable week is one click with zero
+  // re-staffing. New-week constraint conflicts (time-off / availability) do not
+  // block the copy; they surface as violations on the next compliance check.
+  // Used by the "העתק שבוע קודם" button in the schedule top-bar.
+  const CopyWeekBody = z.object({ withAssignments: z.boolean().optional().default(true) });
+  app.post(
+    '/schedules/:scheduleId/copy-from-previous-week',
+    { schema: { params: ScheduleIdParam, body: CopyWeekBody }, preHandler: authHandlers },
+    async (req, reply) => {
+      const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
+      const { withAssignments } = req.body as z.infer<typeof CopyWeekBody>;
       const orgId = orgIdFor(req);
       try {
         const result = await dbFor(req).query(async (tx) => {
@@ -312,10 +346,16 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
               endAtUtc: true,
               timezone: true,
               requiredEmployeeCount: true,
+              assignments: withAssignments
+                ? {
+                    where: { assignmentStatus: { not: 'CANCELLED' } },
+                    select: { employeeId: true },
+                  }
+                : false,
             },
           });
           if (prevShifts.length === 0) {
-            return { copied: 0, skipped: 0, message: 'no_shifts_in_previous_week' };
+            return { copied: 0, assignmentsCopied: 0, skipped: 0, message: 'no_shifts_in_previous_week' };
           }
           // Skip if any shift already exists in the target week (avoid duplicates).
           const existing = await tx.shift.count({
@@ -326,6 +366,7 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
             },
           });
           let copied = 0;
+          let assignmentsCopied = 0;
           for (const s of prevShifts) {
             const start = new Date(s.startAtUtc);
             start.setUTCDate(start.getUTCDate() + 7);
@@ -333,7 +374,7 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
             end.setUTCDate(end.getUTCDate() + 7);
             const localStart = new Date(start);
             const localEnd = new Date(end);
-            await tx.shift.create({
+            const created = await tx.shift.create({
               data: {
                 organizationId: orgId,
                 scheduleId: target.id,
@@ -347,10 +388,29 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
                 status: 'PLANNED',
                 requiredEmployeeCount: s.requiredEmployeeCount,
               },
+              select: { id: true },
             });
             copied++;
+
+            // Carry over the same employees. We skip the rules validator here
+            // on purpose: the copy is a starting point the manager can fix, and
+            // re-validating every assignment would blow the Accelerate tx cap.
+            const sourceAssignments = withAssignments && Array.isArray(s.assignments) ? s.assignments : [];
+            if (sourceAssignments.length > 0) {
+              await tx.shiftAssignment.createMany({
+                data: sourceAssignments.map((a) => ({
+                  shiftId: created.id,
+                  employeeId: a.employeeId,
+                  assignmentStatus: 'CONFIRMED' as const,
+                  source: 'IMPORT' as const,
+                  assignedByUserId: req.user?.id ?? null,
+                })),
+                skipDuplicates: true,
+              });
+              assignmentsCopied += sourceAssignments.length;
+            }
           }
-          return { copied, skipped: 0, existingBefore: existing };
+          return { copied, assignmentsCopied, skipped: 0, existingBefore: existing };
         });
         return reply.send(result);
       } catch (err) {

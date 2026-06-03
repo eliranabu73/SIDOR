@@ -52,7 +52,7 @@ export async function generateCandidates(
 
   // bulk fetches keyed by employeeId — avoid N+1
   const empIds = employees.map((e) => e.id);
-  const [availability, allAssignments, allMetrics, shiftPrefs] = await Promise.all([
+  const [availability, allAssignments, allMetrics, shiftPrefs, timeOff] = await Promise.all([
     prisma.employeeAvailabilityRule.findMany({
       where: { employeeId: { in: empIds } },
     }),
@@ -66,11 +66,16 @@ export async function generateCandidates(
     prisma.employeeShiftPreference.findMany({
       where: { employeeId: { in: empIds } },
     }),
+    // Open time-off requests — drive the TIME_OFF hard-block rule.
+    prisma.employeeTimeOffRequest.findMany({
+      where: { employeeId: { in: empIds }, status: { in: ['PENDING', 'APPROVED'] } },
+    }),
   ]);
 
   const availByEmp = groupBy(availability, (r) => r.employeeId);
   const assignsByEmp = groupBy(allAssignments, (a) => a.employeeId);
   const prefsByEmp = groupBy(shiftPrefs, (p) => p.employeeId);
+  const timeOffByEmp = groupBy(timeOff, (t) => t.employeeId);
 
   const rulesSnapshot = mergeRulesSnapshot(
     parseLaborRulesJson(schedule.organization.laborRulesJsonb),
@@ -97,6 +102,7 @@ export async function generateCandidates(
           availByEmp,
           assignsByEmp,
           prefsByEmp,
+          timeOffByEmp,
           rulesSnapshot,
         );
         candidates.push(result);
@@ -115,7 +121,7 @@ export async function generateCandidates(
       const batch = pairs.slice(i, i + BATCH_SIZE);
       const results = await Promise.all(
         batch.map(({ shift, employee }) =>
-          evaluatePair(shift, employee, allMetrics, availByEmp, assignsByEmp, prefsByEmp, rulesSnapshot),
+          evaluatePair(shift, employee, allMetrics, availByEmp, assignsByEmp, prefsByEmp, timeOffByEmp, rulesSnapshot),
         ),
       );
       candidates.push(...results);
@@ -164,6 +170,7 @@ async function evaluatePair(
   availByEmp: Map<string, Prisma.EmployeeAvailabilityRuleGetPayload<{}>[]>,
   assignsByEmp: Map<string, Prisma.ShiftAssignmentGetPayload<{ include: { shift: true } }>[]>,
   prefsByEmp: Map<string, Prisma.EmployeeShiftPreferenceGetPayload<{}>[]>,
+  timeOffByEmp: Map<string, Prisma.EmployeeTimeOffRequestGetPayload<{}>[]>,
   rulesSnapshot: ReturnType<typeof mergeRulesSnapshot>,
 ): Promise<Candidate> {
   const weekStartDate = DateTime.fromJSDate(shift.startAtUtc)
@@ -181,6 +188,7 @@ async function evaluatePair(
     shift,
     employee,
     availabilityRules: availByEmp.get(employee.id) ?? [],
+    timeOffRequests: timeOffByEmp.get(employee.id) ?? [],
     existingAssignments: assignsByEmp.get(employee.id) ?? [],
     rulesSnapshot,
     metrics,

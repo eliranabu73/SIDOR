@@ -3,7 +3,7 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { DateTime } from "luxon";
-import { ArrowLeft, Check, ClipboardList, Copy, Filter, MessageCircle, Printer, Search, Send, Sparkles, Upload, Users as UsersIcon, X } from "lucide-react";
+import { ArrowLeft, CalendarCog, Check, ClipboardList, Copy, Filter, MessageCircle, Printer, Search, Send, Sparkles, Upload, Users as UsersIcon, Wand2, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import {
   DndContext,
@@ -21,6 +21,7 @@ import {
 import {
   ApiError,
   approveSchedule,
+  ensureSchedule,
   fetchMe,
   rejectSchedule,
   submitScheduleForApproval,
@@ -80,6 +81,9 @@ import { AssignEmployeeSheet } from "@/components/schedule/AssignEmployeeSheet";
 import { WeeklyGrid } from "@/components/schedule/WeeklyGrid";
 import { QuickAddShiftSheet } from "@/components/schedule/QuickAddShiftSheet";
 import { QuickAddEmployeesDialog } from "@/components/schedule/dialogs/QuickAddEmployeesDialog";
+import { RequestsInboxButton } from "@/components/schedule/RequestsInboxButton";
+import { RequestLinksButton } from "@/components/schedule/RequestLinksButton";
+import { WeeklyTemplateDialog } from "@/components/schedule/WeeklyTemplateDialog";
 import {
   SetupChecklist,
   clearSetupChecklistDismissal,
@@ -102,6 +106,9 @@ import {
   useApplyProposals,
   useAutoSchedule,
   useCopyFromPreviousWeek,
+  useWeeklyTemplates,
+  useApplyWeeklyTemplate,
+  useGenerateFromHours,
   useDeleteShift,
   useEmployeeMetrics,
   useEmployees,
@@ -142,6 +149,7 @@ function ScheduleInner() {
   const [roleFilter, setRoleFilter] = React.useState<string | "all">("all");
   const [search, setSearch] = React.useState("");
   const [autoOpen, setAutoOpen] = React.useState(false);
+  const [templateOpen, setTemplateOpen] = React.useState(false);
   const [publishOpen, setPublishOpen] = React.useState(false);
   const [exportOpen, setExportOpen] = React.useState(false);
   const [createShiftOpen, setCreateShiftOpen] = React.useState(false);
@@ -165,6 +173,9 @@ function ScheduleInner() {
   const applyProposals = useApplyProposals();
   const publish = usePublishSchedule();
   const copyWeek = useCopyFromPreviousWeek();
+  const weeklyTemplates = useWeeklyTemplates();
+  const applyTemplate = useApplyWeeklyTemplate();
+  const generateFromHoursMut = useGenerateFromHours();
   const deleteShiftMut = useDeleteShift();
 
   // Current-user query — drives which approval action buttons are shown.
@@ -278,6 +289,25 @@ function ScheduleInner() {
     isDemo || isUuid(scheduleQuery.data?.id)
       ? scheduleQuery.data?.id ?? null
       : null;
+
+  // On an empty week the schedule query returns a shell with a pseudo id
+  // ("sched_2026-06-07"). Copy / auto-schedule / template all need a REAL
+  // schedule row (uuid) or the backend rejects the pseudo id. This creates the
+  // row on demand and returns its uuid.
+  const ensureRealScheduleId = React.useCallback(async (): Promise<string | null> => {
+    const cur = scheduleQuery.data?.id;
+    if (cur && isUuid(cur)) return cur;
+    const ws = weekStart.toISODate();
+    if (!ws) return null;
+    try {
+      const ensured = await ensureSchedule(ws);
+      await scheduleQueryReal.refetch();
+      return ensured.id;
+    } catch {
+      return null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scheduleQuery.data?.id, weekStart]);
 
   const submitForApproval = async () => {
     if (!scheduleQuery.data) return;
@@ -541,8 +571,20 @@ function ScheduleInner() {
   const onPreviewAuto = async (weights: AutoScheduleWeights) => {
     if (!scheduleQuery.data) return [];
     if (blockIfDemo()) return [];
+    // Auto-schedule assigns people to EXISTING shifts — it does not create
+    // shifts. With no shifts there is nothing to assign, so tell the user how
+    // to lay down a week instead of silently returning nothing.
+    if ((scheduleQuery.data.shifts?.length ?? 0) === 0) {
+      toast.info('אין משמרות בשבוע זה — לחצו "בנה שבוע" או צרו משמרות תחילה');
+      return [];
+    }
+    const scheduleId = await ensureRealScheduleId();
+    if (!scheduleId) {
+      toast.error("לא ניתן לטעון את הסידור לשבוע זה");
+      return [];
+    }
     const res = await autoSchedule.mutateAsync({
-      scheduleId: scheduleQuery.data.id,
+      scheduleId,
       dryRun: true,
       weights,
     });
@@ -634,14 +676,89 @@ function ScheduleInner() {
     if (!scheduleQuery.data) return;
     if (blockIfDemo()) return;
     try {
-      const res = await copyWeek.mutateAsync(scheduleQuery.data.id);
+      const scheduleId = await ensureRealScheduleId();
+      if (!scheduleId) {
+        toast.error("לא ניתן לטעון את הסידור לשבוע זה");
+        return;
+      }
+      const res = await copyWeek.mutateAsync(scheduleId);
       if (res.copied > 0) {
-        toast.success(`הועתקו ${res.copied} משמרות מהשבוע הקודם`);
+        const withStaff = res.assignmentsCopied
+          ? ` כולל ${res.assignmentsCopied} שיבוצי עובדים`
+          : "";
+        toast.success(`הועתקו ${res.copied} משמרות מהשבוע הקודם${withStaff}`);
       } else {
         toast.info("אין משמרות בשבוע הקודם להעתקה");
       }
     } catch {
       toast.error("העתקת השבוע הקודם נכשלה");
+    }
+  };
+
+  // Unified "build the week" flow: lay down a base (previous week with its
+  // staff, or the single saved weekly template), then open auto-schedule to
+  // fill any remaining gaps while honoring the latest employee requests.
+  const [buildingWeek, setBuildingWeek] = React.useState(false);
+  const buildWeek = async () => {
+    if (!scheduleQuery.data) return;
+    if (blockIfDemo()) return;
+    setBuildingWeek(true);
+    try {
+      const scheduleId = await ensureRealScheduleId();
+      if (!scheduleId) {
+        toast.error("לא ניתן ליצור סידור לשבוע זה");
+        return;
+      }
+      const hasShifts = (scheduleQuery.data.shifts?.length ?? 0) > 0;
+      let laidDownShifts = hasShifts;
+
+      if (!hasShifts) {
+        // 1) Explicit weekly template wins when the manager defined one.
+        const tpls = (weeklyTemplates.data ?? []).filter((t) => t.shifts.length > 0);
+        if (tpls.length >= 1) {
+          const res = await applyTemplate.mutateAsync({ scheduleId, templateId: tpls[0]!.id });
+          if (res.shiftsCreated > 0) {
+            laidDownShifts = true;
+            toast.success(
+              `נבנה מהתבנית "${tpls[0]!.name}" — ${res.shiftsCreated} משמרות`,
+            );
+          }
+        }
+        // 2) Otherwise generate automatically from the business operating hours
+        //    (zero setup — the org already declared its hours + open days).
+        if (!laidDownShifts) {
+          const gen = await generateFromHoursMut.mutateAsync(scheduleId);
+          if (gen.shiftsCreated > 0) {
+            laidDownShifts = true;
+            toast.success(`נבנה משעות הפעילות — ${gen.shiftsCreated} משמרות`);
+          }
+        }
+        // 3) Otherwise carry over last week (shifts + same employees).
+        if (!laidDownShifts) {
+          const copied = await copyWeek.mutateAsync(scheduleId);
+          if (copied.copied > 0) {
+            laidDownShifts = true;
+            const staff = copied.assignmentsCopied
+              ? ` כולל ${copied.assignmentsCopied} עובדים`
+              : "";
+            toast.success(`נבנה בסיס מהשבוע הקודם — ${copied.copied} משמרות${staff}`);
+          }
+        }
+        if (!laidDownShifts) {
+          toast.info(
+            "כדי לבנות שבוע אוטומטית, הגדירו שעות פעילות בהגדרות העסק (או צרו משמרות / תבנית).",
+          );
+          return;
+        }
+      }
+
+      // 3) Fill remaining gaps with auto-schedule (honors employee requests).
+      await scheduleQueryReal.refetch();
+      setAutoOpen(true);
+    } catch {
+      toast.error("בניית השבוע נכשלה");
+    } finally {
+      setBuildingWeek(false);
     }
   };
 
@@ -712,6 +829,33 @@ function ScheduleInner() {
             <span className="hidden sm:inline">רשימת התקנה</span>
           </Button>
         )}
+        <RequestsInboxButton />
+        <RequestLinksButton />
+        <Button
+          variant="glow"
+          size="sm"
+          onClick={buildWeek}
+          disabled={!scheduleQuery.data || buildingWeek}
+          className="h-11 sm:h-10"
+          aria-label="בנה שבוע"
+          title="בונה את השבוע אוטומטית: בסיס מהשבוע הקודם או מהתבנית, מילוי פערים ולפי בקשות העובדים"
+        >
+          <Wand2 className="h-4 w-4" />
+          <span className="hidden sm:inline">
+            {buildingWeek ? "בונה…" : "בנה שבוע"}
+          </span>
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setTemplateOpen(true)}
+          className="h-11 sm:h-10"
+          aria-label="תבנית שבועית"
+          title="הגדר תבנית שבועית קבועה — פעם אחת"
+        >
+          <CalendarCog className="h-4 w-4" />
+          <span className="hidden sm:inline">תבנית שבועית</span>
+        </Button>
         <Button
           variant="outline"
           size="sm"
@@ -719,7 +863,7 @@ function ScheduleInner() {
           disabled={!scheduleQuery.data || copyWeek.isPending}
           className="h-11 sm:h-10"
           aria-label="העתק שבוע קודם"
-          title="העתק את שלד המשמרות מהשבוע הקודם (בלי השיבוצים)"
+          title="העתק את השבוע הקודם כולל העובדים המשובצים"
         >
           <Copy className="h-4 w-4" />
           <span className="hidden sm:inline">
@@ -1188,6 +1332,11 @@ function ScheduleInner() {
         employees={employees}
         shifts={scheduleQuery.data?.shifts ?? []}
         loading={autoSchedule.isPending}
+      />
+      <WeeklyTemplateDialog
+        open={templateOpen}
+        onOpenChange={setTemplateOpen}
+        scheduleId={exportScheduleId}
       />
       <ProposalOverlay
         proposals={pendingProposals}

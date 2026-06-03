@@ -29,6 +29,7 @@ import { billingRoutes } from './modules/billing/billing.routes';
 import { importRoutes } from './modules/import/import.routes';
 import { settingsRoutes } from './modules/settings/settings.routes';
 import { templatesRoutes } from './modules/templates/templates.routes';
+import { weeklyTemplateRoutes } from './modules/templates/weekly-template.routes';
 import { adminRoutes } from './modules/admin/admin.routes';
 import { payrollRoutes } from './modules/payroll/payroll.routes';
 import { timeoffRoutes } from './modules/timeoff/timeoff.routes';
@@ -138,6 +139,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(importRoutes, { prefix: '/v1' });
   await app.register(settingsRoutes, { prefix: '/v1' });
   await app.register(templatesRoutes, { prefix: '/v1' });
+  await app.register(weeklyTemplateRoutes, { prefix: '/v1' });
   await app.register(billingRoutes, { prefix: '/v1' });
   await app.register(adminRoutes, { prefix: '/v1/admin' });
   await app.register(payrollRoutes, { prefix: '/v1' });

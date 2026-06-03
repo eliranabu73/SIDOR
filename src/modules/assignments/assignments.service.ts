@@ -89,6 +89,16 @@ async function loadContext(
     include: { shift: true },
   });
 
+  // Time-off requests overlapping the shift window — drive the TIME_OFF rule.
+  const timeOffRequests = await tx.employeeTimeOffRequest.findMany({
+    where: {
+      employeeId,
+      status: { in: ['PENDING', 'APPROVED'] },
+      startAtUtc: { lt: shift.endAtUtc },
+      endAtUtc: { gt: shift.startAtUtc },
+    },
+  });
+
   const weekStartDate = DateTime.fromJSDate(shift.startAtUtc)
     .setZone(shift.timezone)
     .startOf('week')
@@ -111,6 +121,7 @@ async function loadContext(
     shift,
     employee,
     availabilityRules,
+    timeOffRequests,
     existingAssignments,
     rulesSnapshot: snapshot,
     metrics,

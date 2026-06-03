@@ -219,17 +219,23 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
           // Pseudo id like "sched_2026-05-17" or "current" with explicit weekStart.
           const start = new Date(weekStart);
           const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
-          schedule = await db.query((tx) =>
-            tx.schedule.findFirst({
+          // A week can have duplicate schedule rows (created over time). Pick
+          // deterministically: the one that actually has shifts, else the
+          // oldest. This MUST match the pick in POST /schedules/ensure so the
+          // grid, copy, auto-schedule and template all act on the same row.
+          const candidates = await db.query((tx) =>
+            tx.schedule.findMany({
               where: {
                 organizationId: orgId,
                 periodStartDate: { gte: start, lt: end },
                 ...schedScope,
               },
-              orderBy: { periodStartDate: 'desc' },
+              orderBy: { createdAt: 'asc' },
               include: includeShifts,
             }),
           );
+          schedule =
+            candidates.find((s) => s.shifts.length > 0) ?? candidates[0] ?? null;
         } else {
           // Fallback — most recent schedule whose period started.
           schedule = await db.query((tx) =>
@@ -281,14 +287,22 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
       try {
         const start = new Date(weekStart);
         const end = new Date(start.getTime() + 7 * 86400000);
-        let schedule = await db.query((tx) =>
-          tx.schedule.findFirst({
+        // Deterministic pick (same rule as GET /schedules): prefer the row with
+        // shifts, else the oldest. Prevents binding to an empty duplicate.
+        const existingForWeek = await db.query((tx) =>
+          tx.schedule.findMany({
             where: {
               organizationId: orgId,
               periodStartDate: { gte: start, lt: end },
             },
+            orderBy: { createdAt: 'asc' },
+            include: { _count: { select: { shifts: true } } },
           }),
         );
+        let schedule: { id: string; periodStartDate: Date; status: string } | null =
+          existingForWeek.find((s) => s._count.shifts > 0) ??
+          existingForWeek[0] ??
+          null;
         if (!schedule) {
           schedule = await db.query((tx) =>
             tx.schedule.create({

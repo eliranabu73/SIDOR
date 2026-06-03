@@ -62,6 +62,7 @@ function fakeTx(overrides: Record<string, any>) {
     shift: { findUnique: jest.fn(), update: jest.fn() },
     employee: { findUnique: jest.fn().mockResolvedValue({ id: 'emp-1', roles: [] }) },
     employeeAvailabilityRule: { findMany: jest.fn().mockResolvedValue([]) },
+    employeeTimeOffRequest: { findMany: jest.fn().mockResolvedValue([]) },
     shiftAssignment: {
       findMany: jest.fn().mockResolvedValue([]),
       upsert: jest.fn(),
