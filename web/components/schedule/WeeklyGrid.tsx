@@ -34,6 +34,26 @@ function empColor(name: string) {
   return AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length]!;
 }
 
+// Each distinct shift TIME gets its own colour, so morning vs evening (and any
+// other shift) are instantly scannable across the grid. Same time → same colour.
+const SHIFT_COLORS = [
+  "bg-sky-500/15 border-sky-400/50 text-sky-800 dark:text-sky-200",
+  "bg-violet-500/15 border-violet-400/50 text-violet-800 dark:text-violet-200",
+  "bg-emerald-500/15 border-emerald-400/50 text-emerald-800 dark:text-emerald-200",
+  "bg-amber-500/15 border-amber-400/50 text-amber-800 dark:text-amber-200",
+  "bg-rose-500/15 border-rose-400/50 text-rose-800 dark:text-rose-200",
+  "bg-fuchsia-500/15 border-fuchsia-400/50 text-fuchsia-800 dark:text-fuchsia-200",
+  "bg-cyan-500/15 border-cyan-400/50 text-cyan-800 dark:text-cyan-200",
+  "bg-lime-500/15 border-lime-400/50 text-lime-800 dark:text-lime-200",
+];
+
+function shiftColor(startsAt: string, endsAt: string): string {
+  const key = `${fmt(startsAt)}-${fmt(endsAt)}`;
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return SHIFT_COLORS[h % SHIFT_COLORS.length]!;
+}
+
 function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
   return (
     <div className={cn(
@@ -196,13 +216,13 @@ function AgendaDay({
               "flex items-center gap-3 px-4 py-3",
               unassigned ? "bg-amber-50/50 dark:bg-amber-950/10" : "bg-background",
             )}>
-              {/* Time badge */}
+              {/* Time badge — coloured per shift time */}
               <div className="shrink-0 min-w-[4.5rem]">
-                <div className="rounded-lg bg-muted/60 px-2 py-1 text-center">
-                  <span dir="ltr" className="text-xs font-mono font-semibold tabular-nums text-foreground">
+                <div className={cn("rounded-lg border px-2 py-1 text-center", shiftColor(shift.startsAt, shift.endsAt))}>
+                  <span dir="ltr" className="text-xs font-mono font-bold tabular-nums">
                     {fmt(shift.startsAt)}
                   </span>
-                  <div className="text-[9px] text-muted-foreground">–{fmt(shift.endsAt)}</div>
+                  <div className="text-[9px] opacity-80">–{fmt(shift.endsAt)}</div>
                 </div>
               </div>
 
@@ -272,8 +292,12 @@ function ShiftPill({
   onRemove?: () => void;
   onDelete?: () => void;
 }) {
+  const color = shiftColor(shift.startsAt, shift.endsAt);
   return (
-    <div className="group flex items-center gap-0.5 rounded-md bg-indigo-500/10 border border-indigo-300/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 text-[10px] font-medium">
+    <div className={cn(
+      "group flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold",
+      color,
+    )}>
       <span dir="ltr" className="tabular-nums">{fmt(shift.startsAt)}–{fmt(shift.endsAt)}</span>
       {onRemove && (
         <button
@@ -281,7 +305,7 @@ function ShiftPill({
           onClick={(e) => { e.stopPropagation(); onRemove(); }}
           aria-label="הסר עובד/ת מהמשמרת"
           title="הסר עובד/ת"
-          className="hidden group-hover:flex text-indigo-400 hover:text-red-500"
+          className="hidden group-hover:flex opacity-70 hover:text-red-500"
         >
           <X className="h-2.5 w-2.5" />
         </button>
@@ -292,7 +316,7 @@ function ShiftPill({
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           aria-label="מחק משמרת"
           title="מחק משמרת"
-          className="hidden group-hover:flex text-indigo-400 hover:text-red-600"
+          className="hidden group-hover:flex opacity-70 hover:text-red-600"
         >
           <Trash2 className="h-2.5 w-2.5" />
         </button>

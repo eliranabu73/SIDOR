@@ -598,6 +598,16 @@ function ScheduleInner() {
         })}`,
       );
     }
+    if ((res.proposals?.length ?? 0) === 0) {
+      const assigned = (scheduleQuery.data.shifts ?? []).every(
+        (s) => (s.assignments?.length ?? 0) > 0,
+      );
+      toast.info(
+        assigned
+          ? "כל המשמרות כבר משובצות 👍"
+          : "אין כרגע התאמה אפשרית — בדקו אילוצים/זמינות העובדים",
+      );
+    }
     return res.proposals;
   };
 
@@ -752,9 +762,18 @@ function ScheduleInner() {
         }
       }
 
-      // 3) Fill remaining gaps with auto-schedule (honors employee requests).
+      // Auto-assign employees to the shifts AUTOMATICALLY — no dialog. One
+      // click on "בנה שבוע" lays the shifts AND fills them, honoring requests.
+      const auto = await autoSchedule.mutateAsync({ scheduleId, dryRun: true });
+      const proposals = auto.proposals ?? [];
+      if (proposals.length > 0) {
+        const res = await applyProposals.mutateAsync({ scheduleId, proposals });
+        const placed = res?.applied ?? proposals.length;
+        toast.success(`השבוע נבנה ושובצו ${placed} משמרות 🎉`);
+      } else {
+        toast.info("המשמרות נוצרו. אין כרגע עובדים זמינים לשיבוץ אוטומטי.");
+      }
       await scheduleQueryReal.refetch();
-      setAutoOpen(true);
     } catch {
       toast.error("בניית השבוע נכשלה");
     } finally {
