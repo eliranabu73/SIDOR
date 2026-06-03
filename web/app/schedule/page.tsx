@@ -3,7 +3,15 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { DateTime } from "luxon";
-import { ArrowLeft, CalendarCog, Check, ClipboardList, Copy, Filter, MessageCircle, Printer, Search, Send, Sparkles, Upload, Users as UsersIcon, Wand2, X } from "lucide-react";
+import { ArrowLeft, CalendarCog, Check, ChevronDown, ClipboardList, Copy, Filter, MessageCircle, Printer, Search, Send, Sparkles, Upload, Users as UsersIcon, Wand2, X } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useQuery } from "@tanstack/react-query";
 import {
   DndContext,
@@ -857,84 +865,67 @@ function ScheduleInner() {
           disabled={!scheduleQuery.data || buildingWeek}
           className="h-11 sm:h-10"
           aria-label="בנה שבוע"
-          title="בונה את השבוע אוטומטית: בסיס מהשבוע הקודם או מהתבנית, מילוי פערים ולפי בקשות העובדים"
+          title="לחיצה אחת: יוצר את משמרות השבוע משעות הפעילות ומשבץ את העובדים אוטומטית, לפי הבקשות"
         >
           <Wand2 className="h-4 w-4" />
           <span className="hidden sm:inline">
-            {buildingWeek ? "בונה…" : "בנה שבוע"}
+            {buildingWeek ? "בונה…" : "בנה שבוע אוטומטי"}
           </span>
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setTemplateOpen(true)}
-          className="h-11 sm:h-10"
-          aria-label="תבנית שבועית"
-          title="הגדר תבנית שבועית קבועה — פעם אחת"
-        >
-          <CalendarCog className="h-4 w-4" />
-          <span className="hidden sm:inline">תבנית שבועית</span>
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={copyFromPreviousWeek}
-          disabled={!scheduleQuery.data || copyWeek.isPending}
-          className="h-11 sm:h-10"
-          aria-label="העתק שבוע קודם"
-          title="העתק את השבוע הקודם כולל העובדים המשובצים"
-        >
-          <Copy className="h-4 w-4" />
-          <span className="hidden sm:inline">
-            {copyWeek.isPending ? "מעתיק…" : "העתק שבוע קודם"}
-          </span>
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            if (blockIfDemo()) return;
-            setAutoOpen(true);
-          }}
-          disabled={!scheduleQuery.data}
-          className="h-11 sm:h-10"
-          aria-label="שיבוץ אוטומטי"
-          title="שיבוץ אוטומטי"
-        >
-          <Sparkles className="h-4 w-4" />
-          <span className="hidden sm:inline">שיבוץ אוטומטי</span>
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setExportOpen(true)}
-          disabled={!exportScheduleId}
-          title={
-            exportScheduleId
-              ? "ייצוא ושיתוף — תמונה או PDF"
-              : "אין סידור לשבוע זה — צרו משמרות תחילה"
-          }
-          className="h-11 sm:h-10"
-          aria-label="ייצוא ושיתוף"
-        >
-          <Printer className="h-4 w-4" />
-          <span className="hidden sm:inline">ייצוא ושיתוף</span>
-        </Button>
-        <Button
-          variant="glow"
-          size="sm"
-          onClick={() => {
-            if (blockIfDemo()) return;
-            setPublishOpen(true);
-          }}
-          disabled={!scheduleQuery.data}
-          title="פרסום בוואטסאפ עם קישור אישי לכל עובד"
-          className="h-11 sm:h-10"
-          aria-label="פרסום ב-WhatsApp"
-        >
-          <MessageCircle className="h-4 w-4" />
-          <span className="hidden sm:inline">פרסום ב-WhatsApp</span>
-        </Button>
+        {/* Secondary actions — grouped under one "עוד" menu to keep the bar clean. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-11 sm:h-10"
+              aria-label="עוד פעולות"
+              disabled={!scheduleQuery.data}
+            >
+              <ChevronDown className="h-4 w-4" />
+              <span className="hidden sm:inline">עוד</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>בנייה ועריכה</DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={() => {
+                if (blockIfDemo()) return;
+                setAutoOpen(true);
+              }}
+            >
+              <Sparkles className="h-4 w-4" />
+              שיבוץ אוטומטי
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTemplateOpen(true)}>
+              <CalendarCog className="h-4 w-4" />
+              תבנית שבועית קבועה
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={copyFromPreviousWeek}
+              disabled={copyWeek.isPending}
+            >
+              <Copy className="h-4 w-4" />
+              {copyWeek.isPending ? "מעתיק…" : "העתק שבוע קודם"}
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>שיתוף</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => setExportOpen(true)} disabled={!exportScheduleId}>
+              <Printer className="h-4 w-4" />
+              ייצוא לתמונה / PDF
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                if (blockIfDemo()) return;
+                setPublishOpen(true);
+              }}
+            >
+              <MessageCircle className="h-4 w-4" />
+              שליחה ב-WhatsApp
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {/* Approval workflow buttons — replace publish for branch managers, add review actions for owners. */}
         {isBranchManager && scheduleStatus === "draft" ? (
           <Button
