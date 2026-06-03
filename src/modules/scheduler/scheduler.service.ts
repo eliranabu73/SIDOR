@@ -121,7 +121,13 @@ export class SchedulerService {
     // while waiting for a connection.
     const orgIdForRls = organizationId ?? '';
     const CONCURRENCY = 4;
-    const PER_CALL_TIMEOUT_MS = 8_000;
+    // Each proposal's transaction does real work (load context + validate +
+    // write assignment + metrics upsert + audit + event). 8s was too tight on
+    // higher-latency links — assignments timed out mid-apply, leaving the week
+    // half-filled. 14s stays under Accelerate's 15s interactive cap while giving
+    // slow connections the headroom to finish. Fast calls return immediately, so
+    // there is no downside to the larger ceiling.
+    const PER_CALL_TIMEOUT_MS = 14_000;
 
     type Settled =
       | { ok: true }
