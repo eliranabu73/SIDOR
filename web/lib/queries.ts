@@ -34,6 +34,7 @@ import {
   deleteWeeklyTemplate,
   applyWeeklyTemplate,
   generateFromHours,
+  generateFromTemplates,
   fetchRequestsSummary,
   fetchRequestLinks,
   type CopyFromPreviousWeekResult,
@@ -41,6 +42,7 @@ import {
   type WeeklyTemplateInput,
   type ApplyTemplateResult,
   type GenerateFromHoursResult,
+  type GenerateFromTemplatesResult,
   type RequestsSummary,
   type RequestLinksBundle,
   updateEmployee,
@@ -433,6 +435,17 @@ export function useGenerateFromHours() {
   const qc = useQueryClient();
   return useMutation<GenerateFromHoursResult, Error, ID>({
     mutationFn: (scheduleId) => generateFromHours(scheduleId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["schedule"] });
+      qc.invalidateQueries({ queryKey: ["shifts"] });
+    },
+  });
+}
+
+export function useGenerateFromTemplates() {
+  const qc = useQueryClient();
+  return useMutation<GenerateFromTemplatesResult, Error, ID>({
+    mutationFn: (scheduleId) => generateFromTemplates(scheduleId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["schedule"] });
       qc.invalidateQueries({ queryKey: ["shifts"] });

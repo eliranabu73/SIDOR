@@ -61,32 +61,41 @@ export async function fetchLaborCostForWeek(
     }
   }
 
+  // Money is accumulated as INTEGER agorot and time as INTEGER minutes — never
+  // floats — so summing many shifts cannot drift (this is wages). We convert to
+  // ILS / hours only at the very end (display rounding), never mid-accumulation.
   const employeesById = new Map<
     string,
     {
       employeeId: string;
       fullName: string;
       hourlyRate: number | null;
-      hours: number;
-      cost: number;
+      minutes: number;
+      agorot: number;
     }
   >();
-  const byDay = new Map<string, { hours: number; cost: number; shifts: number }>();
-  const byRole = new Map<string, { hours: number; cost: number }>();
-  const byLocation = new Map<string, { hours: number; cost: number }>();
+  const byDay = new Map<string, { minutes: number; agorot: number; shifts: number }>();
+  const byRole = new Map<string, { minutes: number; agorot: number }>();
+  const byLocation = new Map<string, { minutes: number; agorot: number }>();
 
-  let totalHours = 0;
-  let totalCost = 0;
-  let uncoveredHours = 0; // hours of shifts not assigned yet
+  let totalMinutes = 0;
+  let totalAgorot = 0;
+  let uncoveredMinutes = 0; // minutes of shifts not assigned yet
   let openShifts = 0;
   let shiftsCount = 0;
   let employeesWithoutRate = 0;
   const seenWithoutRate = new Set<string>();
+  const DEFAULT_RATE_AGOROT = DEFAULT_HOURLY_RATE_ILS * 100;
+
+  // cost (agorot) for `minutes` worked at `rateAgorot` per hour, rounded once.
+  const costAgorot = (minutes: number, rateAgorot: number): number =>
+    Math.round((minutes * rateAgorot) / 60);
 
   for (const s of shifts) {
     shiftsCount += 1;
-    const durationHours =
-      (s.endAtUtc.getTime() - s.startAtUtc.getTime()) / 3_600_000;
+    const durationMinutes = Math.round(
+      (s.endAtUtc.getTime() - s.startAtUtc.getTime()) / 60_000,
+    );
     const required = s.requiredEmployeeCount ?? 1;
     const dayKey = s.startAtUtc.toISOString().slice(0, 10);
     const roleKey = s.role?.name ?? 'ללא תפקיד';
@@ -95,70 +104,72 @@ export async function fetchLaborCostForWeek(
     const assignmentCount = s.assignments.length;
     if (assignmentCount < required) {
       openShifts += required - assignmentCount;
-      uncoveredHours += durationHours * (required - assignmentCount);
+      uncoveredMinutes += durationMinutes * (required - assignmentCount);
     }
 
     for (const a of s.assignments) {
       const empRate = (a.employee as { hourlyRate?: unknown }).hourlyRate;
-      const rate = empRate ? Number(empRate) : DEFAULT_HOURLY_RATE_ILS;
+      const rateAgorot = empRate ? Math.round(Number(empRate) * 100) : DEFAULT_RATE_AGOROT;
       if (!empRate && !seenWithoutRate.has(a.employee.id)) {
         seenWithoutRate.add(a.employee.id);
         employeesWithoutRate += 1;
       }
-      const hours = durationHours;
-      const cost = hours * rate;
+      const agorot = costAgorot(durationMinutes, rateAgorot);
 
-      totalHours += hours;
-      totalCost += cost;
+      totalMinutes += durationMinutes;
+      totalAgorot += agorot;
 
       const e = employeesById.get(a.employee.id) ?? {
         employeeId: a.employee.id,
         fullName: a.employee.fullName,
         hourlyRate: empRate ? Number(empRate) : null,
-        hours: 0,
-        cost: 0,
+        minutes: 0,
+        agorot: 0,
       };
-      e.hours += hours;
-      e.cost += cost;
+      e.minutes += durationMinutes;
+      e.agorot += agorot;
       employeesById.set(a.employee.id, e);
 
-      const day = byDay.get(dayKey) ?? { hours: 0, cost: 0, shifts: 0 };
-      day.hours += hours;
-      day.cost += cost;
+      const day = byDay.get(dayKey) ?? { minutes: 0, agorot: 0, shifts: 0 };
+      day.minutes += durationMinutes;
+      day.agorot += agorot;
       byDay.set(dayKey, day);
 
-      const role = byRole.get(roleKey) ?? { hours: 0, cost: 0 };
-      role.hours += hours;
-      role.cost += cost;
+      const role = byRole.get(roleKey) ?? { minutes: 0, agorot: 0 };
+      role.minutes += durationMinutes;
+      role.agorot += agorot;
       byRole.set(roleKey, role);
 
-      const loc = byLocation.get(locKey) ?? { hours: 0, cost: 0 };
-      loc.hours += hours;
-      loc.cost += cost;
+      const loc = byLocation.get(locKey) ?? { minutes: 0, agorot: 0 };
+      loc.minutes += durationMinutes;
+      loc.agorot += agorot;
       byLocation.set(locKey, loc);
     }
 
     // Ensure day key exists even when no assignments yet
     if (!byDay.has(dayKey)) {
-      const day = { hours: 0, cost: 0, shifts: 0 };
-      byDay.set(dayKey, day);
+      byDay.set(dayKey, { minutes: 0, agorot: 0, shifts: 0 });
     }
     byDay.get(dayKey)!.shifts += 1;
   }
 
-  // Overtime estimate — employees with > 42 hours this week (Israeli weekly limit)
+  // Overtime — employees over 42h (2520 min) this week (Israeli weekly limit).
+  const OVERTIME_MINUTES = 42 * 60;
   const overtimeEmployees = [...employeesById.values()].filter(
-    (e) => e.hours > 42,
+    (e) => e.minutes > OVERTIME_MINUTES,
   );
+
+  const hoursOf = (minutes: number) => round(minutes / 60);
+  const ilsOf = (agorot: number) => agorot / 100; // exact 2-decimal ILS
 
   return {
     weekStart: start.toISOString(),
     currency: 'ILS' as const,
     totals: {
-      hours: round(totalHours),
-      cost: round(totalCost),
+      hours: hoursOf(totalMinutes),
+      cost: ilsOf(totalAgorot),
       shifts: shiftsCount,
-      uncoveredHours: round(uncoveredHours),
+      uncoveredHours: hoursOf(uncoveredMinutes),
       openShifts,
       employees: employeesById.size,
       overtimeEmployees: overtimeEmployees.length,
@@ -169,28 +180,28 @@ export async function fetchLaborCostForWeek(
         employeeId: e.employeeId,
         fullName: e.fullName,
         hourlyRate: e.hourlyRate,
-        hours: round(e.hours),
-        cost: round(e.cost),
-        isOvertime: e.hours > 42,
+        hours: hoursOf(e.minutes),
+        cost: ilsOf(e.agorot),
+        isOvertime: e.minutes > OVERTIME_MINUTES,
       }))
       .sort((a, b) => b.cost - a.cost),
     perDay: [...byDay.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([day, v]) => ({
         date: day,
-        hours: round(v.hours),
-        cost: round(v.cost),
+        hours: hoursOf(v.minutes),
+        cost: ilsOf(v.agorot),
         shifts: v.shifts,
       })),
     perRole: [...byRole.entries()].map(([name, v]) => ({
       name,
-      hours: round(v.hours),
-      cost: round(v.cost),
+      hours: hoursOf(v.minutes),
+      cost: ilsOf(v.agorot),
     })),
     perLocation: [...byLocation.entries()].map(([name, v]) => ({
       name,
-      hours: round(v.hours),
-      cost: round(v.cost),
+      hours: hoursOf(v.minutes),
+      cost: ilsOf(v.agorot),
     })),
     defaultHourlyRate: DEFAULT_HOURLY_RATE_ILS,
   };

@@ -17,7 +17,9 @@ import {
   createShiftTemplate,
   updateShiftTemplate,
   deleteShiftTemplate,
+  fetchRoles,
   type ShiftTemplate,
+  type RoleItem,
 } from "@/lib/api";
 
 interface DraftRow {
@@ -25,6 +27,7 @@ interface DraftRow {
   startLocalTime: string;
   endLocalTime: string;
   requiredEmployeeCount: string;
+  roleId: string; // "" = any role
 }
 
 const EMPTY_DRAFT: DraftRow = {
@@ -32,10 +35,13 @@ const EMPTY_DRAFT: DraftRow = {
   startLocalTime: "08:00",
   endLocalTime: "16:00",
   requiredEmployeeCount: "1",
+  roleId: "",
 };
 
 export function ShiftTemplatesEditor() {
   const [rows, setRows] = React.useState<ShiftTemplate[]>([]);
+  const [roles, setRoles] = React.useState<RoleItem[]>([]);
+  const roleName = (id: string | null) => roles.find((r) => r.id === id)?.name ?? "כל תפקיד";
   const [loading, setLoading] = React.useState(true);
   const [adding, setAdding] = React.useState(false);
   const [draft, setDraft] = React.useState<DraftRow>(EMPTY_DRAFT);
@@ -46,8 +52,9 @@ export function ShiftTemplatesEditor() {
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const list = await listShiftTemplates();
+      const [list, roleList] = await Promise.all([listShiftTemplates(), fetchRoles().catch(() => [])]);
       setRows(list);
+      setRoles(roleList);
     } catch {
       toast.error("שגיאה בטעינת תבניות המשמרות");
     } finally {
@@ -81,6 +88,7 @@ export function ShiftTemplatesEditor() {
         startLocalTime: draft.startLocalTime,
         endLocalTime: draft.endLocalTime,
         requiredEmployeeCount: parseInt(draft.requiredEmployeeCount, 10),
+        roleId: draft.roleId || null,
       });
       setRows((prev) => [...prev, created]);
       setDraft(EMPTY_DRAFT);
@@ -100,6 +108,7 @@ export function ShiftTemplatesEditor() {
       startLocalTime: t.startLocalTime,
       endLocalTime: t.endLocalTime,
       requiredEmployeeCount: String(t.requiredEmployeeCount),
+      roleId: t.roleId ?? "",
     });
   };
 
@@ -117,6 +126,7 @@ export function ShiftTemplatesEditor() {
         startLocalTime: editDraft.startLocalTime,
         endLocalTime: editDraft.endLocalTime,
         requiredEmployeeCount: parseInt(editDraft.requiredEmployeeCount, 10),
+        roleId: editDraft.roleId || null,
       });
       setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
       setEditingId(null);
@@ -164,6 +174,7 @@ export function ShiftTemplatesEditor() {
               <thead>
                 <tr className="border-b bg-muted/40 text-muted-foreground">
                   <th className="px-3 py-2 text-right font-medium">שם</th>
+                  <th className="px-3 py-2 text-right font-medium">תפקיד</th>
                   <th className="px-3 py-2 text-right font-medium">התחלה</th>
                   <th className="px-3 py-2 text-right font-medium">סיום</th>
                   <th className="px-3 py-2 text-right font-medium">עובדים</th>
@@ -186,6 +197,24 @@ export function ShiftTemplatesEditor() {
                           />
                         ) : (
                           <span className="font-medium">{t.name}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {isEditing ? (
+                          <select
+                            value={editDraft.roleId}
+                            onChange={(e) =>
+                              setEditDraft((p) => ({ ...p, roleId: e.target.value }))
+                            }
+                            className="h-8 rounded-md border bg-background px-2 text-sm"
+                          >
+                            <option value="">כל תפקיד</option>
+                            {roles.map((r) => (
+                              <option key={r.id} value={r.id}>{r.name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-muted-foreground">{roleName(t.roleId)}</span>
                         )}
                       </td>
                       <td className="px-3 py-2 tabular-nums" dir="ltr">
@@ -288,7 +317,7 @@ export function ShiftTemplatesEditor() {
 
         {adding ? (
           <div className="rounded-md border bg-muted/20 p-3 space-y-3">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               <div>
                 <label className="text-xs text-muted-foreground">שם</label>
                 <Input
@@ -297,6 +326,19 @@ export function ShiftTemplatesEditor() {
                   placeholder="לדוגמה: בוקר"
                   className="h-9"
                 />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">תפקיד</label>
+                <select
+                  value={draft.roleId}
+                  onChange={(e) => setDraft((p) => ({ ...p, roleId: e.target.value }))}
+                  className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                >
+                  <option value="">כל תפקיד</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="text-xs text-muted-foreground">התחלה</label>

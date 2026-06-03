@@ -54,6 +54,30 @@ function shiftColor(startsAt: string, endsAt: string): string {
   return SHIFT_COLORS[h % SHIFT_COLORS.length]!;
 }
 
+const ROLE_DOTS = [
+  "bg-indigo-500", "bg-emerald-500", "bg-rose-500", "bg-amber-500",
+  "bg-sky-500", "bg-fuchsia-500", "bg-cyan-500", "bg-lime-500",
+];
+function roleDot(role: string): string {
+  let h = 0;
+  for (let i = 0; i < role.length; i++) h = (h * 31 + role.charCodeAt(i)) >>> 0;
+  return ROLE_DOTS[h % ROLE_DOTS.length]!;
+}
+
+const NO_ROLE = "ללא תפקיד";
+/** Group employees by their primary role so the grid is sectioned per role. */
+function groupEmployeesByRole(employees: Employee[]): { role: string; emps: Employee[] }[] {
+  const map = new Map<string, Employee[]>();
+  for (const e of employees) {
+    const role = e.roles?.[0] ?? NO_ROLE;
+    (map.get(role) ?? map.set(role, []).get(role)!).push(e);
+  }
+  // Stable, readable order: named roles alphabetically, "ללא תפקיד" last.
+  return [...map.entries()]
+    .sort(([a], [b]) => (a === NO_ROLE ? 1 : b === NO_ROLE ? -1 : a.localeCompare(b, "he")))
+    .map(([role, emps]) => ({ role, emps }));
+}
+
 function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
   return (
     <div className={cn(
@@ -457,7 +481,18 @@ function DesktopGrid({
             </tr>
           </thead>
           <tbody>
-            {employees.map((emp, idx) => (
+            {groupEmployeesByRole(employees).map((group) => (
+              <React.Fragment key={group.role}>
+                <tr className="bg-muted/50">
+                  <td colSpan={8} className="py-1.5 px-3 border-b">
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold">
+                      <span className={cn("h-2.5 w-2.5 rounded-full", roleDot(group.role))} />
+                      {group.role}
+                      <span className="font-normal text-muted-foreground/70">· {group.emps.length}</span>
+                    </span>
+                  </td>
+                </tr>
+                {group.emps.map((emp, idx) => (
               <tr key={emp.id} className={cn("border-b last:border-0 hover:bg-muted/10 transition-colors", idx % 2 === 1 && "bg-muted/5")}>
                 <td className="py-2 px-3 border-s first:border-s-0">
                   <div className="flex items-center gap-2">
@@ -491,6 +526,8 @@ function DesktopGrid({
                   );
                 })}
               </tr>
+                ))}
+              </React.Fragment>
             ))}
           </tbody>
         </table>

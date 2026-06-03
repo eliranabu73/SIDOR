@@ -117,6 +117,7 @@ import {
   useWeeklyTemplates,
   useApplyWeeklyTemplate,
   useGenerateFromHours,
+  useGenerateFromTemplates,
   useDeleteShift,
   useEmployeeMetrics,
   useEmployees,
@@ -184,6 +185,7 @@ function ScheduleInner() {
   const weeklyTemplates = useWeeklyTemplates();
   const applyTemplate = useApplyWeeklyTemplate();
   const generateFromHoursMut = useGenerateFromHours();
+  const generateFromTemplatesMut = useGenerateFromTemplates();
   const deleteShiftMut = useDeleteShift();
 
   // Current-user query — drives which approval action buttons are shown.
@@ -297,6 +299,11 @@ function ScheduleInner() {
     isDemo || isUuid(scheduleQuery.data?.id)
       ? scheduleQuery.data?.id ?? null
       : null;
+
+  // Empty week → show ONLY "בנה שבוע אוטומטי". Requests/share/publish are
+  // irrelevant until the week actually has shifts, so we hide them to keep the
+  // first action obvious and the bar uncluttered.
+  const hasShiftsInWeek = (scheduleQuery.data?.shifts?.length ?? 0) > 0;
 
   // On an empty week the schedule query returns a shell with a pseudo id
   // ("sched_2026-06-07"). Copy / auto-schedule / template all need a REAL
@@ -731,19 +738,25 @@ function ScheduleInner() {
       let laidDownShifts = hasShifts;
 
       if (!hasShifts) {
-        // 1) Explicit weekly template wins when the manager defined one.
-        const tpls = (weeklyTemplates.data ?? []).filter((t) => t.shifts.length > 0);
-        if (tpls.length >= 1) {
-          const res = await applyTemplate.mutateAsync({ scheduleId, templateId: tpls[0]!.id });
-          if (res.shiftsCreated > 0) {
-            laidDownShifts = true;
-            toast.success(
-              `נבנה מהתבנית "${tpls[0]!.name}" — ${res.shiftsCreated} משמרות`,
-            );
+        // 1) The org's defined shift templates (בוקר/צהריים/ערב + manager) are
+        //    the source of truth — keeps role + headcount exactly as designed.
+        const genT = await generateFromTemplatesMut.mutateAsync(scheduleId);
+        if (genT.shiftsCreated > 0) {
+          laidDownShifts = true;
+          toast.success(`נבנה מתבניות המשמרת — ${genT.shiftsCreated} משמרות`);
+        }
+        // 2) A custom weekly template, if one was defined.
+        if (!laidDownShifts) {
+          const tpls = (weeklyTemplates.data ?? []).filter((t) => t.shifts.length > 0);
+          if (tpls.length >= 1) {
+            const res = await applyTemplate.mutateAsync({ scheduleId, templateId: tpls[0]!.id });
+            if (res.shiftsCreated > 0) {
+              laidDownShifts = true;
+              toast.success(`נבנה מהתבנית "${tpls[0]!.name}" — ${res.shiftsCreated} משמרות`);
+            }
           }
         }
-        // 2) Otherwise generate automatically from the business operating hours
-        //    (zero setup — the org already declared its hours + open days).
+        // 3) Otherwise split the business operating hours (zero setup).
         if (!laidDownShifts) {
           const gen = await generateFromHoursMut.mutateAsync(scheduleId);
           if (gen.shiftsCreated > 0) {
@@ -856,8 +869,12 @@ function ScheduleInner() {
             <span className="hidden sm:inline">רשימת התקנה</span>
           </Button>
         )}
-        <RequestsInboxButton />
-        <RequestLinksButton />
+        {hasShiftsInWeek && (
+          <>
+            <RequestsInboxButton />
+            <RequestLinksButton />
+          </>
+        )}
         <Button
           variant="glow"
           size="sm"
@@ -872,6 +889,8 @@ function ScheduleInner() {
             {buildingWeek ? "בונה…" : "בנה שבוע אוטומטי"}
           </span>
         </Button>
+        {hasShiftsInWeek && (
+          <>
         {/* Secondary actions — grouped under one "עוד" menu to keep the bar clean. */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -974,6 +993,8 @@ function ScheduleInner() {
             <Upload className="h-4 w-4" />
             {publish.isPending ? "מפרסם…" : "פרסם ושתף"}
           </Button>
+        )}
+          </>
         )}
       </div>
 

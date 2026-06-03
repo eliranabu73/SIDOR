@@ -91,7 +91,25 @@ function groupShiftsByDay(
       buckets[dayIdx]!.push(s);
     }
   }
+  // Sort each day's shifts by role then time, so same-role shifts sit together
+  // (visual role separation) and the export reads top-to-bottom by start time.
+  for (const b of buckets) {
+    b.sort(
+      (a, c) =>
+        (a.role ?? '~').localeCompare(c.role ?? '~', 'he') ||
+        a.startsAt.localeCompare(c.startsAt),
+    );
+  }
   return buckets;
+}
+
+// Stable per-role colour so each role is visually distinct in the poster.
+const ROLE_HEXES = ['#6366f1', '#10b981', '#f43f5e', '#f59e0b', '#0ea5e9', '#d946ef', '#06b6d4', '#84cc16'];
+function roleColor(role: string | null, fallback: string): string {
+  if (!role) return fallback;
+  let h = 0;
+  for (let i = 0; i < role.length; i++) h = (h * 31 + role.charCodeAt(i)) >>> 0;
+  return ROLE_HEXES[h % ROLE_HEXES.length]!;
 }
 
 function formatHm(iso: string): string {
@@ -248,8 +266,9 @@ export function buildScheduleTemplate(
             flex: '1 1 0',
           },
         },
-        ...dayShifts.slice(0, 6).map((s, sidx) =>
-          createElement(
+        ...dayShifts.slice(0, 6).map((s, sidx) => {
+          const rc = roleColor(s.role, theme.accent);
+          return createElement(
             'div',
             {
               key: sidx,
@@ -260,10 +279,7 @@ export function buildScheduleTemplate(
                 borderRadius: 8,
                 background: theme.shiftBg,
                 border: `1px solid ${theme.shiftBorder}`,
-                borderRight:
-                  style === 'dark' || style === 'branded'
-                    ? `3px solid ${theme.accent}`
-                    : `2px solid ${theme.accent}`,
+                borderRight: `3px solid ${rc}`,
               },
             },
             createElement(
@@ -282,7 +298,7 @@ export function buildScheduleTemplate(
               s.role
                 ? createElement(
                     'span',
-                    { style: { color: theme.accent, fontWeight: 600 } },
+                    { style: { color: rc, fontWeight: 700 } },
                     vis(s.role),
                   )
                 : null,
@@ -299,8 +315,8 @@ export function buildScheduleTemplate(
               },
               vis(s.employeeNames.slice(0, 3).join(' · ') || '— לא משובץ —'),
             ),
-          ),
-        ),
+          );
+        }),
       ),
     );
   }).reverse(); // reverse so Sunday (idx 0) is rightmost column

@@ -11,37 +11,9 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { toast } from "sonner";
+import { fetchConfirmations, type ConfirmationsData } from "@/lib/api";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
-
-type EmployeeConfirmEntry = {
-  employeeId: string;
-  fullName: string;
-  phone: string | null;
-  confirmedAt: string | null;
-  confirmedVia: string | null;
-  shiftCount: number;
-  confirmedShiftCount: number;
-};
-
-type ConfirmationsData = {
-  total: number;
-  confirmed: number;
-  pending: number;
-  employees: EmployeeConfirmEntry[];
-};
-
-async function fetchConfirmations(
-  scheduleId: string,
-): Promise<ConfirmationsData> {
-  const res = await fetch(
-    `${API_URL}/v1/schedules/${encodeURIComponent(scheduleId)}/confirmations`,
-    { credentials: "include" },
-  );
-  if (!res.ok) throw new Error(`שגיאה ${res.status}`);
-  return res.json() as Promise<ConfirmationsData>;
-}
+type EmployeeConfirmEntry = ConfirmationsData["employees"][number];
 
 function waReminderLink(
   employee: EmployeeConfirmEntry,

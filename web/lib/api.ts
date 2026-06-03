@@ -1765,6 +1765,21 @@ export function generateFromHours(scheduleId: ID): Promise<GenerateFromHoursResu
   );
 }
 
+export interface GenerateFromTemplatesResult {
+  shiftsCreated: number;
+  templatesUsed: number;
+  openDays: number[];
+  message?: string;
+}
+
+/** Create the week's shifts from the org's defined shift templates (role + headcount). */
+export function generateFromTemplates(scheduleId: ID): Promise<GenerateFromTemplatesResult> {
+  return request<GenerateFromTemplatesResult>(
+    `/v1/schedules/${scheduleId}/generate-from-templates`,
+    { method: "POST" },
+  );
+}
+
 // --------- Manager requests inbox (WS4) ---------
 
 export interface RequestsSummaryItem {
@@ -1805,4 +1820,24 @@ export interface RequestLinksBundle {
 /** Per-employee links to collect availability/time-off before building a schedule. */
 export function fetchRequestLinks(): Promise<RequestLinksBundle> {
   return request<RequestLinksBundle>(`/v1/share/request-links`);
+}
+
+export interface ConfirmationsData {
+  total: number;
+  confirmed: number;
+  pending: number;
+  employees: Array<{
+    employeeId: string;
+    fullName: string;
+    phone: string | null;
+    confirmedAt: string | null;
+    confirmedVia: string | null;
+    shiftCount: number;
+    confirmedShiftCount: number;
+  }>;
+}
+
+/** Per-employee confirmation status for a published schedule (Bearer-authed). */
+export function fetchConfirmations(scheduleId: ID): Promise<ConfirmationsData> {
+  return request<ConfirmationsData>(`/v1/schedules/${scheduleId}/confirmations`);
 }

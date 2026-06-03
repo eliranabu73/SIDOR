@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { SchedulerService, type ProviderName } from './scheduler.service';
 import { persistCandidates } from './candidate-generation.service';
-import { generateShiftsFromOperatingHours } from './operating-hours.service';
+import { generateShiftsFromOperatingHours, generateShiftsFromShiftTemplates } from './operating-hours.service';
 import { computeWeeklyCost } from './labor-cost.service';
 import { HttpError } from '../../shared/errors';
 import { prisma, withOrgContext } from '../../db/prisma';
@@ -289,6 +289,28 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
       try {
         const result = await dbFor(req).query((tx) =>
           generateShiftsFromOperatingHours(
+            { scheduleId, organizationId: orgIdFor(req) },
+            tx,
+          ),
+        );
+        return reply.send(result);
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
+
+  // MANAGER — generate the week's shifts from the org's defined ShiftTemplates
+  // (בוקר/צהריים/ערב + manager), preserving role + required headcount.
+  // POST /v1/schedules/:scheduleId/generate-from-templates
+  app.post(
+    '/schedules/:scheduleId/generate-from-templates',
+    { schema: { params: ScheduleIdParam }, preHandler: authHandlers },
+    async (req, reply) => {
+      const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
+      try {
+        const result = await dbFor(req).query((tx) =>
+          generateShiftsFromShiftTemplates(
             { scheduleId, organizationId: orgIdFor(req) },
             tx,
           ),
