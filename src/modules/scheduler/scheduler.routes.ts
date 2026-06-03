@@ -28,6 +28,8 @@ function checkAutoScheduleRateLimit(orgId: string): boolean {
 }
 
 const DEMO_ORG_ID = '10000000-0000-0000-0000-000000000001';
+// Used as the actor when no authenticated user is present (AUTH_DISABLED mode).
+const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
 function orgIdFor(req: { user?: { orgId?: string } }): string {
   return req.user?.orgId ?? DEMO_ORG_ID;
 }
@@ -123,7 +125,9 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
       const body = req.body as z.infer<typeof ApplyProposalsBody>;
-      const actingUserId = req.user!.id;
+      // req.user is absent in AUTH_DISABLED mode; fall back to a system
+      // sentinel uuid so the route never 500s on the optional actor id.
+      const actingUserId = req.user?.id ?? SYSTEM_USER_ID;
 
       try {
         // The service runs each applyAssignment inside its own short
@@ -147,7 +151,7 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req, reply) => {
       const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
-      const actingUserId = req.user!.id;
+      const actingUserId = req.user?.id ?? SYSTEM_USER_ID;
 
       try {
         const updated = await dbFor(req).query((tx) => {
