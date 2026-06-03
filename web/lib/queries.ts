@@ -28,7 +28,21 @@ import {
   patchAssignment,
   publishSchedule,
   runAutoSchedule,
+  fetchWeeklyTemplates,
+  createWeeklyTemplate,
+  updateWeeklyTemplate,
+  deleteWeeklyTemplate,
+  applyWeeklyTemplate,
+  generateFromHours,
+  fetchRequestsSummary,
+  fetchRequestLinks,
   type CopyFromPreviousWeekResult,
+  type WeeklyTemplate,
+  type WeeklyTemplateInput,
+  type ApplyTemplateResult,
+  type GenerateFromHoursResult,
+  type RequestsSummary,
+  type RequestLinksBundle,
   updateEmployee,
   validateAssignment,
   type CreateEmployeeBody,
@@ -367,6 +381,79 @@ export function useCopyFromPreviousWeek() {
       qc.invalidateQueries({ queryKey: ["schedule"] });
       qc.invalidateQueries({ queryKey: ["shifts"] });
     },
+  });
+}
+
+// --------- Weekly templates + requests inbox (WS3/WS4) ---------
+
+export function useWeeklyTemplates() {
+  return useQuery<WeeklyTemplate[]>({
+    queryKey: ["weekly-templates"],
+    queryFn: fetchWeeklyTemplates,
+    enabled: !USE_MOCKS,
+  });
+}
+
+export function useCreateWeeklyTemplate() {
+  const qc = useQueryClient();
+  return useMutation<WeeklyTemplate, Error, WeeklyTemplateInput>({
+    mutationFn: (body) => createWeeklyTemplate(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["weekly-templates"] }),
+  });
+}
+
+export function useUpdateWeeklyTemplate() {
+  const qc = useQueryClient();
+  return useMutation<WeeklyTemplate, Error, { id: ID; body: WeeklyTemplateInput }>({
+    mutationFn: ({ id, body }) => updateWeeklyTemplate(id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["weekly-templates"] }),
+  });
+}
+
+export function useDeleteWeeklyTemplate() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, ID>({
+    mutationFn: (id) => deleteWeeklyTemplate(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["weekly-templates"] }),
+  });
+}
+
+export function useApplyWeeklyTemplate() {
+  const qc = useQueryClient();
+  return useMutation<ApplyTemplateResult, Error, { scheduleId: ID; templateId: ID }>({
+    mutationFn: ({ scheduleId, templateId }) => applyWeeklyTemplate(scheduleId, templateId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["schedule"] });
+      qc.invalidateQueries({ queryKey: ["shifts"] });
+    },
+  });
+}
+
+export function useGenerateFromHours() {
+  const qc = useQueryClient();
+  return useMutation<GenerateFromHoursResult, Error, ID>({
+    mutationFn: (scheduleId) => generateFromHours(scheduleId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["schedule"] });
+      qc.invalidateQueries({ queryKey: ["shifts"] });
+    },
+  });
+}
+
+export function useRequestsSummary() {
+  return useQuery<RequestsSummary>({
+    queryKey: ["requests", "summary"],
+    queryFn: fetchRequestsSummary,
+    enabled: !USE_MOCKS,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useRequestLinks(enabled: boolean) {
+  return useQuery<RequestLinksBundle>({
+    queryKey: ["requests", "links"],
+    queryFn: fetchRequestLinks,
+    enabled: enabled && !USE_MOCKS,
   });
 }
 

@@ -3,6 +3,7 @@ import type {
   Employee,
   EmployeeRole,
   EmployeeAvailabilityRule,
+  EmployeeTimeOffRequest,
   ShiftAssignment,
   EmployeeScheduleMetrics,
 } from '@prisma/client';
@@ -41,6 +42,8 @@ export interface ValidationContext {
   shift: Shift;
   employee: EmployeeWithRoles;
   availabilityRules: EmployeeAvailabilityRule[];
+  /** Time-off requests for this employee overlapping the shift window. PENDING + APPROVED block. */
+  timeOffRequests: EmployeeTimeOffRequest[];
   existingAssignments: Array<ShiftAssignment & { shift: Shift }>;
   rulesSnapshot: RulesSnapshot;
   metrics: EmployeeScheduleMetrics | null;

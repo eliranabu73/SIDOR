@@ -225,6 +225,46 @@ export async function buildPublishBundle(
 }
 
 /**
+ * Build per-employee "requests" links the manager can share so employees fill
+ * their availability + time-off BEFORE the schedule is built. Unlike
+ * buildPublishBundle (which announces a published schedule), the message here
+ * invites the employee to submit constraints. Reuses the same signed share
+ * token + /e/{token} page, which already exposes the availability / time-off
+ * forms. No schedule needed — works any time.
+ */
+export async function buildRequestLinksBundle(
+  input: { organizationId: string },
+  db: Db = defaultPrisma,
+) {
+  const employees = await db.employee.findMany({
+    where: { organizationId: input.organizationId, isActive: true },
+    select: { id: true, fullName: true, phone: true },
+    orderBy: { fullName: 'asc' },
+  });
+
+  const links = employees.map((e) => {
+    const token = signEmployeeToken({
+      employeeId: e.id,
+      organizationId: input.organizationId,
+    });
+    const url = shareUrlForEmployee(token);
+    const personal =
+      `שלום ${e.fullName} 👋\n` +
+      `לפני שאני בונה את הסידור — מלא/י כאן את הזמינות והבקשות שלך:\n${url}\n\n` +
+      `אפשר לעדכן ימים שאי אפשר לעבוד או לבקש חופש. תודה! 🙏`;
+    return {
+      employeeId: e.id,
+      fullName: e.fullName,
+      phone: e.phone,
+      url,
+      whatsapp: whatsappLinkForPhone(e.phone, personal),
+    };
+  });
+
+  return { count: links.length, links };
+}
+
+/**
  * Read-only schedule view for one employee, derived from their share token.
  */
 export async function fetchEmployeeView(

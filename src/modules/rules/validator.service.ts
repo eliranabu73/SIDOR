@@ -7,6 +7,7 @@ import type {
 import { employeeActiveRule } from './rules/employee-active.rule';
 import { roleMatchRule } from './rules/role-match.rule';
 import { availabilityRule } from './rules/availability.rule';
+import { timeOffRule } from './rules/time-off.rule';
 import { overlapRule } from './rules/overlap.rule';
 import { minRestRule } from './rules/min-rest.rule';
 import { maxHoursDayRule } from './rules/max-hours-day.rule';
@@ -26,6 +27,7 @@ export const FAST_RULES: ReadonlyArray<{ name: string; fn: RuleFn }> = [
   { name: 'employeeActive', fn: employeeActiveRule },
   { name: 'roleMatch', fn: roleMatchRule },
   { name: 'availability', fn: availabilityRule },
+  { name: 'timeOff', fn: timeOffRule },
   { name: 'overlap', fn: overlapRule },
   { name: 'minRest', fn: minRestRule },
   { name: 'maxHoursDay', fn: maxHoursDayRule },

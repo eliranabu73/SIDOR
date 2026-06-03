@@ -3,6 +3,7 @@ import type {
   EmployeeRole,
   EmployeeAvailabilityRule,
   EmployeeScheduleMetrics,
+  EmployeeTimeOffRequest,
   Shift,
   ShiftAssignment,
 } from '@prisma/client';
@@ -156,6 +157,24 @@ export function makeMetrics(
   };
 }
 
+export function makeTimeOff(
+  overrides: Partial<EmployeeTimeOffRequest> = {},
+): EmployeeTimeOffRequest {
+  return {
+    id: uid(),
+    employeeId: EMP_ID,
+    startAtUtc: new Date('2026-05-25T00:00:00Z'),
+    endAtUtc: new Date('2026-05-26T00:00:00Z'),
+    timezone: 'Asia/Jerusalem',
+    reason: null,
+    status: 'PENDING',
+    approvedByUserId: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
 export function makeContext(overrides: Partial<ValidationContext> = {}): ValidationContext {
   const shift = overrides.shift ?? makeShift();
   const employee =
@@ -164,6 +183,7 @@ export function makeContext(overrides: Partial<ValidationContext> = {}): Validat
     shift,
     employee,
     availabilityRules: overrides.availabilityRules ?? [makeAvailability()],
+    timeOffRequests: overrides.timeOffRequests ?? [],
     existingAssignments: overrides.existingAssignments ?? [],
     rulesSnapshot: overrides.rulesSnapshot ?? { ...SYSTEM_DEFAULT_RULES },
     metrics: overrides.metrics ?? makeMetrics(),

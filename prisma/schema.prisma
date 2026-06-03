@@ -199,6 +199,7 @@ model Organization {
   employees      Employee[]
   schedules      Schedule[]
   shiftTemplates ShiftTemplate[]
+  weeklyTemplates WeeklyTemplate[]
   shifts         Shift[]
   swaps          ShiftSwapRequest[]
   customRules    CustomRuleDefinition[]
@@ -250,6 +251,7 @@ model Location {
   departments    Department[]
   schedules      Schedule[]
   shiftTemplates ShiftTemplate[]
+  weeklyTemplates WeeklyTemplate[]
   shifts         Shift[]
   defaultedBy    Employee[]      @relation("EmployeeDefaultLocation")
   memberships    Membership[]
@@ -534,6 +536,52 @@ model ShiftTemplate {
 
   @@index([organizationId])
   @@map("shift_templates")
+}
+
+// =========================================================
+// Weekly recurring templates — "define the week once"
+// =========================================================
+
+/// A reusable weekly staffing pattern for an org/location. The manager builds
+/// this once; each new week is materialised from it via applyTemplateToSchedule.
+model WeeklyTemplate {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  locationId     String?  @db.Uuid
+  name           String
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  shifts       WeeklyTemplateShift[]
+
+  @@index([organizationId])
+  @@map("weekly_templates")
+}
+
+/// One recurring shift slot inside a WeeklyTemplate, keyed by day-of-week.
+/// `defaultEmployeeIds` are the people normally assigned — materialised as
+/// ShiftAssignments when the template is applied to a concrete week.
+model WeeklyTemplateShift {
+  id                    String   @id @default(uuid()) @db.Uuid
+  weeklyTemplateId      String   @db.Uuid
+  dayOfWeek             Int // 0..6 (0 = Sunday)
+  startLocalTime        String // "HH:mm" or "HH:mm:ss"
+  endLocalTime          String
+  timezone              String   @default("Asia/Jerusalem")
+  roleId                String?  @db.Uuid
+  requiredEmployeeCount Int      @default(1)
+  /// Employee UUIDs assigned by default. Stored as text[] to avoid a join table.
+  defaultEmployeeIds    String[] @default([])
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  template WeeklyTemplate @relation(fields: [weeklyTemplateId], references: [id], onDelete: Cascade)
+
+  @@index([weeklyTemplateId, dayOfWeek])
+  @@map("weekly_template_shifts")
 }
 
 model Shift {
