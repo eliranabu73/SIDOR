@@ -66,10 +66,14 @@ const ScheduleBoard = dynamic(
   () => import("@/components/schedule/ScheduleBoard").then((m) => m.ScheduleBoard),
   {
     ssr: false,
+    // Reserve a realistic height so the swap from skeleton → real grid does not
+    // shift the page (CLS). Mobile renders a tall day/week agenda, so each
+    // placeholder row gets a generous min-height and the whole block reserves
+    // most of the viewport — keeps Cumulative Layout Shift near zero.
     loading: () => (
-      <div className="flex flex-col gap-2 sm:grid sm:grid-cols-7">
+      <div className="flex min-h-[70svh] flex-col gap-2 sm:grid sm:min-h-0 sm:grid-cols-7">
         {Array.from({ length: 7 }).map((_, i) => (
-          <Skeleton key={i} className="h-24 sm:h-96" />
+          <Skeleton key={i} className="h-40 sm:h-96" />
         ))}
       </div>
     ),
