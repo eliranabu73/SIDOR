@@ -81,19 +81,50 @@ import {
   WeekSelector,
   startOfWeekSunday,
 } from "@/components/schedule/WeekSelector";
-import { AutoScheduleDialog } from "@/components/schedule/AutoScheduleDialog";
-import { ProposalOverlay } from "@/components/schedule/ProposalOverlay";
-import { PublishWhatsAppDialog } from "@/components/schedule/PublishWhatsAppDialog";
 import { ConfirmationStatus, ConfirmationPill } from "@/components/schedule/ConfirmationStatus";
-import { ExportDialog } from "@/components/schedule/ExportDialog";
-import { CreateShiftDialog } from "@/components/schedule/CreateShiftDialog";
-import { AssignEmployeeSheet } from "@/components/schedule/AssignEmployeeSheet";
 import { WeeklyGrid } from "@/components/schedule/WeeklyGrid";
-import { QuickAddShiftSheet } from "@/components/schedule/QuickAddShiftSheet";
-import { QuickAddEmployeesDialog } from "@/components/schedule/dialogs/QuickAddEmployeesDialog";
 import { RequestsInboxButton } from "@/components/schedule/RequestsInboxButton";
 import { RequestLinksButton } from "@/components/schedule/RequestLinksButton";
-import { WeeklyTemplateDialog } from "@/components/schedule/WeeklyTemplateDialog";
+
+// Heavy, interaction-gated modals — code-split out of the initial bundle so the
+// grid paints with far less JS to parse/execute (cuts Total Blocking Time and
+// the LCP render delay). Each chunk loads on first open.
+const AutoScheduleDialog = dynamic(
+  () => import("@/components/schedule/AutoScheduleDialog").then((m) => m.AutoScheduleDialog),
+  { ssr: false },
+);
+const ProposalOverlay = dynamic(
+  () => import("@/components/schedule/ProposalOverlay").then((m) => m.ProposalOverlay),
+  { ssr: false },
+);
+const PublishWhatsAppDialog = dynamic(
+  () => import("@/components/schedule/PublishWhatsAppDialog").then((m) => m.PublishWhatsAppDialog),
+  { ssr: false },
+);
+const ExportDialog = dynamic(
+  () => import("@/components/schedule/ExportDialog").then((m) => m.ExportDialog),
+  { ssr: false },
+);
+const CreateShiftDialog = dynamic(
+  () => import("@/components/schedule/CreateShiftDialog").then((m) => m.CreateShiftDialog),
+  { ssr: false },
+);
+const AssignEmployeeSheet = dynamic(
+  () => import("@/components/schedule/AssignEmployeeSheet").then((m) => m.AssignEmployeeSheet),
+  { ssr: false },
+);
+const QuickAddShiftSheet = dynamic(
+  () => import("@/components/schedule/QuickAddShiftSheet").then((m) => m.QuickAddShiftSheet),
+  { ssr: false },
+);
+const QuickAddEmployeesDialog = dynamic(
+  () => import("@/components/schedule/dialogs/QuickAddEmployeesDialog").then((m) => m.QuickAddEmployeesDialog),
+  { ssr: false },
+);
+const WeeklyTemplateDialog = dynamic(
+  () => import("@/components/schedule/WeeklyTemplateDialog").then((m) => m.WeeklyTemplateDialog),
+  { ssr: false },
+);
 import {
   SetupChecklist,
   clearSetupChecklistDismissal,
@@ -1593,11 +1624,15 @@ function ScheduleInner() {
         shifts={scheduleQuery.data?.shifts ?? []}
         loading={autoSchedule.isPending}
       />
-      <WeeklyTemplateDialog
-        open={templateOpen}
-        onOpenChange={setTemplateOpen}
-        scheduleId={exportScheduleId}
-      />
+      {/* Mounted only when opened so its internal data hooks (employees +
+          weekly-templates) stay off the first-paint critical path. */}
+      {templateOpen && (
+        <WeeklyTemplateDialog
+          open
+          onOpenChange={setTemplateOpen}
+          scheduleId={exportScheduleId}
+        />
+      )}
       <ProposalOverlay
         proposals={pendingProposals}
         onApply={() => void applyNow()}

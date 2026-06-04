@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Clock, MessageCircle, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -49,27 +50,26 @@ export function ConfirmationStatus({
   weekLabel,
   portalBaseUrl,
 }: Props) {
-  const [data, setData] = React.useState<ConfirmationsData | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
   const [reminderOpen, setReminderOpen] = React.useState(false);
 
-  const load = React.useCallback(() => {
-    if (!isPublished) return;
-    setLoading(true);
-    fetchConfirmations(scheduleId)
-      .then(setData)
-      .catch((e: unknown) => {
-        // Log the raw error for diagnostics; show a fixed Hebrew line to users.
-        console.error("[ConfirmationStatus] failed to load confirmations", e);
-        setError("load-failed");
-      })
-      .finally(() => setLoading(false));
-  }, [scheduleId, isPublished]);
-
-  React.useEffect(() => {
-    load();
-  }, [load]);
+  // Shared react-query key — ConfirmationPill reads the SAME key, so the two
+  // widgets coalesce into a single /v1/schedules/:id/confirmations request
+  // instead of firing one each on every schedule-page load.
+  const {
+    data,
+    isLoading: loading,
+    isError,
+    refetch,
+  } = useQuery<ConfirmationsData>({
+    queryKey: ["confirmations", scheduleId],
+    queryFn: () => fetchConfirmations(scheduleId),
+    enabled: isPublished,
+    staleTime: 30_000,
+    retry: 1,
+  });
+  const load = () => {
+    void refetch();
+  };
 
   if (!isPublished) return null;
 
@@ -77,7 +77,7 @@ export function ConfirmationStatus({
     return <Skeleton className="h-16 w-full rounded-2xl" />;
   }
 
-  if (error) {
+  if (isError && !data) {
     return (
       <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card p-3 text-xs text-muted-foreground">
         <span>לא ניתן לטעון את מצב האישורים כעת. נסו לרענן.</span>
@@ -262,17 +262,14 @@ export function ConfirmationPill({
   scheduleId: string;
   isPublished: boolean;
 }) {
-  const [data, setData] = React.useState<Pick<
-    ConfirmationsData,
-    "confirmed" | "total"
-  > | null>(null);
-
-  React.useEffect(() => {
-    if (!isPublished) return;
-    fetchConfirmations(scheduleId)
-      .then((d) => setData({ confirmed: d.confirmed, total: d.total }))
-      .catch(() => {/* silent */});
-  }, [scheduleId, isPublished]);
+  // Reuses the SAME query key as ConfirmationStatus → no extra network call.
+  const { data } = useQuery<ConfirmationsData>({
+    queryKey: ["confirmations", scheduleId],
+    queryFn: () => fetchConfirmations(scheduleId),
+    enabled: isPublished,
+    staleTime: 30_000,
+    retry: 1,
+  });
 
   if (!isPublished || !data) return null;
 

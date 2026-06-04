@@ -285,11 +285,16 @@ export function useDashboard(
     staleTime: 5 * 60_000,
   });
 
+  // `me` is already part of the /v1/dashboard payload, so we do NOT fire a
+  // second /v1/me on mount. This query only runs as a fallback if the dashboard
+  // request errors (so org-name/role resolution still recovers). Eliminates one
+  // cold serverless round-trip on every schedule-page load.
   const meQuery = useQuery<MeResponse>({
     queryKey: queryKeys.me(),
     queryFn: fetchMe,
-    enabled: !USE_MOCKS,
+    enabled: !USE_MOCKS && dashboardQuery.isError,
     staleTime: 5 * 60_000,
+    retry: 1,
   });
 
   const metricsQuery = useEmployeeMetricsLazy(options?.metricsEnabled ?? false);
@@ -507,11 +512,20 @@ export function useCopyFromPreviousWeek() {
 
 // --------- Weekly templates + requests inbox (WS3/WS4) ---------
 
-export function useWeeklyTemplates() {
+/**
+ * Weekly templates are only needed when the user builds a week or opens the
+ * template dialog — NOT on first paint. Defaults to disabled so the schedule
+ * page no longer fires /v1/weekly-templates (a cold serverless call) on every
+ * load; callers `.refetch()` it on demand (build flow) or pass `enabled` when a
+ * dialog mounts. `retry: 1` caps the retry storm if the endpoint is briefly 5xx.
+ */
+export function useWeeklyTemplates(enabled = false) {
   return useQuery<WeeklyTemplate[]>({
     queryKey: ["weekly-templates"],
     queryFn: fetchWeeklyTemplates,
-    enabled: !USE_MOCKS,
+    enabled: enabled && !USE_MOCKS,
+    retry: 1,
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -587,6 +601,8 @@ export function useRequestsSummary() {
     queryFn: fetchRequestsSummary,
     enabled: !USE_MOCKS,
     refetchInterval: 60_000,
+    retry: 1,
+    staleTime: 30_000,
   });
 }
 

@@ -48,7 +48,11 @@ export async function weeklyTemplateRoutes(app: FastifyInstance): Promise<void> 
       const rows = await dbFor(req).query((tx) => listWeeklyTemplates(orgIdFor(req), tx));
       return reply.send(rows);
     } catch (err) {
-      return fail(reply, err);
+      // The list is a non-critical read (used only to populate the template
+      // dialog). A transient DB/migration hiccup must NOT surface as a 500 that
+      // the client retries — degrade to an empty list so the UI stays usable.
+      req.log.error({ err }, 'listWeeklyTemplates failed — returning empty list');
+      return reply.send([]);
     }
   });
 

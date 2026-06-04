@@ -258,8 +258,33 @@ export interface MeResponse {
   activeOrgId: ID | null;
 }
 
+/**
+ * `/v1/me` is requested by several independent auth guards (AuthGuard,
+ * DemoBoundary, admin redirect) that mount together on every page. Each used to
+ * fire its own raw fetch — up to 4 concurrent cold serverless calls. We coalesce
+ * them: while a request is in flight, every caller awaits the SAME promise, and
+ * the resolved value is briefly memoised so guards mounting milliseconds apart
+ * reuse it instead of hammering the backend.
+ */
+let _meInflight: Promise<MeResponse> | null = null;
+let _meCache: { value: MeResponse; at: number } | null = null;
+const ME_TTL_MS = 10_000;
+
 export function fetchMe(): Promise<MeResponse> {
-  return request<MeResponse>(`/v1/me`);
+  const now = Date.now();
+  if (_meCache && now - _meCache.at < ME_TTL_MS) {
+    return Promise.resolve(_meCache.value);
+  }
+  if (_meInflight) return _meInflight;
+  _meInflight = request<MeResponse>(`/v1/me`)
+    .then((value) => {
+      _meCache = { value, at: Date.now() };
+      return value;
+    })
+    .finally(() => {
+      _meInflight = null;
+    });
+  return _meInflight;
 }
 
 export interface CreateOrgBody {

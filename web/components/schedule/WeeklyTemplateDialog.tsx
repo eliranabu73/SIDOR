@@ -65,7 +65,9 @@ function toRows(t: WeeklyTemplate): RowState[] {
 }
 
 export function WeeklyTemplateDialog({ open, onOpenChange, scheduleId }: Props) {
-  const templates = useWeeklyTemplates();
+  // Only fetch the template list while the dialog is open — keeps
+  // /v1/weekly-templates off the schedule page's first-paint critical path.
+  const templates = useWeeklyTemplates(open);
   const employees = useEmployees();
   const roles = useRoles();
   const createTpl = useCreateWeeklyTemplate();
