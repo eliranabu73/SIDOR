@@ -1,7 +1,7 @@
 import type { RuleFn, RuleResult } from '../types';
 import { intervalsOverlap } from '../../../shared/tz';
 
-const ACTIVE_STATUSES = new Set(['PROPOSED', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED']);
+const ACTIVE_STATUSES = new Set(['PROPOSED', 'CONFIRMED', 'COMPLETED']);
 
 export const overlapRule: RuleFn = (ctx): RuleResult => {
   const { shift, existingAssignments } = ctx;

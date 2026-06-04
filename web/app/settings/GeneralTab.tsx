@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Save, Upload, X, Image as ImageIcon } from "lucide-react";
+import { Save, Upload, X, Image as ImageIcon, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { TimeSelect } from "@/components/ui/TimeSelect";
 import {
   Card,
@@ -57,6 +58,27 @@ export interface GeneralTabProps {
   onLogoUpload: (file: File) => Promise<void>;
   onLogoRemove: () => Promise<void>;
   logoUploading?: boolean;
+}
+
+/** Small inline error line shown UNDER an invalid field. */
+function FieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null;
+  return (
+    <p id={id} role="alert" className="text-xs text-destructive">
+      {message}
+    </p>
+  );
+}
+
+/** "saved" pill that fades after a successful save. */
+function SavedHint({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600">
+      <Check className="h-3.5 w-3.5" />
+      נשמר
+    </span>
+  );
 }
 
 export default function GeneralTab({
@@ -123,12 +145,75 @@ export default function GeneralTab({
     await onLogoUpload(file);
   };
 
+  // ── Inline validation ──────────────────────────────────────────────
+  // Errors surface only after the user attempts to save that section, so the
+  // form isn't noisy on first render.
+  const [bizSubmitted, setBizSubmitted] = React.useState(false);
+  const [hoursSubmitted, setHoursSubmitted] = React.useState(false);
+  const [bizSaved, setBizSaved] = React.useState(false);
+  const [hoursSaved, setHoursSaved] = React.useState(false);
+
+  const nameError = !orgName.trim() ? "שם העסק נדרש" : undefined;
+
+  const numErr = (raw: string, min: number, max: number): string | undefined => {
+    if (!raw.trim()) return undefined; // optional — empty clears the rule
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return "יש להזין מספר";
+    if (n < min || n > max) return `הזן ערך בין ${min} ל-${max}`;
+    return undefined;
+  };
+
+  const maxDayError = numErr(maxHoursDay, 1, 24);
+  const maxWeekError = numErr(maxHoursWeek, 1, 168);
+  const minRestError = numErr(minRestHours, 0, 24);
+  const hoursOrderError =
+    bizStart && bizEnd && bizStart === bizEnd
+      ? "שעת פתיחה וסגירה זהות"
+      : undefined;
+
+  const bizValid = !nameError;
+  const hoursValid =
+    !maxDayError && !maxWeekError && !minRestError && !hoursOrderError;
+
+  // Track save completion to flash the "נשמר" hint. `saving` flips true then
+  // back to false on success; we watch the falling edge after a submit.
+  const prevSaving = React.useRef(saving);
+  React.useEffect(() => {
+    if (prevSaving.current && !saving) {
+      if (bizSubmitted) {
+        setBizSaved(true);
+        const t = setTimeout(() => setBizSaved(false), 2500);
+        return () => clearTimeout(t);
+      }
+      if (hoursSubmitted) {
+        setHoursSaved(true);
+        const t = setTimeout(() => setHoursSaved(false), 2500);
+        return () => clearTimeout(t);
+      }
+    }
+    prevSaving.current = saving;
+  }, [saving, bizSubmitted, hoursSubmitted]);
+
+  const handleSaveBiz = () => {
+    setBizSubmitted(true);
+    setHoursSubmitted(false);
+    if (!bizValid) return;
+    onSave();
+  };
+
+  const handleSaveHours = () => {
+    setHoursSubmitted(true);
+    setBizSubmitted(false);
+    if (!hoursValid) return;
+    onSaveLaborRules();
+  };
+
   return (
     <div className="space-y-4">
-      {/* Logo upload card */}
+      {/* ── Card 1: מיתוג (logo) ── */}
       <Card className="glass-card">
         <CardHeader>
-          <CardTitle>לוגו העסק</CardTitle>
+          <CardTitle>מיתוג</CardTitle>
           <CardDescription>
             הלוגו יופיע אוטומטית בכל ייצוא סידור עבודה (PNG / PDF).
           </CardDescription>
@@ -166,7 +251,7 @@ export default function GeneralTab({
                 variant="outline"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={logoUploading}
-                className="justify-start"
+                className="justify-start focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 <Upload className="h-4 w-4" />
                 {logoUploading
@@ -195,10 +280,13 @@ export default function GeneralTab({
         </CardContent>
       </Card>
 
+      {/* ── Card 2: פרטי העסק ── */}
       <Card className="glass-card">
         <CardHeader>
           <CardTitle>פרטי העסק</CardTitle>
-          <CardDescription>שם, תחום פעילות ואזור זמן</CardDescription>
+          <CardDescription>
+            שם, תחום פעילות, אזור זמן, תחילת שבוע וטיפים.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1">
@@ -208,7 +296,12 @@ export default function GeneralTab({
               value={orgName}
               onChange={(e) => setOrgName(e.target.value)}
               placeholder="מסעדת הדוגמה"
+              aria-invalid={bizSubmitted && !!nameError}
+              aria-describedby={nameError ? "org-name-error" : undefined}
             />
+            {bizSubmitted && (
+              <FieldError id="org-name-error" message={nameError} />
+            )}
           </div>
 
           <div className="space-y-1">
@@ -220,7 +313,7 @@ export default function GeneralTab({
                 const v = e.target.value;
                 if (v !== "other") setIndustry(v);
               }}
-              className="flex h-11 sm:h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs"
+              className="flex h-11 sm:h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
             >
               {INDUSTRY_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -234,6 +327,7 @@ export default function GeneralTab({
                 value={industry}
                 onChange={(e) => setIndustry(e.target.value)}
                 placeholder="הזן תחום פעילות..."
+                aria-label="תחום פעילות מותאם אישית"
               />
             )}
             <p className="text-xs text-muted-foreground">
@@ -247,7 +341,7 @@ export default function GeneralTab({
               id="timezone"
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
-              className="flex h-11 sm:h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs"
+              className="flex h-11 sm:h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
             >
               {TIMEZONES.map((tz) => (
                 <option key={tz} value={tz}>
@@ -266,15 +360,18 @@ export default function GeneralTab({
               id="week-start"
               value={weekStartDay}
               onChange={(e) => setWeekStartDay(Number(e.target.value))}
-              className="flex h-11 sm:h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs"
+              className="flex h-11 sm:h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
             >
               <option value={0}>ראשון</option>
               <option value={1}>שני</option>
               <option value={6}>שבת</option>
             </select>
+            <p className="text-xs text-muted-foreground">
+              היום שבו מתחיל לוח השבוע בסידור.
+            </p>
           </div>
 
-          <div className="space-y-1 rounded-md border border-border bg-muted/30 p-3">
+          <div className="rounded-md border border-border bg-muted/30 p-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1">
                 <Label htmlFor="show-tips" className="cursor-pointer">
@@ -284,16 +381,13 @@ export default function GeneralTab({
                   הצג אפשרות לחלוקת טיפים בניווט (מתאים לבתי אוכל ומסעדות)
                 </p>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                <input
-                  id="show-tips"
-                  type="checkbox"
-                  checked={showTips}
-                  onChange={(e) => toggleShowTips(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-muted peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-background after:border after:border-border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-              </label>
+              <Switch
+                id="show-tips"
+                checked={showTips}
+                onCheckedChange={toggleShowTips}
+                aria-label="הצג חלוקת טיפים"
+                className="shrink-0"
+              />
             </div>
           </div>
 
@@ -304,16 +398,25 @@ export default function GeneralTab({
             </div>
           )}
 
-          <Button variant="glow" onClick={onSave} disabled={saving} className="w-full">
-            <Save className="me-2 h-4 w-4" />
-            {saving ? "שומר…" : "שמור פרטי עסק"}
-          </Button>
+          <div className="flex items-center justify-between gap-3">
+            <SavedHint show={bizSaved} />
+            <Button
+              variant="glow"
+              onClick={handleSaveBiz}
+              disabled={saving}
+              className="ms-auto"
+            >
+              <Save className="me-2 h-4 w-4" />
+              {saving && bizSubmitted ? "שומר…" : "שמור פרטי עסק"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
+      {/* ── Card 3: שעות פעילות וחוקי עבודה ── */}
       <Card className="glass-card">
         <CardHeader>
-          <CardTitle>שעות פעילות ומגבלות</CardTitle>
+          <CardTitle>שעות פעילות וחוקי עבודה</CardTitle>
           <CardDescription>
             שעות פתיחה/סגירה ומגבלות חוקיות — נאכפות אוטומטית בבניית הסידור.
           </CardDescription>
@@ -339,6 +442,9 @@ export default function GeneralTab({
               />
             </div>
           </div>
+          {hoursSubmitted && (
+            <FieldError id="biz-hours-error" message={hoursOrderError} />
+          )}
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1">
@@ -351,7 +457,15 @@ export default function GeneralTab({
                 value={maxHoursDay}
                 onChange={(e) => setMaxHoursDay(e.target.value)}
                 placeholder="10"
+                aria-invalid={hoursSubmitted && !!maxDayError}
+                aria-describedby={maxDayError ? "max-day-error" : undefined}
               />
+              {hoursSubmitted && (
+                <FieldError id="max-day-error" message={maxDayError} />
+              )}
+              <p className="text-xs text-muted-foreground">
+                נאכף בעת שיבוץ אוטומטי.
+              </p>
             </div>
             <div className="space-y-1">
               <Label htmlFor="max-week">מקס׳ שעות בשבוע</Label>
@@ -363,7 +477,15 @@ export default function GeneralTab({
                 value={maxHoursWeek}
                 onChange={(e) => setMaxHoursWeek(e.target.value)}
                 placeholder="48"
+                aria-invalid={hoursSubmitted && !!maxWeekError}
+                aria-describedby={maxWeekError ? "max-week-error" : undefined}
               />
+              {hoursSubmitted && (
+                <FieldError id="max-week-error" message={maxWeekError} />
+              )}
+              <p className="text-xs text-muted-foreground">
+                נאכף בעת שיבוץ אוטומטי.
+              </p>
             </div>
             <div className="space-y-1">
               <Label htmlFor="min-rest">מינימום מנוחה (שעות)</Label>
@@ -375,19 +497,30 @@ export default function GeneralTab({
                 value={minRestHours}
                 onChange={(e) => setMinRestHours(e.target.value)}
                 placeholder="8"
+                aria-invalid={hoursSubmitted && !!minRestError}
+                aria-describedby={minRestError ? "min-rest-error" : undefined}
               />
+              {hoursSubmitted && (
+                <FieldError id="min-rest-error" message={minRestError} />
+              )}
+              <p className="text-xs text-muted-foreground">
+                מנוחה מינימלית בין משמרות — נאכפת בעת שיבוץ אוטומטי.
+              </p>
             </div>
           </div>
 
-          <Button
-            variant="glow"
-            onClick={onSaveLaborRules}
-            disabled={saving}
-            className="w-full"
-          >
-            <Save className="me-2 h-4 w-4" />
-            {saving ? "שומר…" : "שמור שעות פעילות"}
-          </Button>
+          <div className="flex items-center justify-between gap-3">
+            <SavedHint show={hoursSaved} />
+            <Button
+              variant="glow"
+              onClick={handleSaveHours}
+              disabled={saving}
+              className="ms-auto"
+            >
+              <Save className="me-2 h-4 w-4" />
+              {saving && hoursSubmitted ? "שומר…" : "שמור שעות וחוקים"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

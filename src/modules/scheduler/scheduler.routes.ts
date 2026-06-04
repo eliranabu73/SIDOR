@@ -302,16 +302,23 @@ export async function schedulerRoutes(app: FastifyInstance): Promise<void> {
 
   // MANAGER — generate the week's shifts from the org's defined ShiftTemplates
   // (בוקר/צהריים/ערב + manager), preserving role + required headcount.
+  // Body { replace?: boolean } — when true, drops the auto-generated shifts and
+  // rebuilds from templates (so a week built from operating-hours upgrades to
+  // the full template structure) while preserving anything staffed/edited.
   // POST /v1/schedules/:scheduleId/generate-from-templates
+  const GenerateFromTemplatesBody = z
+    .object({ replace: z.boolean().optional() })
+    .optional();
   app.post(
     '/schedules/:scheduleId/generate-from-templates',
-    { schema: { params: ScheduleIdParam }, preHandler: authHandlers },
+    { schema: { params: ScheduleIdParam, body: GenerateFromTemplatesBody }, preHandler: authHandlers },
     async (req, reply) => {
       const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
+      const body = (req.body ?? {}) as z.infer<typeof GenerateFromTemplatesBody>;
       try {
         const result = await dbFor(req).query((tx) =>
           generateShiftsFromShiftTemplates(
-            { scheduleId, organizationId: orgIdFor(req) },
+            { scheduleId, organizationId: orgIdFor(req), replace: body?.replace },
             tx,
           ),
         );

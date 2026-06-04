@@ -93,8 +93,11 @@ export async function fetchLaborCostForWeek(
 
   for (const s of shifts) {
     shiftsCount += 1;
-    const durationMinutes = Math.round(
-      (s.endAtUtc.getTime() - s.startAtUtc.getTime()) / 60_000,
+    // Clamp to >= 0: a malformed shift with end before start must never produce
+    // a NEGATIVE wage that silently cancels real pay from the weekly total.
+    const durationMinutes = Math.max(
+      0,
+      Math.round((s.endAtUtc.getTime() - s.startAtUtc.getTime()) / 60_000),
     );
     const required = s.requiredEmployeeCount ?? 1;
     const dayKey = s.startAtUtc.toISOString().slice(0, 10);
@@ -109,8 +112,15 @@ export async function fetchLaborCostForWeek(
 
     for (const a of s.assignments) {
       const empRate = (a.employee as { hourlyRate?: unknown }).hourlyRate;
-      const rateAgorot = empRate ? Math.round(Number(empRate) * 100) : DEFAULT_RATE_AGOROT;
-      if (!empRate && !seenWithoutRate.has(a.employee.id)) {
+      // A rate of 0 / null / undefined / NaN / negative means "NOT CONFIGURED".
+      // Note: Prisma Decimal(0) is a truthy OBJECT, so a plain truthiness check
+      // would silently bypass the fallback and bill ₪0 — coerce to Number and
+      // require a finite, strictly-positive value. This also blocks NaN from
+      // ever poisoning money math (totalAgorot/agorot).
+      const n = Number(empRate);
+      const valid = Number.isFinite(n) && n > 0;
+      const rateAgorot = valid ? Math.round(n * 100) : DEFAULT_RATE_AGOROT;
+      if (!valid && !seenWithoutRate.has(a.employee.id)) {
         seenWithoutRate.add(a.employee.id);
         employeesWithoutRate += 1;
       }
@@ -122,7 +132,7 @@ export async function fetchLaborCostForWeek(
       const e = employeesById.get(a.employee.id) ?? {
         employeeId: a.employee.id,
         fullName: a.employee.fullName,
-        hourlyRate: empRate ? Number(empRate) : null,
+        hourlyRate: valid ? n : null,
         minutes: 0,
         agorot: 0,
       };
@@ -150,6 +160,11 @@ export async function fetchLaborCostForWeek(
     if (!byDay.has(dayKey)) {
       byDay.set(dayKey, { minutes: 0, agorot: 0, shifts: 0 });
     }
+    // NOTE: `shifts` counts ALL shifts in the day (including unassigned/open
+    // ones), whereas `minutes`/`agorot` above accumulate per assignment (only
+    // assigned work). These bases are intentionally asymmetric — consumers must
+    // NOT derive a cost-per-shift from these two numbers, as it would be skewed
+    // by unstaffed shifts that contribute to the count but not to hours/cost.
     byDay.get(dayKey)!.shifts += 1;
   }
 

@@ -21,6 +21,8 @@ import {
   fetchLocations,
   fetchRoles,
   fetchSchedule,
+  fetchDashboard,
+  fetchMe,
   fetchTimeEntries,
   fetchTimetrackingLive,
   fetchTimetrackingStatus,
@@ -43,6 +45,8 @@ import {
   type ApplyTemplateResult,
   type GenerateFromHoursResult,
   type GenerateFromTemplatesResult,
+  type DashboardData,
+  type MeResponse,
   type RequestsSummary,
   type RequestLinksBundle,
   updateEmployee,
@@ -83,6 +87,9 @@ export const queryKeys = {
   metrics: () => ["metrics"] as const,
   locations: () => ["locations"] as const,
   roles: () => ["roles"] as const,
+  me: () => ["me"] as const,
+  dashboard: (id: ID, weekStart?: string) =>
+    ["dashboard", id, weekStart] as const,
 };
 
 export function useSchedule(scheduleId: ID, weekStart?: string) {
@@ -92,7 +99,7 @@ export function useSchedule(scheduleId: ID, weekStart?: string) {
       if (USE_MOCKS) return buildMockSchedule();
       return fetchSchedule(scheduleId, weekStart);
     },
-    staleTime: 30_000,
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -100,7 +107,7 @@ export function useEmployees() {
   return useQuery<Employee[]>({
     queryKey: queryKeys.employees(),
     queryFn: () => fetchEmployees(),
-    staleTime: 60_000,
+    staleTime: 10 * 60_000,
   });
 }
 
@@ -117,7 +124,7 @@ export function useLocations() {
   return useQuery<LocationItem[]>({
     queryKey: queryKeys.locations(),
     queryFn: () => fetchLocations(),
-    staleTime: 5 * 60_000,
+    staleTime: 10 * 60_000,
   });
 }
 
@@ -197,22 +204,134 @@ export function useCreateRole() {
   });
 }
 
+/** Shared fairness→metrics transform used by the eager + lazy metrics hooks. */
+async function loadEmployeeMetrics(): Promise<EmployeeScheduleMetrics[]> {
+  if (USE_MOCKS) return mockMetrics;
+  // Use 1-week fairness window and transform to EmployeeScheduleMetrics shape.
+  const data = await fetchFairness(1);
+  return data.employees.map((e) => ({
+    employeeId: e.employeeId,
+    weeklyAssignedMinutes: Math.round(e.hours * 60),
+    weeklyTargetMinutes: 42 * 60, // IL standard week
+    fairnessScore: e.score,
+  })) as unknown as EmployeeScheduleMetrics[];
+}
+
 export function useEmployeeMetrics() {
   return useQuery<EmployeeScheduleMetrics[]>({
     queryKey: queryKeys.metrics(),
-    queryFn: async () => {
-      if (USE_MOCKS) return mockMetrics;
-      // Use 1-week fairness window and transform to EmployeeScheduleMetrics shape.
-      const data = await fetchFairness(1);
-      return data.employees.map((e) => ({
-        employeeId: e.employeeId,
-        weeklyAssignedMinutes: Math.round(e.hours * 60),
-        weeklyTargetMinutes: 42 * 60, // IL standard week
-        fairnessScore: e.score,
-      })) as unknown as EmployeeScheduleMetrics[];
-    },
+    queryFn: loadEmployeeMetrics,
     staleTime: 60_000,
   });
+}
+
+/**
+ * Lazy variant of the metrics query: gated behind an `enabled` flag so it never
+ * blocks the schedule page's first paint. Flip `enabled` to true once the grid
+ * is mounted (or when the user opens a metrics-dependent view). Identical data
+ * shape to {@link useEmployeeMetrics}; longer staleTime since metrics are a
+ * secondary, slow-changing signal.
+ */
+export function useEmployeeMetricsLazy(enabled: boolean) {
+  return useQuery<EmployeeScheduleMetrics[]>({
+    queryKey: queryKeys.metrics(),
+    queryFn: loadEmployeeMetrics,
+    enabled,
+    staleTime: 15 * 60_000,
+  });
+}
+
+/**
+ * Single-request replacement for the schedule page's 5 separate hooks
+ * (schedule, employees, locations, me, metrics). Fetches GET /v1/dashboard once
+ * and exposes per-slice query-result objects shaped IDENTICALLY to the
+ * dedicated hooks, so page.tsx swaps `xQuery` → `dashboard.x` with near-zero
+ * churn (`.data`, `.isLoading`, `.error`, `.refetch` all keep working).
+ *
+ * `metrics` is intentionally LAZY — it is NOT part of the dashboard payload and
+ * does not block first paint. It runs only once `metricsEnabled` is true.
+ *
+ * In USE_MOCKS mode this composes the same mock builders the individual hooks
+ * use, so the demo path is unchanged.
+ */
+export function useDashboard(
+  scheduleId: ID,
+  weekStartISO: string | null | undefined,
+  options?: { metricsEnabled?: boolean },
+) {
+  // Normalize to a stable string for the query key + request. An empty week is
+  // never queried (enabled guard below) so the placeholder is never sent.
+  const weekStart = weekStartISO ?? "";
+  const dashboardQuery = useQuery<DashboardData>({
+    queryKey: queryKeys.dashboard(scheduleId, weekStart),
+    enabled: !!weekStartISO,
+    queryFn: async () => {
+      if (USE_MOCKS) {
+        const schedule = buildMockSchedule();
+        return {
+          schedule,
+          shifts: schedule.shifts,
+          employees: mockEmployees as unknown as Employee[],
+          locations: [] as LocationItem[],
+          me: {
+            user: { id: "mock", role: "owner" },
+            memberships: [],
+            activeOrgId: null,
+          } as MeResponse,
+        };
+      }
+      return fetchDashboard(scheduleId, weekStart);
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const meQuery = useQuery<MeResponse>({
+    queryKey: queryKeys.me(),
+    queryFn: fetchMe,
+    enabled: !USE_MOCKS,
+    staleTime: 5 * 60_000,
+  });
+
+  const metricsQuery = useEmployeeMetricsLazy(options?.metricsEnabled ?? false);
+
+  const d = dashboardQuery.data;
+
+  return {
+    /** Full one-shot payload (includes shifts) for callers that want it raw. */
+    dashboard: dashboardQuery,
+    schedule: {
+      data: d?.schedule,
+      isLoading: dashboardQuery.isLoading,
+      isError: dashboardQuery.isError,
+      error: dashboardQuery.error,
+      refetch: dashboardQuery.refetch,
+    },
+    employees: {
+      data: d?.employees,
+      isLoading: dashboardQuery.isLoading,
+      isError: dashboardQuery.isError,
+      error: dashboardQuery.error,
+      refetch: dashboardQuery.refetch,
+    },
+    locations: {
+      data: d?.locations,
+      isLoading: dashboardQuery.isLoading,
+      isError: dashboardQuery.isError,
+      error: dashboardQuery.error,
+      refetch: dashboardQuery.refetch,
+    },
+    // `me` comes from the dashboard payload when present, otherwise from the
+    // dedicated /v1/me query (kept cached under the same ["me"] key the page
+    // already uses) so org-name resolution never regresses.
+    me: {
+      data: d?.me ?? meQuery.data,
+      isLoading: meQuery.isLoading && !d?.me,
+      isError: meQuery.isError,
+      error: meQuery.error,
+      refetch: meQuery.refetch,
+    },
+    metrics: metricsQuery,
+  };
 }
 
 export function useValidateAssignment() {
@@ -444,11 +563,20 @@ export function useGenerateFromHours() {
 
 export function useGenerateFromTemplates() {
   const qc = useQueryClient();
-  return useMutation<GenerateFromTemplatesResult, Error, ID>({
-    mutationFn: (scheduleId) => generateFromTemplates(scheduleId),
+  return useMutation<
+    GenerateFromTemplatesResult,
+    Error,
+    ID | { scheduleId: ID; replace?: boolean }
+  >({
+    mutationFn: (vars) => {
+      const scheduleId = typeof vars === "string" ? vars : vars.scheduleId;
+      const replace = typeof vars === "string" ? false : vars.replace ?? false;
+      return generateFromTemplates(scheduleId, { replace });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["schedule"] });
       qc.invalidateQueries({ queryKey: ["shifts"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }

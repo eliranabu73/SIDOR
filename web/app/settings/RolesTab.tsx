@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   updateOrgRole,
   deleteOrgRole,
@@ -31,6 +32,7 @@ export default function RolesTab({ settings, setSettings }: RolesTabProps) {
   const [newRoleName, setNewRoleName] = React.useState("");
   const [roleBusy, setRoleBusy] = React.useState<string | null>(null);
   const [addingRole, setAddingRole] = React.useState(false);
+  const [pendingDelete, setPendingDelete] = React.useState<OrgRole | null>(null);
 
   const saveRole = async (id: string) => {
     if (!editingRoleName.trim()) {
@@ -55,7 +57,6 @@ export default function RolesTab({ settings, setSettings }: RolesTabProps) {
   };
 
   const doDeleteRole = async (role: OrgRole) => {
-    if (!window.confirm(`האם למחוק תפקיד ${role.name}?`)) return;
     setRoleBusy(role.id);
     try {
       await deleteOrgRole(role.id);
@@ -66,6 +67,7 @@ export default function RolesTab({ settings, setSettings }: RolesTabProps) {
       toast.error(msg);
     } finally {
       setRoleBusy(null);
+      setPendingDelete(null);
     }
   };
 
@@ -95,68 +97,80 @@ export default function RolesTab({ settings, setSettings }: RolesTabProps) {
       </CardHeader>
       <CardContent className="space-y-3">
         {settings?.roles.length === 0 && (
-          <p className="text-sm text-muted-foreground">אין תפקידים עדיין.</p>
+          <div className="flex flex-col items-center gap-2 rounded-md border border-dashed border-border py-8 text-center">
+            <ChevronRight className="h-8 w-8 text-muted-foreground opacity-40" aria-hidden />
+            <p className="text-sm font-medium">עדיין אין תפקידים</p>
+            <p className="text-xs text-muted-foreground">
+              הוסיפו תפקיד ראשון (למשל מלצר או טבח) כדי לשבץ עובדים לפי תפקיד.
+            </p>
+          </div>
         )}
         {settings?.roles.map((role) => (
           <div
             key={role.id}
-            className="flex flex-wrap sm:flex-nowrap items-center gap-2 rounded-md border border-border p-2"
+            className="grid grid-cols-1 sm:flex sm:flex-nowrap sm:items-center gap-2 rounded-md border border-border p-2"
           >
             {editingRole === role.id ? (
               <>
                 <Input
                   value={editingRoleName}
                   onChange={(e) => setEditingRoleName(e.target.value)}
-                  className="h-8 flex-1"
+                  className="h-9 flex-1"
+                  aria-label="שם תפקיד"
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === "Enter") void saveRole(role.id);
                     if (e.key === "Escape") setEditingRole(null);
                   }}
                 />
-                <Button
-                  size="sm"
-                  variant="glow"
-                  onClick={() => void saveRole(role.id)}
-                  disabled={roleBusy === role.id}
-                  className="h-8"
-                >
-                  {roleBusy === role.id ? "שומר…" : "שמור"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setEditingRole(null)}
-                  disabled={roleBusy === role.id}
-                  className="h-8"
-                >
-                  ביטול
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="glow"
+                    onClick={() => void saveRole(role.id)}
+                    disabled={roleBusy === role.id}
+                    className="h-9 flex-1 sm:flex-none"
+                  >
+                    {roleBusy === role.id ? "שומר…" : "שמור"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setEditingRole(null)}
+                    disabled={roleBusy === role.id}
+                    className="h-9 flex-1 sm:flex-none"
+                  >
+                    ביטול
+                  </Button>
+                </div>
               </>
             ) : (
               <>
-                <ChevronRight className="h-4 w-4 shrink-0 text-indigo-500" />
+                <ChevronRight className="hidden h-4 w-4 shrink-0 text-indigo-500 sm:block" aria-hidden />
                 <span className="flex-1 text-sm font-medium">{role.name}</span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setEditingRole(role.id);
-                    setEditingRoleName(role.name);
-                  }}
-                  className="h-8"
-                >
-                  ערוך
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => void doDeleteRole(role)}
-                  disabled={roleBusy === role.id}
-                  className="h-8 text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex gap-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setEditingRole(role.id);
+                      setEditingRoleName(role.name);
+                    }}
+                    className="h-9 flex-1 sm:flex-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    ערוך
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setPendingDelete(role)}
+                    disabled={roleBusy === role.id}
+                    aria-label={`מחק תפקיד ${role.name}`}
+                    className="h-9 text-destructive hover:text-destructive focus-visible:ring-2 focus-visible:ring-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </>
             )}
           </div>
@@ -167,6 +181,7 @@ export default function RolesTab({ settings, setSettings }: RolesTabProps) {
             value={newRoleName}
             onChange={(e) => setNewRoleName(e.target.value)}
             placeholder="שם תפקיד חדש"
+            aria-label="שם תפקיד חדש"
             className="flex-1"
             onKeyDown={(e) => {
               if (e.key === "Enter") void addRole();
@@ -183,6 +198,25 @@ export default function RolesTab({ settings, setSettings }: RolesTabProps) {
           </Button>
         </div>
       </CardContent>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(o) => {
+          if (!o) setPendingDelete(null);
+        }}
+        title="מחיקת תפקיד"
+        description={
+          pendingDelete
+            ? `האם למחוק את התפקיד "${pendingDelete.name}"? פעולה זו אינה הפיכה.`
+            : undefined
+        }
+        confirmLabel="מחק"
+        destructive
+        pending={pendingDelete ? roleBusy === pendingDelete.id : false}
+        onConfirm={() => {
+          if (pendingDelete) void doDeleteRole(pendingDelete);
+        }}
+      />
     </Card>
   );
 }

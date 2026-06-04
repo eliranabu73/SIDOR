@@ -1,8 +1,10 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { prisma } from '../../db/prisma';
+import { prisma, withAdminContext } from '../../db/prisma';
 import type { PrismaClient } from '@prisma/client';
 import { locationScope, employeeLocationScope } from '../../shared/location-scope';
+import { listLocations } from '../employees/employees.service';
+import { listMemberships } from '../onboarding/onboarding.service';
 
 /**
  * Build an org-scoped DB handle.
@@ -121,6 +123,126 @@ export function mapSchedule(sched: {
   };
 }
 
+// Shape of the org-scoped DB handle used across reads routes.
+type ScopedDb = { query: <T>(fn: (tx: PrismaClient) => Promise<T>) => Promise<T> };
+
+// The shift include used by the schedule grid — trimmed to grid-only fields.
+// `role: true` selects the role row once (no N+1: Prisma joins it per shift in
+// a single query), and we only read `role.name` downstream via mapShift.
+const SCHEDULE_SHIFT_INCLUDE = {
+  shifts: {
+    // Cancelled shifts are soft-deleted — exclude them so a deleted shift
+    // disappears from the grid (DELETE /shifts/:id sets CANCELLED).
+    where: { status: { not: 'CANCELLED' as const } },
+    include: { role: true, assignments: true },
+    orderBy: { startAtUtc: 'asc' as const },
+  },
+} as const;
+
+/**
+ * Resolve the canonical schedule (with grid shifts) for a request, mirroring
+ * GET /schedules/:scheduleId exactly so the unified dashboard binds to the same
+ * row as every other flow (grid, copy, auto-schedule, template).
+ *
+ * Returns null when no schedule matches (caller renders the empty shell).
+ */
+async function resolveScheduleForWeek(
+  db: ScopedDb,
+  orgId: string,
+  scheduleId: string,
+  weekStart: string | undefined,
+  schedScope: { locationId?: string },
+) {
+  if (UUID_RE.test(scheduleId)) {
+    return db.query((tx) =>
+      tx.schedule.findFirst({
+        where: { id: scheduleId, organizationId: orgId, ...schedScope },
+        include: SCHEDULE_SHIFT_INCLUDE,
+      }),
+    );
+  }
+  if (weekStart) {
+    const start = new Date(weekStart);
+    const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const candidates = await db.query((tx) =>
+      tx.schedule.findMany({
+        where: {
+          organizationId: orgId,
+          periodStartDate: { gte: start, lt: end },
+          ...schedScope,
+        },
+        orderBy: { createdAt: 'asc' },
+        include: SCHEDULE_SHIFT_INCLUDE,
+      }),
+    );
+    return candidates.find((s) => s.shifts.length > 0) ?? candidates[0] ?? null;
+  }
+  return db.query((tx) =>
+    tx.schedule.findFirst({
+      where: {
+        organizationId: orgId,
+        periodStartDate: { lte: new Date() },
+        ...schedScope,
+      },
+      orderBy: { periodStartDate: 'desc' },
+      include: SCHEDULE_SHIFT_INCLUDE,
+    }),
+  );
+}
+
+// Active employees for an org, mapped to the exact shape GET /employees returns
+// so the dashboard payload is byte-compatible with the page's current parsing.
+// `roles` is joined once per employee (no N+1); only role.name is read.
+async function fetchEmployeesForOrg(
+  db: ScopedDb,
+  orgId: string,
+  empScope: { defaultLocationId?: string },
+) {
+  const employees = await db.query((tx) =>
+    tx.employee.findMany({
+      where: { organizationId: orgId, isActive: true, ...empScope },
+      include: { roles: { include: { role: true } } },
+      orderBy: { fullName: 'asc' },
+      take: 500,
+    }),
+  );
+  return employees.map((e) => ({
+    id: e.id,
+    orgId: e.organizationId,
+    fullName: e.fullName,
+    email: e.email,
+    phone: e.phone,
+    roles: e.roles.map((er) => er.role.name),
+    primaryLocationId: e.defaultLocationId,
+    active: e.isActive,
+  }));
+}
+
+/**
+ * Resolve the `me` block for the dashboard, identical in shape to GET /v1/me
+ * ({ user, memberships, activeOrgId }). When authenticated we read memberships
+ * via admin context (cross-tenant discovery, same as /v1/me). In demo mode
+ * (AUTH_DISABLED) there is no real user, so we return a minimal owner stub
+ * scoped to the demo org — enough for the page to render the org name + role.
+ */
+async function resolveMe(req: {
+  user?: { id: string; orgId: string; role: string };
+}, orgId: string) {
+  const u = req.user;
+  if (!u) {
+    return {
+      user: { id: '', role: 'owner' },
+      memberships: [] as Array<{ orgId: string; orgName: string; role: string }>,
+      activeOrgId: orgId,
+    };
+  }
+  const adminDb = withAdminContext();
+  const memberships = await adminDb.query((tx) => listMemberships(u.id, tx));
+  const activeOrgId =
+    memberships.find((m) => m.orgId === u.orgId)?.orgId ?? memberships[0]?.orgId ?? null;
+  return { user: { id: u.id, role: u.role }, memberships, activeOrgId };
+}
+
 export async function readsRoutes(app: FastifyInstance): Promise<void> {
   const authHandlers = devAllowed() ? [] : [app.authenticate];
 
@@ -193,63 +315,18 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
       const { weekStart } = req.query as z.infer<typeof ScheduleQuery>;
 
       try {
-        let schedule;
         const orgId = orgIdFor(req);
         const db = dbFor(req);
         const schedScope = locationScope(req.user ?? { role: '' });
-        const includeShifts = {
-          shifts: {
-            // Cancelled shifts are soft-deleted — exclude them so a deleted
-            // shift disappears from the grid (DELETE /shifts/:id sets CANCELLED).
-            where: { status: { not: 'CANCELLED' as const } },
-            include: { role: true, assignments: true },
-            orderBy: { startAtUtc: 'asc' as const },
-          },
-        };
-
-        if (UUID_RE.test(scheduleId)) {
-          // Real UUID — direct lookup, org-scoped.
-          schedule = await db.query((tx) =>
-            tx.schedule.findFirst({
-              where: { id: scheduleId, organizationId: orgId, ...schedScope },
-              include: includeShifts,
-            }),
-          );
-        } else if (weekStart) {
-          // Pseudo id like "sched_2026-05-17" or "current" with explicit weekStart.
-          const start = new Date(weekStart);
-          const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
-          // A week can have duplicate schedule rows (created over time). Pick
-          // deterministically: the one that actually has shifts, else the
-          // oldest. This MUST match the pick in POST /schedules/ensure so the
-          // grid, copy, auto-schedule and template all act on the same row.
-          const candidates = await db.query((tx) =>
-            tx.schedule.findMany({
-              where: {
-                organizationId: orgId,
-                periodStartDate: { gte: start, lt: end },
-                ...schedScope,
-              },
-              orderBy: { createdAt: 'asc' },
-              include: includeShifts,
-            }),
-          );
-          schedule =
-            candidates.find((s) => s.shifts.length > 0) ?? candidates[0] ?? null;
-        } else {
-          // Fallback — most recent schedule whose period started.
-          schedule = await db.query((tx) =>
-            tx.schedule.findFirst({
-              where: {
-                organizationId: orgId,
-                periodStartDate: { lte: new Date() },
-                ...schedScope,
-              },
-              orderBy: { periodStartDate: 'desc' },
-              include: includeShifts,
-            }),
-          );
-        }
+        // Deterministic pick shared with GET /dashboard and POST /schedules/ensure
+        // so the grid, copy, auto-schedule and template all act on the same row.
+        const schedule = await resolveScheduleForWeek(
+          db,
+          orgId,
+          scheduleId,
+          weekStart,
+          schedScope,
+        );
 
         // No matching schedule but valid week — return empty shell so the
         // UI renders the EmptyScheduleState instead of an error banner.
@@ -265,6 +342,72 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
 
         if (!schedule) throw new NotFoundError('Schedule not found');
         return reply.send(mapSchedule(schedule));
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
+
+  // GET /v1/dashboard?scheduleId=&weekStart=
+  //
+  // Unified read for the schedule page: returns the same data the page used to
+  // fetch via 5 separate calls (schedule + shifts, employees, locations, me) in
+  // ONE org-scoped response. Each block is identical in shape to its dedicated
+  // endpoint so page.tsx can swap its hooks with minimal churn.
+  //
+  // Org scoping + RLS work exactly like the other reads routes: orgIdFor(req)
+  // resolves the org (real JWT, demo fallback when AUTH_DISABLED), and dbFor(req)
+  // returns the withOrgContext wrapper that sets app.current_org_id per query.
+  const DashboardQuery = z.object({
+    scheduleId: z.string().optional(),
+    weekStart: z.string().optional(),
+  });
+
+  app.get(
+    '/dashboard',
+    { schema: { querystring: DashboardQuery }, preHandler: authHandlers },
+    async (req, reply) => {
+      const { scheduleId, weekStart } = req.query as z.infer<typeof DashboardQuery>;
+      try {
+        const orgId = orgIdFor(req);
+        const db = dbFor(req);
+        const schedScope = locationScope(req.user ?? { role: '' });
+        const empScope = employeeLocationScope(req.user ?? { role: '' });
+
+        // Resolve schedule with the same deterministic pick as GET /schedules,
+        // employees + locations in parallel, and `me` (auth-aware) alongside.
+        const [scheduleRow, employees, locations, me] = await Promise.all([
+          resolveScheduleForWeek(db, orgId, scheduleId ?? 'current', weekStart, schedScope),
+          fetchEmployeesForOrg(db, orgId, empScope),
+          db.query((tx) => listLocations(orgId, tx)),
+          resolveMe(req, orgId),
+        ]);
+
+        // Mirror GET /schedules: empty shell when no row matches but a week is
+        // given, so the page renders EmptyScheduleState instead of an error.
+        const schedule = scheduleRow
+          ? mapSchedule(scheduleRow)
+          : weekStart
+            ? {
+                id: scheduleId ?? '',
+                orgId,
+                weekStart: new Date(weekStart).toISOString(),
+                status: 'draft',
+                shifts: [] as ReturnType<typeof mapShift>[],
+              }
+            : null;
+
+        if (!schedule) throw new NotFoundError('Schedule not found');
+
+        return reply.send({
+          schedule,
+          // `shifts` surfaced at the top level too (contract: schedule+shifts),
+          // so callers can read either schedule.shifts or the flat array.
+          shifts: schedule.shifts,
+          employees,
+          locations,
+          me,
+        });
       } catch (err) {
         return handleHttpError(reply, err);
       }

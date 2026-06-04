@@ -1,5 +1,6 @@
 import { createElement, type ReactElement } from 'react';
 import bidiFactory from 'bidi-js';
+import { DateTime } from 'luxon';
 import type { ExportStyle, ScheduleExportData, ExportShiftRow } from '../types';
 
 // Satori renders LTR only — convert Hebrew logical-order strings to visual
@@ -78,45 +79,66 @@ const THEMES: Record<ExportStyle, Theme> = {
   },
 };
 
-function groupShiftsByDay(
+export function groupShiftsByDay(
   shifts: ExportShiftRow[],
   weekStartIso: string,
 ): ExportShiftRow[][] {
   const buckets: ExportShiftRow[][] = Array.from({ length: 7 }, () => []);
-  const weekStart = new Date(`${weekStartIso}T00:00:00Z`).getTime();
+  // weekStart is a local calendar day (YYYY-MM-DD). Bucket each shift by its
+  // LOCAL start day (in the shift's own timezone) relative to weekStart, so an
+  // Israel evening shift near midnight lands on the right column rather than
+  // slipping a day under raw UTC.
   for (const s of shifts) {
-    const t = new Date(s.startsAt).getTime();
-    const dayIdx = Math.floor((t - weekStart) / 86400000);
+    const dayIdx = localDayIndex(s.startsAt, s.timezone, weekStartIso);
     if (dayIdx >= 0 && dayIdx < 7) {
       buckets[dayIdx]!.push(s);
     }
   }
   // Sort each day's shifts by role then time, so same-role shifts sit together
   // (visual role separation) and the export reads top-to-bottom by start time.
+  // Null-role shifts always sort LAST (not first) — they read as the catch-all.
   for (const b of buckets) {
-    b.sort(
-      (a, c) =>
-        (a.role ?? '~').localeCompare(c.role ?? '~', 'he') ||
-        a.startsAt.localeCompare(c.startsAt),
-    );
+    b.sort((a, c) => compareRole(a.role, c.role) || a.startsAt.localeCompare(c.startsAt));
   }
   return buckets;
 }
 
+// Order roles by Hebrew collation, but always push null-role shifts to the END
+// (collation locales vary on where a sentinel lands, so branch explicitly).
+function compareRole(a: string | null, c: string | null): number {
+  if (a === null && c === null) return 0;
+  if (a === null) return 1; // nulls last
+  if (c === null) return -1;
+  return a.localeCompare(c, 'he');
+}
+
+// 0-based index of a shift's LOCAL start day relative to weekStart (a local
+// calendar day). Falls back to UTC when no timezone is supplied (back-compat).
+function localDayIndex(
+  startsAtIso: string,
+  timezone: string | undefined,
+  weekStartIso: string,
+): number {
+  const zone = timezone ?? 'UTC';
+  const localDay = DateTime.fromISO(startsAtIso, { zone }).startOf('day');
+  const weekStartDay = DateTime.fromISO(weekStartIso, { zone }).startOf('day');
+  return Math.round(localDay.diff(weekStartDay, 'days').days);
+}
+
 // Stable per-role colour so each role is visually distinct in the poster.
 const ROLE_HEXES = ['#6366f1', '#10b981', '#f43f5e', '#f59e0b', '#0ea5e9', '#d946ef', '#06b6d4', '#84cc16'];
-function roleColor(role: string | null, fallback: string): string {
+export function roleColor(role: string | null, fallback: string): string {
   if (!role) return fallback;
   let h = 0;
   for (let i = 0; i < role.length; i++) h = (h * 31 + role.charCodeAt(i)) >>> 0;
   return ROLE_HEXES[h % ROLE_HEXES.length]!;
 }
 
-function formatHm(iso: string): string {
-  const d = new Date(iso);
-  const h = d.getUTCHours().toString().padStart(2, '0');
-  const m = d.getUTCMinutes().toString().padStart(2, '0');
-  return `${h}:${m}`;
+// Format an instant as HH:mm in the given timezone. When no timezone is
+// supplied, falls back to UTC (matching the legacy behaviour).
+function formatHm(iso: string, timezone?: string): string {
+  const dt = DateTime.fromISO(iso, { zone: timezone ?? 'UTC' });
+  return dt.toFormat('HH:mm');
 }
 
 function formatHebDate(weekStartIso: string, dayIdx: number): string {
@@ -294,7 +316,7 @@ export function buildScheduleTemplate(
                   color: theme.text,
                 },
               },
-              createElement('span', null, `${formatHm(s.startsAt)}–${formatHm(s.endsAt)}`),
+              createElement('span', null, `${formatHm(s.startsAt, s.timezone)}–${formatHm(s.endsAt, s.timezone)}`),
               s.role
                 ? createElement(
                     'span',

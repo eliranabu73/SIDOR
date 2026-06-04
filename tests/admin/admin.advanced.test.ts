@@ -47,7 +47,10 @@ const txMock = {
   },
   employee: { count: jest.fn().mockResolvedValue(0) },
   shift: { count: jest.fn().mockResolvedValue(0) },
-  membership: { findMany: jest.fn().mockResolvedValue([]) },
+  membership: {
+    findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn().mockResolvedValue(null),
+  },
   scheduleAuditLog: { findMany: jest.fn().mockResolvedValue([]) },
 };
 

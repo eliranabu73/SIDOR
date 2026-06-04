@@ -1,7 +1,8 @@
 /**
  * Unit test for `withAdminContext()` — verifies the wrapper issues
- * `SET LOCAL row_security = off` BEFORE running the caller's query, so that
- * RLS policies are skipped inside the transaction.
+ * `SET LOCAL app.current_org_id = '*'` BEFORE running the caller's query, so
+ * that the admin-bypass sentinel matches all rows inside the transaction.
+ * (The old `row_security = off` approach was removed — see src/db/prisma.ts.)
  *
  * Mocks @prisma/client at the top of the file (Jest hoists `jest.mock`),
  * exposing the captured executeRawUnsafe call list to the assertion.
@@ -31,13 +32,13 @@ beforeEach(() => {
 });
 
 describe('withAdminContext()', () => {
-  it('issues SET LOCAL row_security = off before invoking the query fn', async () => {
+  it("issues SET LOCAL app.current_org_id = '*' before invoking the query fn", async () => {
     const db = withAdminContext();
     let queryRan = false;
     const result = await db.query(async () => {
       queryRan = true;
       // The SET LOCAL must have run by now.
-      expect(sqlCalls[0]).toMatch(/SET LOCAL row_security = off/);
+      expect(sqlCalls[0]).toMatch(/SET LOCAL app\.current_org_id = '\*'/);
       return 42;
     });
     expect(queryRan).toBe(true);

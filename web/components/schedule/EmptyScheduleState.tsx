@@ -1,9 +1,17 @@
 "use client";
 
-import { CalendarPlus, Sparkles, Utensils, ShoppingBag, Settings2 } from "lucide-react";
+import * as React from "react";
+import { CalendarPlus, Sparkles, Utensils, ShoppingBag, Settings2, Wand2, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type EmptyScheduleStateProps = {
+  /**
+   * Primary action — lays down the week's shifts AND auto-assigns employees in a
+   * single click. This is the SAME flow the toolbar's "בנה שבוע אוטומטי" runs.
+   */
+  onBuildWeek: () => void;
+  /** True while the build flow is running — shows a "בונה…" state and disables the CTA. */
+  buildingWeek?: boolean;
   onCreateFirstShift: () => void;
   onAutoSchedule: () => void;
   /**
@@ -36,10 +44,14 @@ const PRESETS: { id: string; label: string; icon: React.ReactNode; templateName:
 ];
 
 export function EmptyScheduleState({
+  onBuildWeek,
+  buildingWeek = false,
   onCreateFirstShift,
   onAutoSchedule,
   onCreateFromPreset,
 }: EmptyScheduleStateProps) {
+  const [manualOpen, setManualOpen] = React.useState(false);
+
   const handlePreset = (templateName: string) => {
     if (onCreateFromPreset) {
       onCreateFromPreset(templateName);
@@ -57,7 +69,7 @@ export function EmptyScheduleState({
             className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-cyan-400 p-[2px]"
           >
             <div className="flex h-full w-full items-center justify-center rounded-full bg-card">
-              <CalendarPlus className="h-9 w-9 text-indigo-500" />
+              <Wand2 className="h-9 w-9 text-indigo-500" />
             </div>
           </div>
 
@@ -65,7 +77,8 @@ export function EmptyScheduleState({
             הסידור שלך מוכן להתחיל
           </h2>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            עדיין אין משמרות בשבוע הזה — התחל מתבנית או צור משמרת חדשה.
+            בלחיצה אחת נבנה את כל משמרות השבוע משעות הפעילות ונשבץ את העובדים
+            אוטומטית — לפי הבקשות שלהם.
           </p>
 
           <div className="mt-6 space-y-3">
@@ -73,40 +86,70 @@ export function EmptyScheduleState({
               type="button"
               size="lg"
               variant="glow"
-              onClick={onCreateFirstShift}
+              onClick={onBuildWeek}
+              disabled={buildingWeek}
               className="w-full text-base"
             >
-              <CalendarPlus className="h-5 w-5" />
-              צור משמרת ראשונה
+              <Wand2 className="h-5 w-5" />
+              {buildingWeek ? "בונה…" : "בנה שבוע אוטומטי"}
             </Button>
 
-            <div className="grid grid-cols-3 gap-2">
-              {PRESETS.map((p) => (
+            {/* Secondary, collapsed path — manual creation stays reachable but
+               demoted so the primary CTA is unmistakable. */}
+            <button
+              type="button"
+              onClick={() => setManualOpen((v) => !v)}
+              aria-expanded={manualOpen}
+              className="inline-flex items-center justify-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md px-2 py-1"
+            >
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${manualOpen ? "rotate-180" : ""}`}
+              />
+              או צרו ידנית
+            </button>
+
+            {manualOpen && (
+              <div className="space-y-3 border-t pt-3">
                 <Button
-                  key={p.id}
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => handlePreset(p.templateName)}
-                  className="h-auto flex-col gap-1 py-3"
-                  aria-label={p.label}
+                  onClick={onCreateFirstShift}
+                  className="w-full"
                 >
-                  {p.icon}
-                  <span className="text-xs">{p.label}</span>
+                  <CalendarPlus className="h-4 w-4" />
+                  צור משמרת ראשונה
                 </Button>
-              ))}
-            </div>
 
-            <Button
-              type="button"
-              size="lg"
-              variant="ghost"
-              onClick={onAutoSchedule}
-              className="w-full"
-            >
-              <Sparkles className="h-4 w-4" />
-              שיבוץ אוטומטי לשבוע שלם
-            </Button>
+                <div className="grid grid-cols-3 gap-2">
+                  {PRESETS.map((p) => (
+                    <Button
+                      key={p.id}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handlePreset(p.templateName)}
+                      className="h-auto flex-col gap-1 py-3"
+                      aria-label={p.label}
+                    >
+                      {p.icon}
+                      <span className="text-xs">{p.label}</span>
+                    </Button>
+                  ))}
+                </div>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={onAutoSchedule}
+                  className="w-full"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  שיבוץ אוטומטי לשבוע שלם
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>

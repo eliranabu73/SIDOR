@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   updateOrgLocation,
   deleteOrgLocation,
@@ -31,6 +32,7 @@ export default function LocationsTab({ settings, setSettings }: LocationsTabProp
   const [newLocationName, setNewLocationName] = React.useState("");
   const [locationBusy, setLocationBusy] = React.useState<string | null>(null);
   const [addingLocation, setAddingLocation] = React.useState(false);
+  const [pendingDelete, setPendingDelete] = React.useState<OrgLocation | null>(null);
 
   const saveLocation = async (id: string) => {
     if (!editingLocationName.trim()) {
@@ -60,7 +62,6 @@ export default function LocationsTab({ settings, setSettings }: LocationsTabProp
   };
 
   const doDeleteLocation = async (loc: OrgLocation) => {
-    if (!window.confirm(`האם למחוק סניף ${loc.name}?`)) return;
     setLocationBusy(loc.id);
     try {
       await deleteOrgLocation(loc.id);
@@ -73,6 +74,7 @@ export default function LocationsTab({ settings, setSettings }: LocationsTabProp
       toast.error(msg);
     } finally {
       setLocationBusy(null);
+      setPendingDelete(null);
     }
   };
 
@@ -105,71 +107,83 @@ export default function LocationsTab({ settings, setSettings }: LocationsTabProp
       </CardHeader>
       <CardContent className="space-y-3">
         {settings?.locations.length === 0 && (
-          <p className="text-sm text-muted-foreground">אין סניפים עדיין.</p>
+          <div className="flex flex-col items-center gap-2 rounded-md border border-dashed border-border py-8 text-center">
+            <MapPin className="h-8 w-8 text-muted-foreground opacity-40" aria-hidden />
+            <p className="text-sm font-medium">עדיין אין סניפים</p>
+            <p className="text-xs text-muted-foreground">
+              הוסיפו את הסניף הראשון כדי להתחיל לנהל סידורי עבודה.
+            </p>
+          </div>
         )}
         {settings?.locations.map((loc) => (
           <div
             key={loc.id}
-            className="flex flex-wrap sm:flex-nowrap items-center gap-2 rounded-md border border-border p-2"
+            className="grid grid-cols-1 sm:flex sm:flex-nowrap sm:items-center gap-2 rounded-md border border-border p-2"
           >
             {editingLocation === loc.id ? (
               <>
                 <Input
                   value={editingLocationName}
                   onChange={(e) => setEditingLocationName(e.target.value)}
-                  className="h-8 flex-1"
+                  className="h-9 flex-1"
+                  aria-label="שם סניף"
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === "Enter") void saveLocation(loc.id);
                     if (e.key === "Escape") setEditingLocation(null);
                   }}
                 />
-                <Button
-                  size="sm"
-                  variant="glow"
-                  onClick={() => void saveLocation(loc.id)}
-                  disabled={locationBusy === loc.id}
-                  className="h-8"
-                >
-                  {locationBusy === loc.id ? "שומר…" : "שמור"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setEditingLocation(null)}
-                  disabled={locationBusy === loc.id}
-                  className="h-8"
-                >
-                  ביטול
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="glow"
+                    onClick={() => void saveLocation(loc.id)}
+                    disabled={locationBusy === loc.id}
+                    className="h-9 flex-1 sm:flex-none"
+                  >
+                    {locationBusy === loc.id ? "שומר…" : "שמור"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setEditingLocation(null)}
+                    disabled={locationBusy === loc.id}
+                    className="h-9 flex-1 sm:flex-none"
+                  >
+                    ביטול
+                  </Button>
+                </div>
               </>
             ) : (
               <>
-                <MapPin className="h-4 w-4 shrink-0 text-cyan-500" />
+                <MapPin className="hidden h-4 w-4 shrink-0 text-cyan-500 sm:block" aria-hidden />
                 <span className="flex-1 text-sm font-medium">{loc.name}</span>
                 {loc.timezone && (
                   <span className="text-xs text-muted-foreground">{loc.timezone}</span>
                 )}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setEditingLocation(loc.id);
-                    setEditingLocationName(loc.name);
-                  }}
-                  className="h-8"
-                >
-                  ערוך
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => void doDeleteLocation(loc)}
-                  disabled={locationBusy === loc.id}
-                  className="h-8 text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex gap-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setEditingLocation(loc.id);
+                      setEditingLocationName(loc.name);
+                    }}
+                    className="h-9 flex-1 sm:flex-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    ערוך
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setPendingDelete(loc)}
+                    disabled={locationBusy === loc.id}
+                    aria-label={`מחק סניף ${loc.name}`}
+                    className="h-9 text-destructive hover:text-destructive focus-visible:ring-2 focus-visible:ring-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </>
             )}
           </div>
@@ -180,6 +194,7 @@ export default function LocationsTab({ settings, setSettings }: LocationsTabProp
             value={newLocationName}
             onChange={(e) => setNewLocationName(e.target.value)}
             placeholder="שם סניף חדש"
+            aria-label="שם סניף חדש"
             className="flex-1"
             onKeyDown={(e) => {
               if (e.key === "Enter") void addLocation();
@@ -196,6 +211,25 @@ export default function LocationsTab({ settings, setSettings }: LocationsTabProp
           </Button>
         </div>
       </CardContent>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(o) => {
+          if (!o) setPendingDelete(null);
+        }}
+        title="מחיקת סניף"
+        description={
+          pendingDelete
+            ? `האם למחוק את הסניף "${pendingDelete.name}"? פעולה זו אינה הפיכה.`
+            : undefined
+        }
+        confirmLabel="מחק"
+        destructive
+        pending={pendingDelete ? locationBusy === pendingDelete.id : false}
+        onConfirm={() => {
+          if (pendingDelete) void doDeleteLocation(pendingDelete);
+        }}
+      />
     </Card>
   );
 }

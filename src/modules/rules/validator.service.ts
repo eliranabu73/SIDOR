@@ -54,11 +54,18 @@ export async function validateAssignment(
       try {
         return await r.fn(ctx);
       } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown rule error';
+        // A rule THROWING is a code bug, not a labour-law block. Without this log
+        // the synthetic blocking result below silently removes the employee from
+        // auto-scheduling, indistinguishable from a real block. Always surface it.
+        // eslint-disable-next-line no-console
+        console.error(`RULE_ERROR: rule "${r.name}" threw during validation`, err);
         return {
           ruleCode: `RULE_ERROR:${r.name}`,
           status: 'failed',
           severity: 'blocking',
-          message: err instanceof Error ? err.message : 'Unknown rule error',
+          message,
+          metadata: { rule: r.name, error: message },
         } satisfies RuleResult;
       }
     }),

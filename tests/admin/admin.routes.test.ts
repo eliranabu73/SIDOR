@@ -43,7 +43,10 @@ const txMock = {
   },
   employee: { count: jest.fn().mockResolvedValue(42) },
   shift: { count: jest.fn().mockResolvedValue(100) },
-  membership: { findMany: jest.fn().mockResolvedValue([]) },
+  membership: {
+    findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn().mockResolvedValue(null),
+  },
 };
 
 jest.mock('../../src/db/prisma', () => ({

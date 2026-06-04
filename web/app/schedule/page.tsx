@@ -30,11 +30,13 @@ import {
   ApiError,
   approveSchedule,
   ensureSchedule,
-  fetchMe,
   rejectSchedule,
   submitScheduleForApproval,
+  generateFromTemplates,
+  listShiftTemplates,
+  type ShiftTemplate,
 } from "@/lib/api";
-import { useAssignMutation, useValidateAssignment } from "@/lib/queries";
+import { useAssignMutation, useValidateAssignment, useDashboard, useEmployeeMetricsLazy } from "@/lib/queries";
 import { ConfirmWarningsDialog } from "@/components/schedule/ConfirmWarningsDialog";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import type { AssignBody, ApiErrorBody, Employee, RuleResult, Shift } from "@/lib/types";
@@ -82,7 +84,7 @@ import {
 import { AutoScheduleDialog } from "@/components/schedule/AutoScheduleDialog";
 import { ProposalOverlay } from "@/components/schedule/ProposalOverlay";
 import { PublishWhatsAppDialog } from "@/components/schedule/PublishWhatsAppDialog";
-import { ConfirmationStatus } from "@/components/schedule/ConfirmationStatus";
+import { ConfirmationStatus, ConfirmationPill } from "@/components/schedule/ConfirmationStatus";
 import { ExportDialog } from "@/components/schedule/ExportDialog";
 import { CreateShiftDialog } from "@/components/schedule/CreateShiftDialog";
 import { AssignEmployeeSheet } from "@/components/schedule/AssignEmployeeSheet";
@@ -119,11 +121,7 @@ import {
   useGenerateFromHours,
   useGenerateFromTemplates,
   useDeleteShift,
-  useEmployeeMetrics,
-  useEmployees,
-  useLocations,
   usePublishSchedule,
-  useSchedule,
 } from "@/lib/queries";
 import { toast } from "sonner";
 import type {
@@ -171,13 +169,31 @@ function ScheduleInner() {
     AssignmentProposal[] | null
   >(null);
 
-  const scheduleQueryReal = useSchedule(
+  // #1 speed — ONE combined dashboard request replaces the previous five
+  // separate queries (schedule / employees / locations / me / metrics). The
+  // returned fields keep the SAME query-like shapes ({ data, isLoading,
+  // isError, refetch }) the page used before, so the rest of the component is
+  // untouched. `metricsEnabled` keeps the metrics block lazy — it is only
+  // fetched when the user opens the fairness/metrics view.
+  const [metricsEnabled, setMetricsEnabled] = React.useState(false);
+  const dashboard = useDashboard(
     `sched_${weekStart.toISODate()}`,
-    weekStart.toISO() ?? undefined,
+    weekStart.toISODate() ?? undefined,
+    { metricsEnabled },
   );
-  const employeesQuery = useEmployees();
-  const metricsQuery = useEmployeeMetrics();
-  const locationsQuery = useLocations();
+  const scheduleQueryReal = dashboard.schedule;
+  const employeesQuery = dashboard.employees;
+  const locationsQuery = dashboard.locations;
+  // Metrics stay lazy: the hook only fires once `metricsEnabled` flips true.
+  const metricsQuery = useEmployeeMetricsLazy(metricsEnabled);
+  // Active shift templates — used by #4 to decide whether the week's existing
+  // shifts derive from the CURRENT templates (and to surface "no templates").
+  const shiftTemplatesQuery = useQuery<ShiftTemplate[]>({
+    queryKey: ["shift-templates"],
+    queryFn: () => listShiftTemplates(),
+    enabled: !isDemo,
+    staleTime: 5 * 60_000,
+  });
   const autoSchedule = useAutoSchedule();
   const applyProposals = useApplyProposals();
   const publish = usePublishSchedule();
@@ -188,15 +204,11 @@ function ScheduleInner() {
   const generateFromTemplatesMut = useGenerateFromTemplates();
   const deleteShiftMut = useDeleteShift();
 
-  // Current-user query — drives which approval action buttons are shown.
-  // We rely on /v1/me which returns the active role (lowercased) along with
-  // the membership list, so we don't need to re-derive it from the JWT.
-  const meQ = useQuery({
-    queryKey: ["me"],
-    queryFn: fetchMe,
-    enabled: !isDemo,
-    staleTime: 5 * 60_000,
-  });
+  // Current-user data — comes back inside the combined dashboard response so we
+  // no longer issue a separate /v1/me request. Same shape as before
+  // ({ user.role, memberships, activeOrgId }) so the approval-button logic is
+  // untouched.
+  const meQ = dashboard.me;
   const role = (meQ.data?.user.role ?? "").toLowerCase();
   const isOwner = role === "owner";
   const isManager = role === "manager";
@@ -214,6 +226,9 @@ function ScheduleInner() {
       "סידור עבודה";
 
   const [approving, setApproving] = React.useState(false);
+  // Reject flow — a proper RTL dialog replaces the old window.prompt().
+  const [rejectOpen, setRejectOpen] = React.useState(false);
+  const [rejectNote, setRejectNote] = React.useState("");
 
   // ── DnD state (lifted from ScheduleBoard so EmployeeCard sources live INSIDE DndContext)
   const [activeEmployeeId, setActiveEmployeeId] = React.useState<string | null>(null);
@@ -357,11 +372,13 @@ function ScheduleInner() {
   const reject = async () => {
     if (!scheduleQuery.data) return;
     if (blockIfDemo()) return;
-    const note = window.prompt("הערה למנהל הסניף (אופציונלי):") ?? undefined;
+    const note = rejectNote.trim() || undefined;
     setApproving(true);
     try {
       await rejectSchedule(scheduleQuery.data.id, note);
       toast.success("הסידור הוחזר לעריכה");
+      setRejectOpen(false);
+      setRejectNote("");
       scheduleQueryReal.refetch();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "הדחייה נכשלה");
@@ -643,6 +660,20 @@ function ScheduleInner() {
     setPendingProposals(null);
   };
 
+  // Distinguish "no employees in the org at all" from "filters hide everyone".
+  // Only count ACTIVE employees as the org population — inactive ones never show.
+  const hasAnyActiveEmployees = React.useMemo(
+    () => employees.some((e) => e.active),
+    [employees],
+  );
+  const filtersActive =
+    locationFilter !== "all" || roleFilter !== "all" || search.trim() !== "";
+  const clearFilters = React.useCallback(() => {
+    setLocationFilter("all");
+    setRoleFilter("all");
+    setSearch("");
+  }, []);
+
   const [filtersOpen, setFiltersOpen] = React.useState(false);
   const [employeesPanelOpen, setEmployeesPanelOpen] = React.useState(false);
   // Weekly vs daily view toggle — weekly is the new default
@@ -682,6 +713,18 @@ function ScheduleInner() {
     clearSetupChecklistDismissal();
     setChecklistDismissed(false);
   };
+
+  // Lazy metrics: fairness numbers (weekly hours / fairness score) are only
+  // needed once the user actually looks at an employee-centric view — the
+  // auto-schedule (fairness weights) dialog, the assign-to-shift sheet, or the
+  // mobile employees drawer. Flipping this on once is enough; the query then
+  // stays warm for the rest of the session.
+  React.useEffect(() => {
+    if (metricsEnabled) return;
+    if (autoOpen || assignShift !== null || employeesPanelOpen) {
+      setMetricsEnabled(true);
+    }
+  }, [autoOpen, assignShift, employeesPanelOpen, metricsEnabled]);
 
   const publishNow = async () => {
     if (!scheduleQuery.data) return;
@@ -724,9 +767,105 @@ function ScheduleInner() {
   // staff, or the single saved weekly template), then open auto-schedule to
   // fill any remaining gaps while honoring the latest employee requests.
   const [buildingWeek, setBuildingWeek] = React.useState(false);
-  const buildWeek = async () => {
+  // #4 rebuild dialog state — shown when the week already has shifts that do
+  // NOT derive from the current shift templates.
+  const [rebuildOpen, setRebuildOpen] = React.useState(false);
+
+  // Extract the local "HH:mm" wall-clock for a shift in the given timezone.
+  // Shift templates store plain local times ("08:00"), so we compare against
+  // the shift's local start/end in the template's zone.
+  const localHHmm = React.useCallback((iso: string, zone: string): string => {
+    const dt = DateTime.fromISO(iso, { zone });
+    return dt.isValid ? dt.toFormat("HH:mm") : "";
+  }, []);
+
+  // Do the week's existing shifts derive from the CURRENT shift templates?
+  // Heuristic (the Shift row carries no templateId today): a shift "matches" a
+  // template when its local start+end times line up with a template's
+  // start/end. If every shift matches some active template we treat the week as
+  // template-derived; otherwise it was hand-built / generated another way and a
+  // rebuild would discard the user's work — so we confirm first.
+  const shiftsDeriveFromTemplates = React.useCallback((): boolean => {
+    const templates = shiftTemplatesQuery.data ?? [];
+    const shifts = scheduleQuery.data?.shifts ?? [];
+    if (templates.length === 0) return false; // no templates → nothing to derive from
+    if (shifts.length === 0) return true; // empty week is handled elsewhere
+    const slots = new Set(
+      templates.map(
+        (t) => `${t.startLocalTime.slice(0, 5)}-${t.endLocalTime.slice(0, 5)}`,
+      ),
+    );
+    return shifts.every((s) => {
+      const zone = templates[0]?.timezone || "Asia/Jerusalem";
+      const key = `${localHHmm(s.startsAt, zone)}-${localHHmm(s.endsAt, zone)}`;
+      return slots.has(key);
+    });
+  }, [shiftTemplatesQuery.data, scheduleQuery.data, localHHmm]);
+
+  // Shared tail of the flow: auto-assign employees to the (already laid-down)
+  // shifts and emit exactly one summary toast. `createdShifts` describes how
+  // many shifts the lay-down stage produced (for the no-staff message).
+  const fillAndSummarize = async (scheduleId: string, createdShifts: number) => {
+    const auto = await autoSchedule.mutateAsync({ scheduleId, dryRun: true });
+    const proposals = auto.proposals ?? [];
+    let placed = 0;
+    if (proposals.length > 0) {
+      const res = await applyProposals.mutateAsync({ scheduleId, proposals });
+      placed = res?.applied ?? proposals.length;
+    }
+    await scheduleQueryReal.refetch();
+
+    if (placed > 0) {
+      toast.success(`השבוע נבנה ושובצו ${placed} משמרות 🎉`);
+    } else if (createdShifts > 0) {
+      toast.info(
+        `נוצרו ${createdShifts} משמרות. אין כרגע עובדים זמינים לשיבוץ אוטומטי.`,
+      );
+    } else {
+      toast.info("אין כרגע עובדים זמינים לשיבוץ אוטומטי.");
+    }
+  };
+
+  // Empty-week lay-down ladder: templates → weekly template → operating hours →
+  // copy previous week. Returns the created-shift count, or -1 when nothing
+  // could be laid down (caller shows guidance). Surfaces the "no templates"
+  // settings nudge when the org has none defined.
+  const layDownEmptyWeek = async (scheduleId: string): Promise<number> => {
+    // 1) The org's defined shift templates are the source of truth.
+    const genT = await generateFromTemplatesMut.mutateAsync(scheduleId);
+    if (genT.shiftsCreated > 0) return genT.shiftsCreated;
+    // No templates at all → point the user to settings to define them.
+    if (genT.templatesFound === 0) {
+      toast.error("לא הוגדרו תבניות משמרת", {
+        action: {
+          label: "פתח הגדרות",
+          onClick: () => {
+            window.location.href = "/settings/shift-templates";
+          },
+        },
+      });
+    }
+    // 2) A custom weekly template, if one was defined.
+    const tpls = (weeklyTemplates.data ?? []).filter((t) => t.shifts.length > 0);
+    if (tpls.length >= 1) {
+      const res = await applyTemplate.mutateAsync({ scheduleId, templateId: tpls[0]!.id });
+      if (res.shiftsCreated > 0) return res.shiftsCreated;
+    }
+    // 3) Otherwise split the business operating hours (zero setup).
+    const gen = await generateFromHoursMut.mutateAsync(scheduleId);
+    if (gen.shiftsCreated > 0) return gen.shiftsCreated;
+    // 4) Otherwise carry over last week (shifts + same employees).
+    const copied = await copyWeek.mutateAsync(scheduleId);
+    if (copied.copied > 0) return copied.copied;
+    return -1;
+  };
+
+  // Regenerate the week from current templates (replacing the auto-generated
+  // shifts), then auto-fill. Called when the user confirms the rebuild dialog.
+  const rebuildFromTemplates = async () => {
     if (!scheduleQuery.data) return;
     if (blockIfDemo()) return;
+    setRebuildOpen(false);
     setBuildingWeek(true);
     try {
       const scheduleId = await ensureRealScheduleId();
@@ -734,67 +873,57 @@ function ScheduleInner() {
         toast.error("לא ניתן ליצור סידור לשבוע זה");
         return;
       }
-      const hasShifts = (scheduleQuery.data.shifts?.length ?? 0) > 0;
-      let laidDownShifts = hasShifts;
+      const genT = await generateFromTemplates(scheduleId, { replace: true });
+      if (genT.templatesFound === 0) {
+        toast.error("לא הוגדרו תבניות משמרת", {
+          action: {
+            label: "פתח הגדרות",
+            onClick: () => {
+              window.location.href = "/settings/shift-templates";
+            },
+          },
+        });
+        return;
+      }
+      await fillAndSummarize(scheduleId, genT.shiftsCreated);
+    } catch {
+      toast.error("בניית השבוע נכשלה");
+    } finally {
+      setBuildingWeek(false);
+    }
+  };
 
+  const buildWeek = async () => {
+    if (!scheduleQuery.data) return;
+    if (blockIfDemo()) return;
+    const hasShifts = (scheduleQuery.data.shifts?.length ?? 0) > 0;
+
+    // #4 — non-empty week whose shifts do NOT derive from the current templates:
+    // rebuilding would replace the auto-generated shifts, so confirm first.
+    if (hasShifts && !shiftsDeriveFromTemplates()) {
+      setRebuildOpen(true);
+      return;
+    }
+
+    setBuildingWeek(true);
+    try {
+      const scheduleId = await ensureRealScheduleId();
+      if (!scheduleId) {
+        toast.error("לא ניתן ליצור סידור לשבוע זה");
+        return;
+      }
+      let createdShifts = 0;
       if (!hasShifts) {
-        // 1) The org's defined shift templates (בוקר/צהריים/ערב + manager) are
-        //    the source of truth — keeps role + headcount exactly as designed.
-        const genT = await generateFromTemplatesMut.mutateAsync(scheduleId);
-        if (genT.shiftsCreated > 0) {
-          laidDownShifts = true;
-          toast.success(`נבנה מתבניות המשמרת — ${genT.shiftsCreated} משמרות`);
-        }
-        // 2) A custom weekly template, if one was defined.
-        if (!laidDownShifts) {
-          const tpls = (weeklyTemplates.data ?? []).filter((t) => t.shifts.length > 0);
-          if (tpls.length >= 1) {
-            const res = await applyTemplate.mutateAsync({ scheduleId, templateId: tpls[0]!.id });
-            if (res.shiftsCreated > 0) {
-              laidDownShifts = true;
-              toast.success(`נבנה מהתבנית "${tpls[0]!.name}" — ${res.shiftsCreated} משמרות`);
-            }
-          }
-        }
-        // 3) Otherwise split the business operating hours (zero setup).
-        if (!laidDownShifts) {
-          const gen = await generateFromHoursMut.mutateAsync(scheduleId);
-          if (gen.shiftsCreated > 0) {
-            laidDownShifts = true;
-            toast.success(`נבנה משעות הפעילות — ${gen.shiftsCreated} משמרות`);
-          }
-        }
-        // 3) Otherwise carry over last week (shifts + same employees).
-        if (!laidDownShifts) {
-          const copied = await copyWeek.mutateAsync(scheduleId);
-          if (copied.copied > 0) {
-            laidDownShifts = true;
-            const staff = copied.assignmentsCopied
-              ? ` כולל ${copied.assignmentsCopied} עובדים`
-              : "";
-            toast.success(`נבנה בסיס מהשבוע הקודם — ${copied.copied} משמרות${staff}`);
-          }
-        }
-        if (!laidDownShifts) {
+        const laid = await layDownEmptyWeek(scheduleId);
+        if (laid < 0) {
           toast.info(
             "כדי לבנות שבוע אוטומטית, הגדירו שעות פעילות בהגדרות העסק (או צרו משמרות / תבנית).",
           );
           return;
         }
+        createdShifts = laid;
       }
-
-      // Auto-assign employees to the shifts AUTOMATICALLY — no dialog. One
-      // click on "בנה שבוע" lays the shifts AND fills them, honoring requests.
-      const auto = await autoSchedule.mutateAsync({ scheduleId, dryRun: true });
-      const proposals = auto.proposals ?? [];
-      if (proposals.length > 0) {
-        const res = await applyProposals.mutateAsync({ scheduleId, proposals });
-        const placed = res?.applied ?? proposals.length;
-        toast.success(`השבוע נבנה ושובצו ${placed} משמרות 🎉`);
-      } else {
-        toast.info("המשמרות נוצרו. אין כרגע עובדים זמינים לשיבוץ אוטומטי.");
-      }
-      await scheduleQueryReal.refetch();
+      await fillAndSummarize(scheduleId, createdShifts);
     } catch {
       toast.error("בניית השבוע נכשלה");
     } finally {
@@ -814,7 +943,8 @@ function ScheduleInner() {
           <button
             type="button"
             onClick={() => setViewMode("weekly")}
-            className={`px-3 py-1 transition-colors ${
+            aria-pressed={viewMode === "weekly"}
+            className={`px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${
               viewMode === "weekly"
                 ? "bg-indigo-500 text-white font-medium"
                 : "bg-background text-muted-foreground hover:bg-muted"
@@ -825,7 +955,8 @@ function ScheduleInner() {
           <button
             type="button"
             onClick={() => setViewMode("daily")}
-            className={`px-3 py-1 border-s transition-colors ${
+            aria-pressed={viewMode === "daily"}
+            className={`px-3 py-1 border-s transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${
               viewMode === "daily"
                 ? "bg-indigo-500 text-white font-medium"
                 : "bg-background text-muted-foreground hover:bg-muted"
@@ -834,6 +965,12 @@ function ScheduleInner() {
             יומי
           </button>
         </div>
+        {/* #2 confirmations — compact pill in the toolbar for the published
+           state (replaces the old floating mid-page card). Self-hides until the
+           schedule is published with a real id. */}
+        {scheduleQuery.data?.status === "published" && scheduleQuery.data.id && (
+          <ConfirmationPill scheduleId={scheduleQuery.data.id} isPublished />
+        )}
         <div className="me-auto" />
         {/* Mobile-only: filter + employees drawer triggers */}
         <Button
@@ -880,12 +1017,16 @@ function ScheduleInner() {
           size="sm"
           onClick={buildWeek}
           disabled={!scheduleQuery.data || buildingWeek}
-          className="h-11 sm:h-10"
-          aria-label="בנה שבוע"
+          className={`h-11 sm:h-10 ${!hasShiftsInWeek ? "flex-1 sm:flex-none" : ""}`}
+          aria-label="בנה שבוע אוטומטי"
+          aria-busy={buildingWeek}
           title="לחיצה אחת: יוצר את משמרות השבוע משעות הפעילות ומשבץ את העובדים אוטומטית, לפי הבקשות"
         >
           <Wand2 className="h-4 w-4" />
-          <span className="hidden sm:inline">
+          {/* On an empty week the label is the single primary CTA — always show
+             it (full-width labeled button on mobile). With shifts it collapses
+             to an icon on small screens to keep the bar tidy. */}
+          <span className={hasShiftsInWeek ? "hidden sm:inline" : "inline"}>
             {buildingWeek ? "בונה…" : "בנה שבוע אוטומטי"}
           </span>
         </Button>
@@ -899,7 +1040,7 @@ function ScheduleInner() {
               size="sm"
               className="h-11 sm:h-10"
               aria-label="עוד פעולות"
-              disabled={!scheduleQuery.data}
+              disabled={!scheduleQuery.data || buildingWeek}
             >
               <ChevronDown className="h-4 w-4" />
               <span className="hidden sm:inline">עוד</span>
@@ -949,7 +1090,7 @@ function ScheduleInner() {
         {isBranchManager && scheduleStatus === "draft" ? (
           <Button
             onClick={submitForApproval}
-            disabled={approving || !scheduleQuery.data}
+            disabled={approving || !scheduleQuery.data || buildingWeek}
             className="h-11 sm:h-10"
             title="שלח את הסידור לאישור הבעלים"
           >
@@ -964,8 +1105,8 @@ function ScheduleInner() {
           <>
             <Button
               variant="outline"
-              onClick={reject}
-              disabled={approving}
+              onClick={() => setRejectOpen(true)}
+              disabled={approving || buildingWeek}
               className="h-11 sm:h-10"
               title="החזר את הסידור לעריכה למנהל הסניף"
             >
@@ -975,7 +1116,7 @@ function ScheduleInner() {
             <Button
               variant="glow"
               onClick={approve}
-              disabled={approving}
+              disabled={approving || buildingWeek}
               className="h-11 sm:h-10"
               title="אשר את הסידור"
             >
@@ -986,7 +1127,7 @@ function ScheduleInner() {
         ) : (
           <Button
             onClick={publishNow}
-            disabled={publish.isPending || !scheduleQuery.data}
+            disabled={publish.isPending || !scheduleQuery.data || buildingWeek}
             className="h-11 sm:h-10"
             title="שמירה כסידור פורסם + פתיחת חלון שיתוף"
           >
@@ -1004,16 +1145,8 @@ function ScheduleInner() {
       {/* Compliance banner — hidden for small-business simplicity */}
       {/* <ComplianceBanner scheduleId={scheduleQuery.data?.id ?? null} /> */}
 
-      {/* Confirmation status — visible only when schedule is published */}
-      {scheduleQuery.data?.status === "published" && scheduleQuery.data.id && (
-        <div className="px-3 sm:px-4 pt-2 pb-1 max-w-md">
-          <ConfirmationStatus
-            scheduleId={scheduleQuery.data.id}
-            isPublished
-            weekLabel={weekStart.toISODate() ?? ""}
-          />
-        </div>
-      )}
+      {/* Confirmation status moved: compact pill lives in the top toolbar, and
+         the full card is anchored inside the right employees sidebar below. */}
 
       <DndContext
         sensors={sensors}
@@ -1085,12 +1218,21 @@ function ScheduleInner() {
               ))}
             </div>
           ) : scheduleQuery.isError ? (
-            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-sm text-destructive">
-              שגיאה בטעינת הסידור
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-sm text-destructive space-y-3">
+              <p>שגיאה בטעינת הסידור</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void scheduleQueryReal.refetch()}
+              >
+                נסה שוב
+              </Button>
             </div>
           ) : scheduleQuery.data ? (
             scheduleQuery.data.shifts.length === 0 ? (
               <EmptyScheduleState
+                onBuildWeek={buildWeek}
+                buildingWeek={buildingWeek}
                 onCreateFirstShift={() => {
                   if (blockIfDemo()) return;
                   setCreateShiftPreset(undefined);
@@ -1137,6 +1279,17 @@ function ScheduleInner() {
 
         {/* Right rail — employees (desktop only) */}
         <aside aria-label="עובדים זמינים" className="hidden sm:block w-72 shrink-0 border-s bg-muted/30 p-3 overflow-y-auto">
+          {/* #2 — full confirmations card, anchored here as a w-full block when
+             the schedule is published (instead of floating mid-page). */}
+          {scheduleQuery.data?.status === "published" && scheduleQuery.data.id && (
+            <div className="mb-3 w-full">
+              <ConfirmationStatus
+                scheduleId={scheduleQuery.data.id}
+                isPublished
+                weekLabel={weekStart.toISODate() ?? ""}
+              />
+            </div>
+          )}
           <div className="text-xs font-semibold mb-2 flex items-center justify-between">
             <span>עובדים זמינים</span>
             <span className="text-muted-foreground tabular-nums">
@@ -1160,8 +1313,25 @@ function ScheduleInner() {
                 />
               ))}
               {visibleEmployees.length === 0 ? (
-                <div className="text-xs text-muted-foreground p-3 text-center">
-                  אין עובדים תואמים
+                <div className="p-3 text-center space-y-2">
+                  {hasAnyActiveEmployees && filtersActive ? (
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        אין עובדים תואמים לסינון
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={clearFilters}
+                      >
+                        נקה סינון
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      אין עובדים פעילים — הוסיפו עובדים בהגדרות
+                    </p>
+                  )}
                 </div>
               ) : null}
             </div>
@@ -1346,8 +1516,25 @@ function ScheduleInner() {
                 />
               ))}
               {visibleEmployees.length === 0 ? (
-                <div className="text-xs text-muted-foreground p-3 text-center">
-                  אין עובדים תואמים
+                <div className="p-3 text-center space-y-2">
+                  {hasAnyActiveEmployees && filtersActive ? (
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        אין עובדים תואמים לסינון
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={clearFilters}
+                      >
+                        נקה סינון
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      אין עובדים פעילים — הוסיפו עובדים בהגדרות
+                    </p>
+                  )}
                 </div>
               ) : null}
             </div>
@@ -1436,6 +1623,92 @@ function ScheduleInner() {
       {/* Setup checklist — floating bottom-start on desktop, top banner on mobile.
          Self-contained: reads useOnboardingProgress() and auto-hides when done. */}
       {!isDemo && <SetupChecklist />}
+
+      {/* #4 — rebuild-from-templates confirmation. Shown when the current week
+         already has shifts that don't derive from the active templates, so the
+         user understands the auto-generated shifts will be replaced. */}
+      <Dialog open={rebuildOpen} onOpenChange={setRebuildOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>בנה מחדש לפי התבניות?</DialogTitle>
+            <DialogDescription>
+              {(shiftTemplatesQuery.data?.length ?? 0) === 0
+                ? "לא הוגדרו תבניות משמרת. הגדירו תבניות בהגדרות העסק ואז נסו שוב."
+                : "בשבוע זה כבר קיימות משמרות שלא נוצרו מהתבניות הנוכחיות. בנייה מחדש תחליף את המשמרות שנוצרו אוטומטית בתבניות המשמרת המעודכנות, ולאחר מכן תשבץ עובדים מחדש."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setRebuildOpen(false)}
+              disabled={buildingWeek}
+            >
+              ביטול
+            </Button>
+            {(shiftTemplatesQuery.data?.length ?? 0) === 0 ? (
+              <Button asChild variant="glow">
+                <Link href="/settings/shift-templates">
+                  <CalendarCog className="h-4 w-4" />
+                  פתח הגדרות תבניות
+                </Link>
+              </Button>
+            ) : (
+              <Button
+                variant="glow"
+                onClick={() => void rebuildFromTemplates()}
+                disabled={buildingWeek}
+              >
+                <Wand2 className="h-4 w-4" />
+                {buildingWeek ? "בונה…" : "בנה מחדש"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject (return-to-edit) dialog — replaces window.prompt with a proper
+         RTL dialog containing a labeled, optional note for the branch manager. */}
+      <Dialog
+        open={rejectOpen}
+        onOpenChange={(open) => {
+          setRejectOpen(open);
+          if (!open) setRejectNote("");
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>החזרת הסידור לעריכה</DialogTitle>
+            <DialogDescription>
+              ניתן לצרף הערה למנהל הסניף שתסביר מה נדרש לתקן (אופציונלי).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5 text-start">
+            <label htmlFor="reject-note" className="text-sm font-medium">
+              הערה למנהל הסניף
+            </label>
+            <textarea
+              id="reject-note"
+              value={rejectNote}
+              onChange={(e) => setRejectNote(e.target.value)}
+              rows={4}
+              placeholder="לדוגמה: חסר עובד במשמרת הערב של יום חמישי…"
+              className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setRejectOpen(false)}
+              disabled={approving}
+            >
+              ביטול
+            </Button>
+            <Button onClick={reject} disabled={approving}>
+              {approving ? "מחזיר…" : "החזר לעריכה"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Signup prompt — replaces the old toast for demo-mode blocks */}
       <Dialog open={signupPromptOpen} onOpenChange={setSignupPromptOpen}>

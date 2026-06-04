@@ -53,10 +53,18 @@ export class GreedySchedulerProvider implements SchedulerProvider {
       bucket.sort((a, b) => b.score - a.score);
     }
 
-    // walk shifts in chronological order, picking top-K respecting conflicts
-    const orderedShifts = Array.from(new Set(scored.map((r) => r.candidate.shift.id)))
-      .map((id) => scored.find((r) => r.candidate.shift.id === id)!.candidate.shift)
-      .sort((a, b) => a.startAtUtc.getTime() - b.startAtUtc.getTime());
+    // walk shifts in chronological order, picking top-K respecting conflicts.
+    // Build the shift universe from ALL candidates (not just the eligible/scored
+    // ones): a shift whose entire candidate pool is ineligible has no scored row,
+    // but it still exists and must be considered so it can be reported as
+    // unfilled below. Pulling only from `scored` would silently drop it.
+    const shiftById = new Map<string, (typeof candidates)[number]['shift']>();
+    for (const c of candidates) {
+      if (!shiftById.has(c.shift.id)) shiftById.set(c.shift.id, c.shift);
+    }
+    const orderedShifts = Array.from(shiftById.values()).sort(
+      (a, b) => a.startAtUtc.getTime() - b.startAtUtc.getTime(),
+    );
 
     const proposals: AssignmentProposal[] = [];
     const employeeBusy = new Map<string, Array<{ start: Date; end: Date }>>();

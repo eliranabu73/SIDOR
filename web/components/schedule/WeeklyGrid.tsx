@@ -34,24 +34,35 @@ function empColor(name: string) {
   return AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length]!;
 }
 
-// Each distinct shift TIME gets its own colour, so morning vs evening (and any
-// other shift) are instantly scannable across the grid. Same time → same colour.
+// Each distinct shift TEMPLATE (role + time-of-day) gets its own colour, so
+// morning vs evening (and per-role variants) are instantly scannable across the
+// grid. Keyed off a stable template key, not just the raw time-string, so the
+// same logical shift always renders the same colour. Tint raised to 25% and
+// text darkened (900/200) for >=4.5:1 contrast in light + dark.
 const SHIFT_COLORS = [
-  "bg-sky-500/15 border-sky-400/50 text-sky-800 dark:text-sky-200",
-  "bg-violet-500/15 border-violet-400/50 text-violet-800 dark:text-violet-200",
-  "bg-emerald-500/15 border-emerald-400/50 text-emerald-800 dark:text-emerald-200",
-  "bg-amber-500/15 border-amber-400/50 text-amber-800 dark:text-amber-200",
-  "bg-rose-500/15 border-rose-400/50 text-rose-800 dark:text-rose-200",
-  "bg-fuchsia-500/15 border-fuchsia-400/50 text-fuchsia-800 dark:text-fuchsia-200",
-  "bg-cyan-500/15 border-cyan-400/50 text-cyan-800 dark:text-cyan-200",
-  "bg-lime-500/15 border-lime-400/50 text-lime-800 dark:text-lime-200",
+  "bg-sky-500/25 border-sky-500/60 text-sky-900 dark:text-sky-100",
+  "bg-violet-500/25 border-violet-500/60 text-violet-900 dark:text-violet-100",
+  "bg-emerald-500/25 border-emerald-500/60 text-emerald-900 dark:text-emerald-100",
+  "bg-amber-500/25 border-amber-500/60 text-amber-900 dark:text-amber-100",
+  "bg-rose-500/25 border-rose-500/60 text-rose-900 dark:text-rose-100",
+  "bg-fuchsia-500/25 border-fuchsia-500/60 text-fuchsia-900 dark:text-fuchsia-100",
+  "bg-cyan-500/25 border-cyan-500/60 text-cyan-900 dark:text-cyan-100",
+  "bg-lime-500/25 border-lime-500/60 text-lime-900 dark:text-lime-100",
 ];
 
-function shiftColor(startsAt: string, endsAt: string): string {
-  const key = `${fmt(startsAt)}-${fmt(endsAt)}`;
+/** Stable template key for a shift: prefer role + time-of-day over raw ISO. */
+function shiftTemplateKey(shift: Shift): string {
+  return `${shift.role ?? ""}|${fmt(shift.startsAt)}-${fmt(shift.endsAt)}`;
+}
+
+function hashIndex(key: string, mod: number): number {
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  return SHIFT_COLORS[h % SHIFT_COLORS.length]!;
+  return h % mod;
+}
+
+function shiftColor(shift: Shift): string {
+  return SHIFT_COLORS[hashIndex(shiftTemplateKey(shift), SHIFT_COLORS.length)]!;
 }
 
 const ROLE_DOTS = [
@@ -59,9 +70,7 @@ const ROLE_DOTS = [
   "bg-sky-500", "bg-fuchsia-500", "bg-cyan-500", "bg-lime-500",
 ];
 function roleDot(role: string): string {
-  let h = 0;
-  for (let i = 0; i < role.length; i++) h = (h * 31 + role.charCodeAt(i)) >>> 0;
-  return ROLE_DOTS[h % ROLE_DOTS.length]!;
+  return ROLE_DOTS[hashIndex(role, ROLE_DOTS.length)]!;
 }
 
 const NO_ROLE = "ללא תפקיד";
@@ -78,13 +87,97 @@ function groupEmployeesByRole(employees: Employee[]): { role: string; emps: Empl
     .map(([role, emps]) => ({ role, emps }));
 }
 
+// ─── Legend ──────────────────────────────────────────────────────────────────
+// Maps each role to its dot colour and each distinct shift template (role +
+// time) to its colour swatch, so the colour coding across the grid is explained
+// and never colour-only (every swatch carries its time/role text label too).
+
+interface ShiftTemplate {
+  key: string;
+  role: string;
+  startsAt: string;
+  endsAt: string;
+}
+
+function deriveLegend(
+  employees: Employee[],
+  shifts: Shift[],
+  locFilter: string | "all",
+  roleFilter: string | "all",
+): { roles: string[]; templates: ShiftTemplate[] } {
+  const roleSet = new Set<string>();
+  for (const e of employees) roleSet.add(e.roles?.[0] ?? NO_ROLE);
+
+  const tmplMap = new Map<string, ShiftTemplate>();
+  for (const s of shifts) {
+    if (locFilter !== "all" && s.locationId !== locFilter) continue;
+    if (roleFilter !== "all" && s.role !== roleFilter) continue;
+    if (s.role) roleSet.add(s.role);
+    const key = shiftTemplateKey(s);
+    if (!tmplMap.has(key)) {
+      tmplMap.set(key, { key, role: s.role ?? NO_ROLE, startsAt: s.startsAt, endsAt: s.endsAt });
+    }
+  }
+
+  const roles = [...roleSet].sort((a, b) =>
+    a === NO_ROLE ? 1 : b === NO_ROLE ? -1 : a.localeCompare(b, "he"),
+  );
+  const templates = [...tmplMap.values()].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  return { roles, templates };
+}
+
+function Legend({ roles, templates }: { roles: string[]; templates: ShiftTemplate[] }) {
+  if (!roles.length && !templates.length) return null;
+  return (
+    <div
+      className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border bg-muted/20 px-3 py-2 mb-3"
+      role="group"
+      aria-label="מקרא צבעים"
+    >
+      {roles.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span className="text-[11px] font-semibold text-muted-foreground">תפקידים:</span>
+          {roles.map((role) => (
+            <span key={role} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-foreground">
+              <span aria-hidden="true" className={cn("h-2.5 w-2.5 rounded-full", roleDot(role))} />
+              {role}
+            </span>
+          ))}
+        </div>
+      )}
+      {templates.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          <span className="text-[11px] font-semibold text-muted-foreground">משמרות:</span>
+          {templates.map((t) => (
+            <span
+              key={t.key}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-semibold",
+                shiftColor({ role: t.role, startsAt: t.startsAt, endsAt: t.endsAt } as Shift),
+              )}
+            >
+              <span dir="ltr" className="tabular-nums">{fmt(t.startsAt)}–{fmt(t.endsAt)}</span>
+              {t.role && t.role !== NO_ROLE && (
+                <span className="font-normal opacity-80">· {t.role}</span>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
   return (
-    <div className={cn(
-      "shrink-0 rounded-full flex items-center justify-center font-bold",
-      empColor(name),
-      size === "sm" ? "h-6 w-6 text-[9px]" : "h-8 w-8 text-xs",
-    )}>
+    <div
+      aria-hidden="true"
+      className={cn(
+        "shrink-0 rounded-full flex items-center justify-center font-bold",
+        empColor(name),
+        size === "sm" ? "h-6 w-6 text-[9px]" : "h-8 w-8 text-xs",
+      )}
+    >
       {initials(name)}
     </div>
   );
@@ -195,6 +288,18 @@ function AgendaDay({
 }) {
   const hasContent = agendaShifts.length > 0;
 
+  // Group the day's shifts by role so role separation mirrors the desktop grid.
+  const byRole = React.useMemo(() => {
+    const map = new Map<string, AgendaShift[]>();
+    for (const a of agendaShifts) {
+      const role = a.shift.role || NO_ROLE;
+      (map.get(role) ?? map.set(role, []).get(role)!).push(a);
+    }
+    return [...map.entries()]
+      .sort(([a], [b]) => (a === NO_ROLE ? 1 : b === NO_ROLE ? -1 : a.localeCompare(b, "he")))
+      .map(([role, items]) => ({ role, items }));
+  }, [agendaShifts]);
+
   return (
     <div className={cn(
       "rounded-2xl border overflow-hidden shadow-sm",
@@ -232,17 +337,26 @@ function AgendaDay({
         </button>
       </div>
 
-      {/* Shifts list */}
+      {/* Shifts list — sectioned by role to mirror the desktop grid */}
       {hasContent ? (
         <div className="divide-y">
-          {agendaShifts.map(({ shift, employees, unassigned }) => (
+          {byRole.map(({ role, items }) => (
+            <div key={role}>
+              {/* Role section header */}
+              <div className="flex items-center gap-1.5 px-4 py-1.5 bg-muted/50">
+                <span aria-hidden="true" className={cn("h-2.5 w-2.5 rounded-full", roleDot(role))} />
+                <span className="text-[11px] font-bold text-foreground">{role}</span>
+                <span className="text-[11px] font-normal text-muted-foreground/70">· {items.length}</span>
+              </div>
+              <div className="divide-y">
+                {items.map(({ shift, employees, unassigned }) => (
             <div key={shift.id} className={cn(
               "flex items-center gap-3 px-4 py-3",
               unassigned ? "bg-amber-50/50 dark:bg-amber-950/10" : "bg-background",
             )}>
               {/* Time badge — coloured per shift time */}
               <div className="shrink-0 min-w-[4.5rem]">
-                <div className={cn("rounded-lg border px-2 py-1 text-center", shiftColor(shift.startsAt, shift.endsAt))}>
+                <div className={cn("rounded-lg border px-2 py-1 text-center", shiftColor(shift))}>
                   <span dir="ltr" className="text-xs font-mono font-bold tabular-nums">
                     {fmt(shift.startsAt)}
                   </span>
@@ -294,6 +408,9 @@ function AgendaDay({
                 </button>
               )}
             </div>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       ) : (
@@ -316,10 +433,10 @@ function ShiftPill({
   onRemove?: () => void;
   onDelete?: () => void;
 }) {
-  const color = shiftColor(shift.startsAt, shift.endsAt);
+  const color = shiftColor(shift);
   return (
     <div className={cn(
-      "group flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold",
+      "group flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-xs font-semibold",
       color,
     )}>
       <span dir="ltr" className="tabular-nums">{fmt(shift.startsAt)}–{fmt(shift.endsAt)}</span>
@@ -329,9 +446,9 @@ function ShiftPill({
           onClick={(e) => { e.stopPropagation(); onRemove(); }}
           aria-label="הסר עובד/ת מהמשמרת"
           title="הסר עובד/ת"
-          className="hidden group-hover:flex opacity-70 hover:text-red-500"
+          className="hidden focus-visible:flex group-hover:flex group-focus-within:flex opacity-80 hover:text-red-500 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1"
         >
-          <X className="h-2.5 w-2.5" />
+          <X className="h-3 w-3" />
         </button>
       )}
       {onDelete && (
@@ -340,9 +457,9 @@ function ShiftPill({
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           aria-label="מחק משמרת"
           title="מחק משמרת"
-          className="hidden group-hover:flex opacity-70 hover:text-red-600"
+          className="hidden focus-visible:flex group-hover:flex group-focus-within:flex opacity-80 hover:text-red-600 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-1"
         >
-          <Trash2 className="h-2.5 w-2.5" />
+          <Trash2 className="h-3 w-3" />
         </button>
       )}
     </div>
@@ -461,11 +578,11 @@ function DesktopGrid({
           </colgroup>
           <thead>
             <tr className="bg-muted/30">
-              <th className="py-3 px-3 text-start text-xs font-semibold text-muted-foreground border-b">עובד/ת</th>
+              <th scope="col" className="py-3 px-3 text-start text-xs font-semibold text-muted-foreground border-b">עובד/ת</th>
               {days.map((dt, i) => {
                 const isToday = i === todayIdx;
                 return (
-                  <th key={i} className={cn("py-3 px-1 text-center border-b border-s", isToday ? "bg-indigo-500/8" : "")}>
+                  <th key={i} scope="col" className={cn("py-3 px-1 text-center border-b border-s", isToday ? "bg-indigo-500/8" : "")}>
                     <div className={cn("text-[10px] font-semibold", isToday ? "text-indigo-600" : "text-muted-foreground")}>
                       {DAYS_SHORT[i]}
                     </div>
@@ -484,22 +601,22 @@ function DesktopGrid({
             {groupEmployeesByRole(employees).map((group) => (
               <React.Fragment key={group.role}>
                 <tr className="bg-muted/50">
-                  <td colSpan={8} className="py-1.5 px-3 border-b">
+                  <th scope="colgroup" colSpan={8} className="py-1.5 px-3 text-start border-b">
                     <span className="inline-flex items-center gap-1.5 text-[11px] font-bold">
-                      <span className={cn("h-2.5 w-2.5 rounded-full", roleDot(group.role))} />
+                      <span aria-hidden="true" className={cn("h-2.5 w-2.5 rounded-full", roleDot(group.role))} />
                       {group.role}
                       <span className="font-normal text-muted-foreground/70">· {group.emps.length}</span>
                     </span>
-                  </td>
+                  </th>
                 </tr>
                 {group.emps.map((emp, idx) => (
               <tr key={emp.id} className={cn("border-b last:border-0 hover:bg-muted/10 transition-colors", idx % 2 === 1 && "bg-muted/5")}>
-                <td className="py-2 px-3 border-s first:border-s-0">
+                <th scope="row" className="py-2 px-3 text-start font-normal border-s first:border-s-0">
                   <div className="flex items-center gap-2">
                     <Avatar name={emp.fullName} size="sm" />
                     <span className="text-xs font-medium truncate max-w-[6.5rem]" title={emp.fullName}>{emp.fullName}</span>
                   </div>
-                </td>
+                </th>
                 {days.map((dt, dayIdx) => {
                   const dayShifts = byEmployee[emp.id]?.[dayIdx] ?? [];
                   return (
@@ -516,7 +633,7 @@ function DesktopGrid({
                         <button
                           type="button"
                           onClick={() => onQuickAdd(emp.id, dt)}
-                          className="flex h-5 w-5 items-center justify-center rounded-full border border-transparent text-transparent group-hover/cell:border-border group-hover/cell:text-muted-foreground hover:!border-indigo-400 hover:!text-indigo-500 hover:!bg-indigo-50 dark:hover:!bg-indigo-950/30 transition-all"
+                          className="flex h-5 w-5 items-center justify-center rounded-full border border-border/40 text-muted-foreground/40 group-hover/cell:border-border group-hover/cell:text-muted-foreground focus-visible:border-indigo-400 focus-visible:text-indigo-500 hover:!border-indigo-400 hover:!text-indigo-500 hover:!bg-indigo-50 dark:hover:!bg-indigo-950/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1 transition-all"
                           aria-label={`הוסף משמרת ל${emp.fullName}`}
                         >
                           <Plus className="h-2.5 w-2.5" />
@@ -573,12 +690,18 @@ export function WeeklyGrid({
   );
 
   const todayIdx = DateTime.now().weekday % 7;
-  const activeEmployees = employees.filter((e) => e.active);
+  const activeEmployees = React.useMemo(() => employees.filter((e) => e.active), [employees]);
+
+  const legend = React.useMemo(
+    () => deriveLegend(activeEmployees, schedule.shifts, locationFilter, roleFilter),
+    [activeEmployees, schedule.shifts, locationFilter, roleFilter],
+  );
 
   return (
     <>
       {/* ── MOBILE: Agenda (scrollable day cards) ─────────────────── */}
       <div className="md:hidden flex flex-col gap-3 p-3">
+        <Legend roles={legend.roles} templates={legend.templates} />
         {dayDates.map((dt, dayIdx) => (
           <AgendaDay
             key={dayIdx}
@@ -596,6 +719,7 @@ export function WeeklyGrid({
 
       {/* ── DESKTOP: employee×day grid + accordion ─────────────────── */}
       <div className="hidden md:flex flex-col gap-0">
+        <Legend roles={legend.roles} templates={legend.templates} />
         <DesktopGrid
           weekStart={weekStart}
           employees={activeEmployees}

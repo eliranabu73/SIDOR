@@ -16,6 +16,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   fetchEmployees,
   fetchSettings,
   promoteEmployeeToManager,
@@ -123,7 +130,7 @@ export function PromoteEmployeeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="w-[calc(100%-2rem)] max-w-md sm:w-full">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5 text-primary" />
@@ -137,20 +144,26 @@ export function PromoteEmployeeDialog({
         <div className="space-y-4">
           <div className="space-y-1">
             <Label htmlFor="employee">עובד</Label>
-            <select
-              id="employee"
+            <Select
               value={employeeId}
-              onChange={(e) => setEmployeeId(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
-              disabled={employeesQ.isLoading}
+              onValueChange={setEmployeeId}
+              disabled={employeesQ.isLoading || eligibleEmployees.length === 0}
             >
-              <option value="">— בחר עובד —</option>
-              {eligibleEmployees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.fullName} ({e.email})
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="employee" className="h-10 w-full" aria-label="עובד">
+                <SelectValue
+                  placeholder={
+                    employeesQ.isLoading ? "טוען עובדים…" : "בחר עובד מהרשימה"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {eligibleEmployees.map((e) => (
+                  <SelectItem key={e.id} value={e.id}>
+                    {e.fullName} ({e.email})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {!employeesQ.isLoading && eligibleEmployees.length === 0 && (
               <p className="text-xs text-muted-foreground">
                 אין עובדים זמינים עם כתובת אימייל שעדיין לא מוגדרים כמנהלים.
@@ -160,39 +173,48 @@ export function PromoteEmployeeDialog({
 
           <div className="space-y-1">
             <Label htmlFor="role">תפקיד מערכת</Label>
-            <select
-              id="role"
+            <Select
               value={role}
-              onChange={(e) => {
-                const next = e.target.value as "MANAGER" | "BRANCH_MANAGER";
+              onValueChange={(v) => {
+                const next = v as "MANAGER" | "BRANCH_MANAGER";
                 setRole(next);
                 if (next === "MANAGER") setLocationId("");
               }}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
             >
-              <option value="MANAGER">מנהל (כל הסניפים)</option>
-              <option value="BRANCH_MANAGER">מנהל סניף</option>
-            </select>
+              <SelectTrigger id="role" className="h-10 w-full" aria-label="תפקיד מערכת">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="MANAGER">מנהל (כל הסניפים)</SelectItem>
+                <SelectItem value="BRANCH_MANAGER">מנהל סניף</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          {role === "BRANCH_MANAGER" && (
-            <div className="space-y-1">
-              <Label htmlFor="branch">סניף</Label>
-              <select
-                id="branch"
-                value={locationId}
-                onChange={(e) => setLocationId(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
-              >
-                <option value="">— בחר סניף —</option>
-                {settingsQ.data?.locations.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          {/* Reserve space so the dialog height does not jump when the branch
+              field appears for BRANCH_MANAGER. */}
+          <div className="min-h-[68px]">
+            {role === "BRANCH_MANAGER" && (
+              <div className="space-y-1">
+                <Label htmlFor="branch">סניף</Label>
+                <Select value={locationId} onValueChange={setLocationId}>
+                  <SelectTrigger id="branch" className="h-10 w-full" aria-label="סניף">
+                    <SelectValue placeholder="בחר סניף" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {settingsQ.data?.locations.map((l) => (
+                      <SelectItem key={l.id} value={l.id}>
+                        {l.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  מנהל הסניף יראה ויערוך רק את הנתונים של הסניף שנבחר.
+                </p>
+              </div>
+            )}
+          </div>
 
           <div className="space-y-1">
             <Label htmlFor="password">סיסמה ראשונית</Label>

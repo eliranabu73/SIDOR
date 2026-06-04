@@ -26,6 +26,37 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Maps an HTTP status to a user-facing Hebrew message — never leaks the raw
+ * status code or English text into a toast. The numeric status stays on the
+ * ApiError object for logging only.
+ */
+function statusMessage(status: number): string {
+  if (status === 401 || status === 403) {
+    return "אין הרשאה לבצע פעולה זו — התחברו מחדש";
+  }
+  if (status >= 500) {
+    return "שגיאת שרת זמנית, נסו שוב בעוד רגע";
+  }
+  return "הפעולה נכשלה, נסו שוב";
+}
+
+/**
+ * Resolves the message to surface to the user: a server-provided Hebrew error
+ * when present, otherwise a code-free Hebrew fallback derived from the status.
+ */
+function userFacingError(body: unknown, status: number, key = "error"): string {
+  if (
+    body &&
+    typeof body === "object" &&
+    key in body &&
+    typeof (body as Record<string, unknown>)[key] === "string"
+  ) {
+    return (body as Record<string, string>)[key];
+  }
+  return statusMessage(status);
+}
+
 async function authHeaders(): Promise<HeadersInit> {
   const headers: Record<string, string> = {
     "content-type": "application/json",
@@ -83,14 +114,7 @@ async function request<T>(
     }
   }
   if (!res.ok) {
-    const message =
-      (body &&
-        typeof body === "object" &&
-        "error" in body &&
-        typeof (body as { error: unknown }).error === "string"
-        ? (body as { error: string }).error
-        : `Request failed: ${res.status}`);
-    throw new ApiError(message, res.status, body);
+    throw new ApiError(userFacingError(body, res.status), res.status, body);
   }
   return body as T;
 }
@@ -554,11 +578,7 @@ export async function fetchEmployeeActivity(
   );
   const body = (await r.json().catch(() => null)) as unknown;
   if (!r.ok) {
-    const msg =
-      body && typeof body === "object" && "message" in body
-        ? String((body as { message: unknown }).message)
-        : `Request failed: ${r.status}`;
-    throw new ApiError(msg, r.status, body);
+    throw new ApiError(userFacingError(body, r.status, "message"), r.status, body);
   }
   return body as EmployeeActivity;
 }
@@ -577,11 +597,7 @@ export async function createTimeOff(
   );
   const j = (await r.json().catch(() => null)) as unknown;
   if (!r.ok) {
-    const msg =
-      j && typeof j === "object" && "message" in j
-        ? String((j as { message: unknown }).message)
-        : `Request failed: ${r.status}`;
-    throw new ApiError(msg, r.status, j);
+    throw new ApiError(userFacingError(j, r.status, "message"), r.status, j);
   }
   return j as EmployeeTimeOffItem;
 }
@@ -605,11 +621,7 @@ export async function saveAvailability(
   );
   const j = (await r.json().catch(() => null)) as unknown;
   if (!r.ok) {
-    const msg =
-      j && typeof j === "object" && "message" in j
-        ? String((j as { message: unknown }).message)
-        : `Request failed: ${r.status}`;
-    throw new ApiError(msg, r.status, j);
+    throw new ApiError(userFacingError(j, r.status, "message"), r.status, j);
   }
   return j as { rules: EmployeeAvailabilityRule[] };
 }
@@ -650,11 +662,7 @@ export async function createSwapRequestFromShare(
   );
   const body = (await res.json().catch(() => null)) as unknown;
   if (!res.ok) {
-    const msg =
-      body && typeof body === "object" && "message" in body
-        ? String((body as { message: unknown }).message)
-        : `Request failed: ${res.status}`;
-    throw new ApiError(msg, res.status, body);
+    throw new ApiError(userFacingError(body, res.status, "message"), res.status, body);
   }
   return body as { id: ID; status: string };
 }
@@ -685,11 +693,7 @@ export async function fetchEmployeeShare(
   const res = await fetch(`${API_URL}/v1/share/${encodeURIComponent(token)}/me`);
   const body = (await res.json().catch(() => null)) as unknown;
   if (!res.ok) {
-    const msg =
-      body && typeof body === "object" && "message" in body
-        ? String((body as { message: unknown }).message)
-        : `Request failed: ${res.status}`;
-    throw new ApiError(msg, res.status, body);
+    throw new ApiError(userFacingError(body, res.status, "message"), res.status, body);
   }
   return body as EmployeeShareView;
 }
@@ -1294,7 +1298,7 @@ export async function downloadPayrollCsv(input: {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new ApiError(`Request failed: ${res.status}`, res.status, text);
+    throw new ApiError(statusMessage(res.status), res.status, text);
   }
   const blob = await res.blob();
   // Try to extract filename from content-disposition.
@@ -1768,16 +1772,53 @@ export function generateFromHours(scheduleId: ID): Promise<GenerateFromHoursResu
 export interface GenerateFromTemplatesResult {
   shiftsCreated: number;
   templatesUsed: number;
+  /** How many shift templates the org has defined (>= templatesUsed). */
+  templatesFound: number;
   openDays: number[];
   message?: string;
 }
 
-/** Create the week's shifts from the org's defined shift templates (role + headcount). */
-export function generateFromTemplates(scheduleId: ID): Promise<GenerateFromTemplatesResult> {
+/**
+ * Create the week's shifts from the org's defined shift templates (role +
+ * headcount). Pass `{ replace: true }` to clear existing template-generated
+ * shifts before regenerating.
+ */
+export function generateFromTemplates(
+  scheduleId: ID,
+  opts?: { replace?: boolean },
+): Promise<GenerateFromTemplatesResult> {
   return request<GenerateFromTemplatesResult>(
     `/v1/schedules/${scheduleId}/generate-from-templates`,
-    { method: "POST" },
+    { method: "POST", body: JSON.stringify({ replace: opts?.replace ?? false }) },
   );
+}
+
+// --------- Dashboard (single round-trip for the schedule page) ---------
+
+/**
+ * One-shot payload for the schedule page: schedule + its shifts, plus the
+ * employees/locations/me the page needs to render. Each sub-shape matches the
+ * dedicated endpoints (fetchSchedule, fetchEmployees, fetchLocations, fetchMe)
+ * so callers can destructure with zero churn.
+ */
+export interface DashboardData {
+  schedule: Schedule;
+  shifts: Shift[];
+  employees: Employee[];
+  locations: LocationItem[];
+  me: MeResponse;
+}
+
+/** Fetch the whole schedule-page dataset in a single GET /v1/dashboard call. */
+export function fetchDashboard(
+  scheduleId: ID,
+  weekStartISO: string,
+): Promise<DashboardData> {
+  const qs = new URLSearchParams({
+    scheduleId,
+    weekStart: weekStartISO,
+  }).toString();
+  return request<DashboardData>(`/v1/dashboard?${qs}`);
 }
 
 // --------- Manager requests inbox (WS4) ---------

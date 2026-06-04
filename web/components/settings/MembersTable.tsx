@@ -4,6 +4,13 @@ import * as React from "react";
 import { toast } from "sonner";
 import { Users, Edit2, X, Check } from "lucide-react";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   fetchOrgMembers,
   fetchSettings,
   patchMemberRole,
@@ -130,20 +137,24 @@ export function MembersTable() {
                 {/* Role */}
                 <td className="px-4 py-3">
                   {isEditing ? (
-                    <select
+                    <Select
                       value={editing.role}
-                      onChange={(e) =>
+                      onValueChange={(v) =>
                         setEditing((prev) =>
                           prev
-                            ? { ...prev, role: e.target.value as "MANAGER" | "BRANCH_MANAGER", locationId: undefined }
+                            ? { ...prev, role: v as "MANAGER" | "BRANCH_MANAGER", locationId: undefined }
                             : prev
                         )
                       }
-                      className="rounded border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
-                      <option value="MANAGER">מנהל</option>
-                      <option value="BRANCH_MANAGER">מנהל סניף</option>
-                    </select>
+                      <SelectTrigger className="h-9 w-[140px]" aria-label="תפקיד מערכת">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MANAGER">מנהל</SelectItem>
+                        <SelectItem value="BRANCH_MANAGER">מנהל סניף</SelectItem>
+                      </SelectContent>
+                    </Select>
                   ) : (
                     <span
                       className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${ROLE_BADGE[member.role] ?? "bg-gray-100 text-gray-700"}`}
@@ -156,22 +167,25 @@ export function MembersTable() {
                 {/* Location */}
                 <td className="px-4 py-3">
                   {isEditing && editing.role === "BRANCH_MANAGER" ? (
-                    <select
+                    <Select
                       value={editing.locationId ?? ""}
-                      onChange={(e) =>
+                      onValueChange={(v) =>
                         setEditing((prev) =>
-                          prev ? { ...prev, locationId: e.target.value || undefined } : prev
+                          prev ? { ...prev, locationId: v || undefined } : prev
                         )
                       }
-                      className="rounded border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
-                      <option value="">-- בחר סניף --</option>
-                      {locations.map((loc) => (
-                        <option key={loc.id} value={loc.id}>
-                          {loc.name}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="h-9 w-[160px]" aria-label="סניף">
+                        <SelectValue placeholder="בחר סניף" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locations.map((loc) => (
+                          <SelectItem key={loc.id} value={loc.id}>
+                            {loc.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : (
                     <span className="text-muted-foreground">
                       {member.location?.name ?? (member.role === "BRANCH_MANAGER" ? "לא הוגדר" : "—")}

@@ -8,5 +8,6 @@ coverage/
 .DS_Store
 .idea/
 .vscode/
+.claude/
 generated-images/
 prisma/migrations/dev.db*

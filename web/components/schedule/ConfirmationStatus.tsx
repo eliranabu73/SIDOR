@@ -59,9 +59,11 @@ export function ConfirmationStatus({
     setLoading(true);
     fetchConfirmations(scheduleId)
       .then(setData)
-      .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : "שגיאת טעינה"),
-      )
+      .catch((e: unknown) => {
+        // Log the raw error for diagnostics; show a fixed Hebrew line to users.
+        console.error("[ConfirmationStatus] failed to load confirmations", e);
+        setError("load-failed");
+      })
       .finally(() => setLoading(false));
   }, [scheduleId, isPublished]);
 
@@ -72,13 +74,21 @@ export function ConfirmationStatus({
   if (!isPublished) return null;
 
   if (loading && !data) {
-    return <Skeleton className="h-16 rounded-2xl" />;
+    return <Skeleton className="h-16 w-full rounded-2xl" />;
   }
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-border bg-card p-3 text-xs text-muted-foreground">
-        לא ניתן לטעון אישורים: {error}
+      <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card p-3 text-xs text-muted-foreground">
+        <span>לא ניתן לטעון את מצב האישורים כעת. נסו לרענן.</span>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-8 text-xs text-muted-foreground"
+          onClick={load}
+        >
+          רענן
+        </Button>
       </div>
     );
   }
@@ -89,7 +99,7 @@ export function ConfirmationStatus({
 
   return (
     <>
-      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="w-full rounded-2xl border border-border bg-card p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <Users className="h-4 w-4 text-muted-foreground" />
@@ -104,14 +114,21 @@ export function ConfirmationStatus({
         </div>
 
         {/* Progress bar */}
-        <div className="mb-3 h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          role="progressbar"
+          aria-valuenow={pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="אחוז העובדים שאישרו את המשמרות"
+          className="mb-3 h-2 w-full overflow-hidden rounded-full bg-muted"
+        >
           <div
             className="h-full rounded-full bg-emerald-500 transition-all duration-500"
             style={{ width: `${pct}%` }}
           />
         </div>
 
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs text-muted-foreground">
             {data.pending > 0
               ? `${data.pending} ממתינים לאישור`
@@ -214,7 +231,10 @@ function ReminderRow({
         <div className="truncate text-sm font-medium">{employee.fullName}</div>
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <Clock className="h-3 w-3" />
-          {employee.shiftCount} משמרות · טרם אישר/ה
+          {employee.shiftCount === 1
+            ? "משמרת אחת"
+            : `${employee.shiftCount} משמרות`}{" "}
+          · טרם אישר/ה
         </div>
       </div>
       <a

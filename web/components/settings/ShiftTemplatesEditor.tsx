@@ -4,7 +4,10 @@ import * as React from "react";
 import { toast } from "sonner";
 import { Trash2, Plus, Edit2, Check, X, Sunrise } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { TimeSelect } from "@/components/ui/TimeSelect";
 import {
   Card,
   CardContent,
@@ -48,6 +51,10 @@ export function ShiftTemplatesEditor() {
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editDraft, setEditDraft] = React.useState<DraftRow>(EMPTY_DRAFT);
   const [saving, setSaving] = React.useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = React.useState<string | null>(null);
+  const [deleting, setDeleting] = React.useState(false);
+  const [addError, setAddError] = React.useState<string | null>(null);
+  const [editError, setEditError] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -78,9 +85,10 @@ export function ShiftTemplatesEditor() {
   const submitNew = async () => {
     const err = validateDraft(draft);
     if (err) {
-      toast.error(err);
+      setAddError(err);
       return;
     }
+    setAddError(null);
     setSaving(true);
     try {
       const created = await createShiftTemplate({
@@ -93,6 +101,7 @@ export function ShiftTemplatesEditor() {
       setRows((prev) => [...prev, created]);
       setDraft(EMPTY_DRAFT);
       setAdding(false);
+      setAddError(null);
       toast.success("תבנית משמרת נוספה");
     } catch {
       toast.error("יצירת תבנית נכשלה");
@@ -103,6 +112,7 @@ export function ShiftTemplatesEditor() {
 
   const startEdit = (t: ShiftTemplate) => {
     setEditingId(t.id);
+    setEditError(null);
     setEditDraft({
       name: t.name,
       startLocalTime: t.startLocalTime,
@@ -116,9 +126,10 @@ export function ShiftTemplatesEditor() {
     if (!editingId) return;
     const err = validateDraft(editDraft);
     if (err) {
-      toast.error(err);
+      setEditError(err);
       return;
     }
+    setEditError(null);
     setSaving(true);
     try {
       const updated = await updateShiftTemplate(editingId, {
@@ -138,14 +149,18 @@ export function ShiftTemplatesEditor() {
     }
   };
 
-  const remove = async (id: string) => {
-    if (!confirm("למחוק את תבנית המשמרת?")) return;
+  const confirmRemove = async () => {
+    if (!pendingDeleteId) return;
+    setDeleting(true);
     try {
-      await deleteShiftTemplate(id);
-      setRows((prev) => prev.filter((r) => r.id !== id));
+      await deleteShiftTemplate(pendingDeleteId);
+      setRows((prev) => prev.filter((r) => r.id !== pendingDeleteId));
       toast.success("תבנית נמחקה");
+      setPendingDeleteId(null);
     } catch {
       toast.error("מחיקת תבנית נכשלה");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -165,9 +180,14 @@ export function ShiftTemplatesEditor() {
         {loading ? (
           <div className="h-20 animate-pulse rounded-md bg-muted/40" />
         ) : rows.length === 0 && !adding ? (
-          <p className="text-sm text-muted-foreground py-2">
-            עדיין לא הוגדרו תבניות. הוסף אחת כדי להתחיל.
-          </p>
+          <div className="flex flex-col items-center gap-2 rounded-md border border-dashed border-border bg-muted/20 py-8 text-center">
+            <Sunrise className="h-8 w-8 text-amber-400" aria-hidden />
+            <p className="text-sm font-medium">עדיין לא הוגדרו תבניות משמרת</p>
+            <p className="text-xs text-muted-foreground max-w-xs">
+              הוסף תבנית ראשונה (לדוגמה: בוקר 08:00–16:00) כדי למלא שעות אוטומטית
+              בעת יצירת משמרת.
+            </p>
+          </div>
         ) : (
           <div className="rounded-md border overflow-x-auto">
             <table className="w-full min-w-[480px] text-sm">
@@ -185,7 +205,8 @@ export function ShiftTemplatesEditor() {
                 {rows.map((t) => {
                   const isEditing = editingId === t.id;
                   return (
-                    <tr key={t.id} className="border-b last:border-0">
+                    <React.Fragment key={t.id}>
+                    <tr className="border-b last:border-0">
                       <td className="px-3 py-2">
                         {isEditing ? (
                           <Input
@@ -219,13 +240,12 @@ export function ShiftTemplatesEditor() {
                       </td>
                       <td className="px-3 py-2 tabular-nums" dir="ltr">
                         {isEditing ? (
-                          <Input
-                            type="time"
+                          <TimeSelect
                             value={editDraft.startLocalTime}
-                            onChange={(e) =>
-                              setEditDraft((p) => ({ ...p, startLocalTime: e.target.value }))
+                            onChange={(v) =>
+                              setEditDraft((p) => ({ ...p, startLocalTime: v }))
                             }
-                            className="h-8 w-28"
+                            aria-label="שעת התחלה"
                           />
                         ) : (
                           t.startLocalTime
@@ -233,13 +253,12 @@ export function ShiftTemplatesEditor() {
                       </td>
                       <td className="px-3 py-2 tabular-nums" dir="ltr">
                         {isEditing ? (
-                          <Input
-                            type="time"
+                          <TimeSelect
                             value={editDraft.endLocalTime}
-                            onChange={(e) =>
-                              setEditDraft((p) => ({ ...p, endLocalTime: e.target.value }))
+                            onChange={(v) =>
+                              setEditDraft((p) => ({ ...p, endLocalTime: v }))
                             }
-                            className="h-8 w-28"
+                            aria-label="שעת סיום"
                           />
                         ) : (
                           <>
@@ -272,42 +291,67 @@ export function ShiftTemplatesEditor() {
                       <td className="px-3 py-2 text-end">
                         {isEditing ? (
                           <div className="inline-flex items-center gap-1">
-                            <button
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
                               onClick={saveEdit}
                               disabled={saving}
                               aria-label="שמור"
-                              className="rounded p-2 text-green-600 hover:bg-green-50"
+                              className="h-8 w-8 text-green-600 hover:bg-green-50 hover:text-green-700"
                             >
                               <Check className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => setEditingId(null)}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setEditingId(null);
+                                setEditError(null);
+                              }}
                               aria-label="ביטול"
-                              className="rounded p-2 text-muted-foreground hover:bg-muted"
+                              className="h-8 w-8 text-muted-foreground"
                             >
                               <X className="h-4 w-4" />
-                            </button>
+                            </Button>
                           </div>
                         ) : (
                           <div className="inline-flex items-center gap-1">
-                            <button
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
                               onClick={() => startEdit(t)}
                               aria-label="ערוך"
-                              className="rounded p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
                             >
                               <Edit2 className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => remove(t.id)}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setPendingDeleteId(t.id)}
                               aria-label="מחק"
-                              className="rounded p-2 text-destructive hover:bg-destructive/10"
+                              className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                             >
                               <Trash2 className="h-4 w-4" />
-                            </button>
+                            </Button>
                           </div>
                         )}
                       </td>
                     </tr>
+                    {isEditing && editError && (
+                      <tr>
+                        <td colSpan={6} className="px-3 pb-2">
+                          <p role="alert" className="text-xs text-destructive">
+                            {editError}
+                          </p>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
@@ -317,22 +361,33 @@ export function ShiftTemplatesEditor() {
 
         {adding ? (
           <div className="rounded-md border bg-muted/20 p-3 space-y-3">
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-              <div>
-                <label className="text-xs text-muted-foreground">שם</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1 sm:col-span-2">
+                <Label htmlFor="tpl-name" className="text-xs text-muted-foreground">
+                  שם
+                </Label>
                 <Input
+                  id="tpl-name"
                   value={draft.name}
-                  onChange={(e) => setDraft((p) => ({ ...p, name: e.target.value }))}
+                  onChange={(e) => {
+                    setDraft((p) => ({ ...p, name: e.target.value }));
+                    if (addError) setAddError(null);
+                  }}
                   placeholder="לדוגמה: בוקר"
                   className="h-9"
+                  aria-invalid={!!addError}
+                  aria-describedby={addError ? "tpl-add-error" : undefined}
                 />
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground">תפקיד</label>
+              <div className="space-y-1 sm:col-span-2">
+                <Label htmlFor="tpl-role" className="text-xs text-muted-foreground">
+                  תפקיד
+                </Label>
                 <select
+                  id="tpl-role"
                   value={draft.roleId}
                   onChange={(e) => setDraft((p) => ({ ...p, roleId: e.target.value }))}
-                  className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                  className="h-9 w-full rounded-md border bg-background px-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   <option value="">כל תפקיד</option>
                   {roles.map((r) => (
@@ -340,31 +395,28 @@ export function ShiftTemplatesEditor() {
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground">התחלה</label>
-                <Input
-                  type="time"
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">התחלה</Label>
+                <TimeSelect
                   value={draft.startLocalTime}
-                  onChange={(e) =>
-                    setDraft((p) => ({ ...p, startLocalTime: e.target.value }))
-                  }
-                  className="h-9"
+                  onChange={(v) => setDraft((p) => ({ ...p, startLocalTime: v }))}
+                  aria-label="שעת התחלה"
                 />
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground">סיום</label>
-                <Input
-                  type="time"
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">סיום</Label>
+                <TimeSelect
                   value={draft.endLocalTime}
-                  onChange={(e) =>
-                    setDraft((p) => ({ ...p, endLocalTime: e.target.value }))
-                  }
-                  className="h-9"
+                  onChange={(v) => setDraft((p) => ({ ...p, endLocalTime: v }))}
+                  aria-label="שעת סיום"
                 />
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground">עובדים</label>
+              <div className="space-y-1">
+                <Label htmlFor="tpl-count" className="text-xs text-muted-foreground">
+                  עובדים
+                </Label>
                 <Input
+                  id="tpl-count"
                   type="number"
                   min={1}
                   max={99}
@@ -376,8 +428,20 @@ export function ShiftTemplatesEditor() {
                 />
               </div>
             </div>
+            {addError && (
+              <p id="tpl-add-error" role="alert" className="text-xs text-destructive">
+                {addError}
+              </p>
+            )}
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" size="sm" onClick={() => setAdding(false)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setAdding(false);
+                  setAddError(null);
+                }}
+              >
                 ביטול
               </Button>
               <Button size="sm" onClick={submitNew} disabled={saving}>
@@ -386,12 +450,30 @@ export function ShiftTemplatesEditor() {
             </div>
           </div>
         ) : (
-          <Button variant="outline" size="sm" onClick={() => setAdding(true)} className="w-full">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAdding(true)}
+            className="w-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
             <Plus className="me-1 h-4 w-4" />
             הוסף תבנית משמרת
           </Button>
         )}
       </CardContent>
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteId(null);
+        }}
+        title="מחיקת תבנית משמרת"
+        description="למחוק את תבנית המשמרת? לא ניתן לבטל פעולה זו."
+        confirmLabel="מחק"
+        onConfirm={confirmRemove}
+        destructive
+        pending={deleting}
+      />
     </Card>
   );
 }

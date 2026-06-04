@@ -28,6 +28,8 @@ interface ParsedHours {
   end: string; // "HH:mm"
   openDays: number[]; // 0..6
   maxHoursDay: number;
+  /** true when openDays was defaulted to Sun–Thu because config didn't declare them. */
+  openDaysDefaulted: boolean;
 }
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -59,7 +61,11 @@ export function parseOperatingHours(
     }
   }
   // Fallback: Sun–Thu if open days couldn't be determined.
-  if (openDays.length === 0) openDays = [0, 1, 2, 3, 4];
+  let openDaysDefaulted = false;
+  if (openDays.length === 0) {
+    openDays = [0, 1, 2, 3, 4];
+    openDaysDefaulted = true;
+  }
 
   const maxHoursDay = Number(merged['maxHoursDay']);
   return {
@@ -67,12 +73,28 @@ export function parseOperatingHours(
     end,
     openDays,
     maxHoursDay: Number.isFinite(maxHoursDay) && maxHoursDay > 0 ? maxHoursDay : 9,
+    openDaysDefaulted,
   };
 }
 
 function hhmm(t: string): { h: number; m: number } {
-  const [h = '0', m = '0'] = t.split(':');
-  return { h: Number(h), m: Number(m) };
+  const invalid = (): never => {
+    throw Object.assign(new Error(`Invalid time string: ${JSON.stringify(t)}`), {
+      statusCode: 400,
+      code: 'INVALID_TIME',
+    });
+  };
+  if (typeof t !== 'string') invalid();
+  const parts = t.split(':');
+  if (parts.length !== 2) invalid();
+  const [hRaw, mRaw] = parts;
+  // Require purely-numeric HH and MM segments (reject 'abc', '9', '', '8.5', etc.).
+  if (!/^\d{1,2}$/.test(hRaw ?? '') || !/^\d{1,2}$/.test(mRaw ?? '')) invalid();
+  const h = Number(hRaw);
+  const m = Number(mRaw);
+  if (!Number.isInteger(h) || h < 0 || h > 23) invalid();
+  if (!Number.isInteger(m) || m < 0 || m > 59) invalid();
+  return { h, m };
 }
 
 /**
@@ -165,6 +187,8 @@ export async function generateShiftsFromOperatingHours(
 export interface GenerateFromTemplatesResult {
   shiftsCreated: number;
   templatesUsed: number;
+  /** How many ShiftTemplate rows were found for this schedule (incl. 0). */
+  templatesFound: number;
   openDays: number[];
   message?: string;
 }
@@ -176,13 +200,20 @@ export interface GenerateFromTemplatesResult {
  * requiredEmployeeCount — so the auto-scheduler fills the EXACT structure the
  * manager designed (and role-match keeps a manager template manager-only).
  *
- * Idempotent: skipped when the week already has shifts.
+ * Idempotent by default: skipped when the week already has shifts.
+ *
+ * When `replace === true` AND templates exist, instead of bailing on existing
+ * shifts we DELETE only the auto-generated ones — shifts that are safe to drop:
+ * those with a non-null templateId, OR PLANNED shifts with zero assignments.
+ * Shifts that carry assignments or were manually created/edited are NEVER
+ * deleted, so a week built once via operating-hours (2-window split) can be
+ * upgraded to the full template structure without clobbering real staffing.
  */
 export async function generateShiftsFromShiftTemplates(
-  args: { scheduleId: string; organizationId: string },
+  args: { scheduleId: string; organizationId: string; replace?: boolean },
   db: Db = defaultPrisma,
 ): Promise<GenerateFromTemplatesResult> {
-  const { scheduleId, organizationId } = args;
+  const { scheduleId, organizationId, replace } = args;
 
   const schedule = await db.schedule.findFirst({
     where: { id: scheduleId, organizationId },
@@ -203,20 +234,48 @@ export async function generateShiftsFromShiftTemplates(
     where: { organizationId, ...(schedule.locationId ? { OR: [{ locationId: schedule.locationId }, { locationId: null }] } : {}) },
     orderBy: { startLocalTime: 'asc' },
   });
-  if (templates.length === 0) {
-    return { shiftsCreated: 0, templatesUsed: 0, openDays: [], message: 'no_templates' };
+  const templatesFound = templates.length;
+  if (templatesFound === 0) {
+    return { shiftsCreated: 0, templatesUsed: 0, templatesFound: 0, openDays: [], message: 'no_templates' };
   }
 
-  const existing = await db.shift.count({
-    where: { organizationId, scheduleId, status: { not: 'CANCELLED' } },
-  });
-  if (existing > 0) {
-    return { shiftsCreated: 0, templatesUsed: templates.length, openDays: [], message: 'week_already_has_shifts' };
+  if (replace === true) {
+    // Upgrade path: drop only the AUTO-GENERATED shifts (safe to regenerate),
+    // never anything a manager touched. Safe = templateId set OR (PLANNED with
+    // no assignments). Shifts with assignments are always preserved.
+    await db.shift.deleteMany({
+      where: {
+        organizationId,
+        scheduleId,
+        status: { not: 'CANCELLED' },
+        OR: [
+          { templateId: { not: null } },
+          { status: 'PLANNED', assignments: { none: {} } },
+        ],
+      },
+    });
+  } else {
+    const existing = await db.shift.count({
+      where: { organizationId, scheduleId, status: { not: 'CANCELLED' } },
+    });
+    if (existing > 0) {
+      return {
+        shiftsCreated: 0,
+        templatesUsed: templatesFound,
+        templatesFound,
+        openDays: [],
+        message: 'week_already_has_shifts',
+      };
+    }
   }
 
   // Open days: prefer the org's declared business days; else Sun–Thu.
   const parsed = parseOperatingHours(schedule.organization.laborRulesJsonb, schedule.location?.laborRulesJsonb);
   const openDays = parsed?.openDays ?? [0, 1, 2, 3, 4];
+  // A real fallback (garbled/absent config) happened when there were no business
+  // hours at all, or parseOperatingHours had to default open days to Sun–Thu.
+  // Do NOT flag when the org genuinely declares Sun–Thu.
+  const openDaysDefaulted = !parsed || parsed.openDaysDefaulted;
 
   const tz = schedule.timezone || DEFAULT_TZ;
   const weekStart = DateTime.fromJSDate(schedule.periodStartDate, { zone: 'utc' });
@@ -252,5 +311,11 @@ export async function generateShiftsFromShiftTemplates(
     }
   }
 
-  return { shiftsCreated, templatesUsed: templates.length, openDays };
+  return {
+    shiftsCreated,
+    templatesUsed: templatesFound,
+    templatesFound,
+    openDays,
+    ...(openDaysDefaulted ? { message: 'open_days_defaulted' } : {}),
+  };
 }
