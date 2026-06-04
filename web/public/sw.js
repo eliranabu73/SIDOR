@@ -5,13 +5,14 @@
 //     stale-while-revalidate.
 //   - API requests (cross-origin or /v1/*): network only, never cached
 //     (avoids stale schedule data + auth issues).
-const VERSION = "v1";
+const VERSION = "v2";
 const STATIC_CACHE = `sidor4s-static-${VERSION}`;
 const RUNTIME_CACHE = `sidor4s-runtime-${VERSION}`;
 
 const PRECACHE_URLS = [
   "/",
   "/schedule",
+  "/offline.html",
   "/manifest.json",
   "/icon-192.png",
   "/icon-512.png",
@@ -79,7 +80,7 @@ self.addEventListener("fetch", (event) => {
           return res;
         })
         .catch(() =>
-          caches.match(req).then((cached) => cached || caches.match("/schedule")),
+          caches.match(req).then((cached) => cached || caches.match("/offline.html")),
         ),
     );
     return;

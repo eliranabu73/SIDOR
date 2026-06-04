@@ -7,6 +7,7 @@ import {
   FileText,
   Image as ImageIcon,
   Link2,
+  Loader2,
   MessageCircle,
   Send,
 } from "lucide-react";
@@ -29,6 +30,7 @@ import {
   canNativeShareFiles,
   shareScheduleImage,
 } from "@/lib/whatsapp-share";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 type Props = {
@@ -254,7 +256,16 @@ export function ExportDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent
+        className={cn(
+          "sm:max-w-2xl",
+          // Mobile: bottom-sheet — full-width, rounded top, capped height,
+          // safe-area bottom padding. Overrides the primitive's full-screen default.
+          "max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-auto",
+          "max-sm:max-h-[90dvh] max-sm:rounded-t-2xl max-sm:rounded-b-none max-sm:overflow-y-auto",
+          "max-sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]",
+        )}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Download className="h-5 w-5 text-indigo-500" />
@@ -302,7 +313,7 @@ export function ExportDialog({
                   role="radio"
                   aria-checked={style === s.id}
                   onClick={() => setStyle(s.id)}
-                  className={`text-start rounded-lg border-2 p-2 transition focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                  className={`text-start rounded-lg border-2 p-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                     style === s.id
                       ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/20"
                       : "border-border hover:border-indigo-300"
@@ -333,10 +344,16 @@ export function ExportDialog({
                     : "במכשיר זה: התמונה תרד והקישור ייפתח ב-WhatsApp"
                 }
               >
-                <ImageIcon className="h-4 w-4" />
-                {nativeShareReady
-                  ? "שתף תמונה ב-WhatsApp"
-                  : "הורד תמונה + פתח WhatsApp"}
+                {busy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ImageIcon className="h-4 w-4" />
+                )}
+                {busy
+                  ? "מכין תמונה…"
+                  : nativeShareReady
+                    ? "שתף תמונה ב-WhatsApp"
+                    : "הורד תמונה + פתח WhatsApp"}
               </Button>
               <Button
                 variant="outline"
@@ -345,7 +362,11 @@ export function ExportDialog({
                 className="justify-start"
                 title="WhatsApp יצור תצוגה מקדימה של התמונה אוטומטית"
               >
-                <Link2 className="h-4 w-4" />
+                {busy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Link2 className="h-4 w-4" />
+                )}
                 שתף לינק תמונה (preview אוטומטי)
               </Button>
             </div>
@@ -361,7 +382,7 @@ export function ExportDialog({
                   placeholder="050-1234567"
                   value={managerPhone}
                   onChange={(e) => setManagerPhone(e.target.value)}
-                  className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                   aria-label="טלפון מנהל לאישור"
                 />
                 <Button
@@ -369,7 +390,11 @@ export function ExportDialog({
                   onClick={() => handleShareViaUrl(managerPhone.trim())}
                   disabled={busy || !scheduleId || !managerPhone.trim()}
                 >
-                  <Send className="h-4 w-4" />
+                  {busy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
                   שלח לאישור
                 </Button>
               </div>
@@ -388,7 +413,11 @@ export function ExportDialog({
               disabled={busy || !scheduleId}
               className="flex-1"
             >
-              <Download className="h-4 w-4" />
+              {busy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
               הורד {format.toUpperCase()}
             </Button>
             <Button
@@ -431,7 +460,7 @@ function FormatPill({
       role="radio"
       aria-checked={active}
       onClick={onClick}
-      className={`flex flex-col items-start gap-1 rounded-lg border-2 p-3 text-start transition focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+      className={`flex flex-col items-start gap-1 rounded-lg border-2 p-3 text-start transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
         active
           ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/20"
           : "border-border hover:border-indigo-300"

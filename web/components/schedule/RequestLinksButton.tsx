@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useRequestLinks } from "@/lib/queries";
 import type { RequestLink } from "@/lib/api";
 
@@ -68,7 +69,16 @@ export function RequestLinksButton() {
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" dir="rtl">
+        <DialogContent
+          dir="rtl"
+          className={cn(
+            "sm:max-w-lg sm:max-h-[90dvh] overflow-y-auto",
+            // Mobile: bottom-sheet — full-width, rounded top, capped height.
+            "max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-auto",
+            "max-sm:max-h-[90dvh] max-sm:rounded-t-2xl max-sm:rounded-b-none",
+            "max-sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]",
+          )}
+        >
           <DialogHeader>
             <DialogTitle className="inline-flex items-center gap-2">
               <Link2 className="h-5 w-5 text-primary" />
@@ -118,7 +128,7 @@ export function RequestLinksButton() {
                       href={l.whatsapp}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex h-9 items-center gap-1 rounded-md bg-emerald-500 px-2.5 text-xs font-medium text-white hover:bg-emerald-600"
+                      className="inline-flex h-11 sm:h-9 items-center gap-1 rounded-md bg-emerald-500 px-3 sm:px-2.5 text-xs font-medium text-white hover:bg-emerald-600 active:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                       title="שלח ב-WhatsApp"
                     >
                       <MessageCircle className="h-4 w-4" />

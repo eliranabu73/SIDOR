@@ -29,10 +29,10 @@ export const SheetContent = React.forwardRef<
 >(({ className, side = "left", children, ...props }, ref) => {
   const sideClass =
     side === "bottom"
-      ? "inset-x-0 bottom-0 w-full max-w-full rounded-t-2xl border-t pb-[max(1.5rem,env(safe-area-inset-bottom))] max-h-[90vh] overflow-y-auto"
+      ? "inset-x-0 bottom-0 w-full max-w-full rounded-t-2xl border-t pb-[max(1.5rem,env(safe-area-inset-bottom))] max-h-[90dvh] overflow-y-auto"
       : side === "left"
-        ? "top-0 h-full w-3/4 max-w-md start-0 border-e"
-        : "top-0 h-full w-3/4 max-w-md end-0 border-s";
+        ? "top-0 h-full max-h-[90dvh] w-3/4 max-w-md start-0 border-e overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+        : "top-0 h-full max-h-[90dvh] w-3/4 max-w-md end-0 border-s overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))]";
   return (
   <DialogPrimitive.Portal>
     <Overlay />

@@ -6,6 +6,7 @@ import {
   Copy,
   ExternalLink,
   Image as ImageIcon,
+  Loader2,
   MessageCircle,
   Phone,
 } from "lucide-react";
@@ -23,6 +24,7 @@ import {
   getSchedulePosterLink,
   type PublishBundle,
 } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 type Props = {
@@ -84,7 +86,15 @@ export function PublishWhatsAppDialog({ open, onOpenChange, scheduleId }: Props)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent
+        className={cn(
+          "sm:max-w-2xl",
+          // Mobile: bottom-sheet — full-width, rounded top, capped height.
+          "max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:h-auto",
+          "max-sm:max-h-[90dvh] max-sm:rounded-t-2xl max-sm:rounded-b-none max-sm:overflow-y-auto",
+          "max-sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]",
+        )}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MessageCircle className="h-5 w-5 text-emerald-500" />
@@ -121,8 +131,12 @@ export function PublishWhatsAppDialog({ open, onOpenChange, scheduleId }: Props)
                   onClick={shareGroupWithPoster}
                   disabled={posterBusy}
                 >
-                  <MessageCircle className="h-3.5 w-3.5" />
-                  שלח עם תצוגה
+                  {posterBusy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <MessageCircle className="h-3.5 w-3.5" />
+                  )}
+                  {posterBusy ? "מכין תמונה…" : "שלח עם תצוגה"}
                 </Button>
               </div>
             </section>

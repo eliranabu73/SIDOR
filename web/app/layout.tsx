@@ -115,7 +115,14 @@ const organizationJsonLd = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#6366f1",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#6366f1" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f172a" },
+  ],
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  colorScheme: "light dark",
 };
 
 // Inline pre-paint script — sets data-theme before first render to avoid FOUC.

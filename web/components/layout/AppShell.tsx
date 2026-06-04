@@ -85,9 +85,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="sticky top-0 z-30 border-b border-border bg-card/80 backdrop-blur-sm">
-        <div className="flex h-14 items-center gap-6 px-4 sm:px-6">
+    <div className="min-h-[100svh] flex flex-col">
+      <header
+        className="sticky top-0 z-30 border-b border-border bg-card/80 backdrop-blur-sm"
+        style={{ paddingTop: "env(safe-area-inset-top)" }}
+      >
+        <div className="flex h-14 items-center gap-6 px-[max(1rem,env(safe-area-inset-right))] sm:px-6">
           <Link href="/schedule" aria-label="סידור4S" className="flex items-center">
             <Logo size={26} />
           </Link>

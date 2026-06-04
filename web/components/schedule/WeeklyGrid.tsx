@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { DateTime } from "luxon";
-import { ChevronDown, Plus, Trash2, X } from "lucide-react";
+import { useDroppable } from "@dnd-kit/core";
+import { ChevronDown, GripVertical, Plus, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Employee, Schedule, Shift } from "@/lib/types";
 
@@ -267,6 +268,117 @@ export interface WeeklyGridProps {
 // ─── MOBILE: Agenda view ─────────────────────────────────────────────────────
 // One scrollable card per day. Each shift = a row with avatar + name + time.
 
+/** Assigned-employee chip with a ≥44px-tall remove hit area (icon stays 12px). */
+function EmpChip({ emp, onRemove }: { emp: Employee; onRemove: (e: React.MouseEvent) => void }) {
+  return (
+    <span className="flex items-center gap-1.5 rounded-full bg-muted/50 pe-1 ps-1 py-1">
+      <Avatar name={emp.fullName} size="sm" />
+      <span className="text-xs font-medium text-foreground">{emp.fullName}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`הסר ${emp.fullName}`}
+        className="grid place-items-center min-h-[44px] min-w-[44px] text-muted-foreground/50 hover:text-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 transition-colors"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </span>
+  );
+}
+
+/**
+ * Mobile agenda shift row. The whole row is BOTH:
+ *  - a drop target (useDroppable, `shift:<id>`) so a held-and-dragged employee
+ *    card can land here, and
+ *  - a primary tap target — tapping the row opens AssignEmployeeSheet. The 300ms
+ *    TouchSensor delay (page.tsx) lets a quick tap fall through to onClick while a
+ *    deliberate hold arms the drag, so both gestures coexist on one element.
+ */
+function AgendaShiftRow({
+  shift,
+  employees,
+  unassigned,
+  onRequestAssign,
+  onUnassign,
+  onDeleteShift,
+}: {
+  shift: Shift;
+  employees: Employee[];
+  unassigned: boolean;
+  onRequestAssign?: (shift: Shift) => void;
+  onUnassign: (shift: Shift, empId: string) => void;
+  onDeleteShift?: (shift: Shift) => void;
+}) {
+  const { isOver, setNodeRef } = useDroppable({
+    id: `shift:${shift.id}`,
+    data: { type: "shift", shiftId: shift.id },
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "flex items-center gap-3 px-4 py-3 transition-colors",
+        unassigned ? "bg-amber-50/50 dark:bg-amber-950/10" : "bg-background",
+        isOver && "ring-2 ring-inset ring-indigo-400 bg-indigo-50/40 dark:bg-indigo-950/20",
+      )}
+    >
+      {/* Time badge — coloured per shift time */}
+      <div className="shrink-0 min-w-[4.5rem]">
+        <div className={cn("rounded-lg border px-2 py-1 text-center", shiftColor(shift))}>
+          <span dir="ltr" className="text-xs font-mono font-bold tabular-nums">
+            {fmt(shift.startsAt)}
+          </span>
+          <div className="text-[9px] opacity-80">–{fmt(shift.endsAt)}</div>
+        </div>
+      </div>
+
+      {/* Whole-row tap target → opens AssignEmployeeSheet */}
+      <button
+        type="button"
+        onClick={() => onRequestAssign?.(shift)}
+        aria-label={`שבץ עובד/ת למשמרת ${fmt(shift.startsAt)}`}
+        className="flex-1 min-w-0 text-start rounded-lg px-2 py-1.5 active:bg-accent/70 transition-colors touch-target"
+      >
+        {unassigned ? (
+          <span className="inline-flex items-center gap-2 rounded-lg border border-dashed border-amber-300 bg-amber-100/60 dark:bg-amber-900/20 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+            <Plus className="h-3.5 w-3.5 shrink-0" />
+            שבץ עובד/ת למשמרת זו
+          </span>
+        ) : (
+          <span className="flex flex-wrap gap-1.5">
+            {employees.map((emp) => (
+              <EmpChip
+                key={emp.id}
+                emp={emp}
+                onRemove={(ev) => {
+                  ev.stopPropagation();
+                  onUnassign(shift, emp.id);
+                }}
+              />
+            ))}
+          </span>
+        )}
+      </button>
+
+      {/* Delete whole shift — stopPropagation island, ≥44px hit area */}
+      {onDeleteShift && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDeleteShift(shift);
+          }}
+          aria-label={`מחק משמרת ${fmt(shift.startsAt)}`}
+          title="מחק משמרת"
+          className="shrink-0 grid place-items-center touch-target rounded-md text-muted-foreground/60 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function AgendaDay({
   dayIdx,
   date,
@@ -349,65 +461,16 @@ function AgendaDay({
                 <span className="text-[11px] font-normal text-muted-foreground/70">· {items.length}</span>
               </div>
               <div className="divide-y">
-                {items.map(({ shift, employees, unassigned }) => (
-            <div key={shift.id} className={cn(
-              "flex items-center gap-3 px-4 py-3",
-              unassigned ? "bg-amber-50/50 dark:bg-amber-950/10" : "bg-background",
-            )}>
-              {/* Time badge — coloured per shift time */}
-              <div className="shrink-0 min-w-[4.5rem]">
-                <div className={cn("rounded-lg border px-2 py-1 text-center", shiftColor(shift))}>
-                  <span dir="ltr" className="text-xs font-mono font-bold tabular-nums">
-                    {fmt(shift.startsAt)}
-                  </span>
-                  <div className="text-[9px] opacity-80">–{fmt(shift.endsAt)}</div>
-                </div>
-              </div>
-
-              {/* Employees */}
-              <div className="flex-1 min-w-0">
-                {unassigned ? (
-                  <button
-                    type="button"
-                    onClick={() => onRequestAssign?.(shift)}
-                    className="flex items-center gap-2 rounded-lg border border-dashed border-amber-300 bg-amber-100/60 dark:bg-amber-900/20 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-200/60 transition-colors w-full"
-                  >
-                    <Plus className="h-3.5 w-3.5 shrink-0" />
-                    שבץ עובד/ת למשמרת זו
-                  </button>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {employees.map((emp) => (
-                      <div key={emp.id} className="flex items-center gap-1.5 rounded-full bg-muted/50 pe-3 ps-1 py-1">
-                        <Avatar name={emp.fullName} size="sm" />
-                        <span className="text-xs font-medium text-foreground">{emp.fullName}</span>
-                        <button
-                          type="button"
-                          onClick={() => onUnassign(shift, emp.id)}
-                          aria-label={`הסר ${emp.fullName}`}
-                          className="text-muted-foreground/50 hover:text-red-500 transition-colors"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Delete whole shift */}
-              {onDeleteShift && (
-                <button
-                  type="button"
-                  onClick={() => onDeleteShift(shift)}
-                  aria-label={`מחק משמרת ${fmt(shift.startsAt)}`}
-                  title="מחק משמרת"
-                  className="shrink-0 rounded-md p-1.5 text-muted-foreground/50 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              )}
-            </div>
+                {items.map((a) => (
+                  <AgendaShiftRow
+                    key={a.shift.id}
+                    shift={a.shift}
+                    employees={a.employees}
+                    unassigned={a.unassigned}
+                    onRequestAssign={onRequestAssign}
+                    onUnassign={onUnassign}
+                    onDeleteShift={onDeleteShift}
+                  />
                 ))}
               </div>
             </div>
@@ -702,6 +765,11 @@ export function WeeklyGrid({
       {/* ── MOBILE: Agenda (scrollable day cards) ─────────────────── */}
       <div className="md:hidden flex flex-col gap-3 p-3">
         <Legend roles={legend.roles} templates={legend.templates} />
+        {/* Subtle gesture affordance — tap to assign, hold-and-drag to move. */}
+        <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground -mt-1 px-1">
+          <GripVertical className="h-3 w-3 shrink-0" aria-hidden />
+          הקש על משמרת לשיבוץ · החזק וגרור עובד/ת להזזה
+        </p>
         {dayDates.map((dt, dayIdx) => (
           <AgendaDay
             key={dayIdx}

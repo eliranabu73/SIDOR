@@ -188,7 +188,7 @@ function ReminderSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="max-h-[80vh] w-full overflow-y-auto sm:max-w-md" dir="rtl">
+      <SheetContent side="right" className="max-h-[80dvh] w-full overflow-y-auto sm:max-w-md" dir="rtl">
         <SheetHeader className="mb-4 text-right">
           <SheetTitle>שליחת תזכורות — {employees.length} ממתינים</SheetTitle>
         </SheetHeader>

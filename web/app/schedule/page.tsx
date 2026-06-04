@@ -241,9 +241,12 @@ function ScheduleInner() {
   // Shift-first assignment — when set, the AssignEmployeeSheet shows for this shift.
   const [assignShift, setAssignShift] = React.useState<Shift | null>(null);
 
+  // R3 — desktop mouse drags after a 4px move; mobile requires a 300ms hold
+  // (≤8px move before that falls through to tap/scroll, never drag) so a single
+  // quick tap on a shift still opens AssignEmployeeSheet via onClick.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 300, tolerance: 8 } }),
     useSensor(KeyboardSensor),
   );
 
@@ -407,6 +410,9 @@ function ScheduleInner() {
 
   // ── DnD handlers
   const onDragStart = (e: DragStartEvent) => {
+    // Light haptic tick on mobile when a deliberate hold-drag arms (no-op on
+    // desktop / unsupported browsers).
+    navigator.vibrate?.(10);
     const empId = (e.active.data.current as { employeeId?: string } | undefined)?.employeeId;
     setActiveEmployeeId(empId ?? null);
     setValidationByShift({});
@@ -805,7 +811,12 @@ function ScheduleInner() {
   // Shared tail of the flow: auto-assign employees to the (already laid-down)
   // shifts and emit exactly one summary toast. `createdShifts` describes how
   // many shifts the lay-down stage produced (for the no-staff message).
-  const fillAndSummarize = async (scheduleId: string, createdShifts: number) => {
+  const fillAndSummarize = async (
+    scheduleId: string,
+    createdShifts: number,
+    toastId: string | number = "build-week",
+  ) => {
+    toast.loading("משבץ עובדים…", { id: toastId });
     const auto = await autoSchedule.mutateAsync({ scheduleId, dryRun: true });
     const proposals = auto.proposals ?? [];
     let placed = 0;
@@ -816,13 +827,14 @@ function ScheduleInner() {
     await scheduleQueryReal.refetch();
 
     if (placed > 0) {
-      toast.success(`השבוע נבנה ושובצו ${placed} משמרות 🎉`);
+      toast.success(`השבוע נבנה ושובצו ${placed} משמרות 🎉`, { id: toastId });
     } else if (createdShifts > 0) {
       toast.info(
         `נוצרו ${createdShifts} משמרות. אין כרגע עובדים זמינים לשיבוץ אוטומטי.`,
+        { id: toastId },
       );
     } else {
-      toast.info("אין כרגע עובדים זמינים לשיבוץ אוטומטי.");
+      toast.info("אין כרגע עובדים זמינים לשיבוץ אוטומטי.", { id: toastId });
     }
   };
 
@@ -830,13 +842,21 @@ function ScheduleInner() {
   // copy previous week. Returns the created-shift count, or -1 when nothing
   // could be laid down (caller shows guidance). Surfaces the "no templates"
   // settings nudge when the org has none defined.
-  const layDownEmptyWeek = async (scheduleId: string): Promise<number> => {
+  const layDownEmptyWeek = async (
+    scheduleId: string,
+    toastId: string | number = "build-week",
+  ): Promise<number> => {
+    toast.loading("יוצר משמרות…", { id: toastId });
     // 1) The org's defined shift templates are the source of truth.
     const genT = await generateFromTemplatesMut.mutateAsync(scheduleId);
     if (genT.shiftsCreated > 0) return genT.shiftsCreated;
     // No templates at all → point the user to settings to define them.
+    // (Non-fatal here: the ladder still tries weekly template / operating hours
+    // / copy below. We surface the nudge on a separate toast id so it doesn't
+    // clobber the shared build-week progress toast.)
     if (genT.templatesFound === 0) {
       toast.error("לא הוגדרו תבניות משמרת", {
+        id: "build-week-templates-nudge",
         action: {
           label: "פתח הגדרות",
           onClick: () => {
@@ -866,16 +886,20 @@ function ScheduleInner() {
     if (!scheduleQuery.data) return;
     if (blockIfDemo()) return;
     setRebuildOpen(false);
+    const toastId = "build-week";
     setBuildingWeek(true);
+    toast.loading("בונה מחדש מהתבניות…", { id: toastId });
     try {
       const scheduleId = await ensureRealScheduleId();
       if (!scheduleId) {
-        toast.error("לא ניתן ליצור סידור לשבוע זה");
+        toast.error("לא ניתן ליצור סידור לשבוע זה", { id: toastId });
         return;
       }
+      toast.loading("יוצר משמרות מהתבניות…", { id: toastId });
       const genT = await generateFromTemplates(scheduleId, { replace: true });
       if (genT.templatesFound === 0) {
         toast.error("לא הוגדרו תבניות משמרת", {
+          id: toastId,
           action: {
             label: "פתח הגדרות",
             onClick: () => {
@@ -885,9 +909,12 @@ function ScheduleInner() {
         });
         return;
       }
-      await fillAndSummarize(scheduleId, genT.shiftsCreated);
+      if (genT.shiftsCreated > 0) {
+        toast.loading(`נוצרו ${genT.shiftsCreated} משמרות…`, { id: toastId });
+      }
+      await fillAndSummarize(scheduleId, genT.shiftsCreated, toastId);
     } catch {
-      toast.error("בניית השבוע נכשלה");
+      toast.error("בניית השבוע נכשלה", { id: toastId });
     } finally {
       setBuildingWeek(false);
     }
@@ -905,34 +932,45 @@ function ScheduleInner() {
       return;
     }
 
+    const toastId = "build-week";
     setBuildingWeek(true);
+    toast.loading("מכין את השבוע…", { id: toastId });
     try {
-      const scheduleId = await ensureRealScheduleId();
+      // Independent prep runs in parallel: creating the real schedule row and
+      // warming the weekly-templates list (the lay-down ladder may need it).
+      const [scheduleId] = await Promise.all([
+        ensureRealScheduleId(),
+        weeklyTemplates.isFetched ? Promise.resolve() : weeklyTemplates.refetch(),
+      ]);
       if (!scheduleId) {
-        toast.error("לא ניתן ליצור סידור לשבוע זה");
+        toast.error("לא ניתן ליצור סידור לשבוע זה", { id: toastId });
         return;
       }
       let createdShifts = 0;
       if (!hasShifts) {
-        const laid = await layDownEmptyWeek(scheduleId);
+        const laid = await layDownEmptyWeek(scheduleId, toastId);
         if (laid < 0) {
           toast.info(
             "כדי לבנות שבוע אוטומטית, הגדירו שעות פעילות בהגדרות העסק (או צרו משמרות / תבנית).",
+            { id: toastId },
           );
           return;
         }
         createdShifts = laid;
+        if (createdShifts > 0) {
+          toast.loading(`נוצרו ${createdShifts} משמרות…`, { id: toastId });
+        }
       }
-      await fillAndSummarize(scheduleId, createdShifts);
+      await fillAndSummarize(scheduleId, createdShifts, toastId);
     } catch {
-      toast.error("בניית השבוע נכשלה");
+      toast.error("בניית השבוע נכשלה", { id: toastId });
     } finally {
       setBuildingWeek(false);
     }
   };
 
   return (
-    <div className="flex flex-col min-h-[calc(100vh-3.5rem)]">
+    <div className="flex flex-col min-h-[calc(100dvh-3.5rem)]">
       <h1 className="sr-only">סידור עבודה</h1>
       {/* Top bar */}
       <div className="flex items-center gap-2 sm:gap-3 border-b bg-card px-3 sm:px-4 py-2 flex-wrap">
@@ -973,6 +1011,8 @@ function ScheduleInner() {
         )}
         <div className="me-auto" />
         {/* Mobile-only: filter + employees drawer triggers */}
+        {/* Mobile secondary triggers — icon-only on the narrowest phones
+            (<400px) to cut crowding; the label returns once there is room. */}
         <Button
           variant="outline"
           size="sm"
@@ -981,7 +1021,7 @@ function ScheduleInner() {
           aria-label="סינון"
         >
           <Filter className="h-4 w-4" />
-          סינון
+          <span className="hidden min-[400px]:inline">סינון</span>
         </Button>
         <Button
           variant="outline"
@@ -991,7 +1031,7 @@ function ScheduleInner() {
           aria-label="עובדים"
         >
           <UsersIcon className="h-4 w-4" />
-          עובדים
+          <span className="hidden min-[400px]:inline">עובדים</span>
         </Button>
         {checklistDismissed && (
           <Button
@@ -1006,12 +1046,11 @@ function ScheduleInner() {
             <span className="hidden sm:inline">רשימת התקנה</span>
           </Button>
         )}
-        {hasShiftsInWeek && (
-          <>
-            <RequestsInboxButton />
-            <RequestLinksButton />
-          </>
-        )}
+        {/* Requests inbox + share-request-links are always available so a
+            manager can collect employee availability BEFORE building the week.
+            They no longer wait for the week to have shifts. */}
+        <RequestsInboxButton />
+        <RequestLinksButton />
         <Button
           variant="glow"
           size="sm"
@@ -1499,6 +1538,9 @@ function ScheduleInner() {
               </span>
             </SheetTitle>
           </SheetHeader>
+          <p className="text-[11px] text-muted-foreground mb-2">
+            הקש על משמרת לשיבוץ · החזק וגרור עובד/ת להזזה
+          </p>
           {employeesLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 4 }).map((_, i) => (

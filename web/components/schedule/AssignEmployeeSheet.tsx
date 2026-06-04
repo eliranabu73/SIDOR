@@ -112,19 +112,21 @@ export function AssignEmployeeSheet({
           ) : null}
         </SheetHeader>
 
-        <div className="relative">
-          <Search className="h-4 w-4 absolute end-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="חיפוש עובד/ת…"
-            className="pe-8 h-11"
-            aria-label="חיפוש עובד/ת"
-            autoFocus
-          />
+        <div className="sticky top-0 z-10 -mx-4 sm:-mx-5 px-4 sm:px-5 pb-2 bg-background">
+          <div className="relative">
+            <Search className="h-4 w-4 absolute end-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="חיפוש עובד/ת…"
+              className="pe-8 h-11"
+              aria-label="חיפוש עובד/ת"
+              autoFocus
+            />
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto -mx-4 sm:-mx-5">
+        <div className="flex-1 overflow-y-auto -mx-4 sm:-mx-5 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           {candidates.length === 0 ? (
             employees.length === 0 ? (
               <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
@@ -177,7 +179,7 @@ export function AssignEmployeeSheet({
                         "w-full text-start py-3 px-3 sm:px-4 flex items-center gap-3 rounded-md hover:bg-accent active:bg-accent/80 transition-colors touch-target",
                       )}
                     >
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 text-primary text-sm font-semibold shrink-0">
+                      <div className="flex h-11 w-11 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-primary/15 text-primary text-sm font-semibold shrink-0">
                         {initials(emp.fullName)}
                       </div>
                       <div className="min-w-0 flex-1">

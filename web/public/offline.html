@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#6366f1" />
+  <title>אין חיבור — סידור4S</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; margin: 0; }
+    body {
+      min-height: 100dvh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 1rem;
+      padding: max(2rem, env(safe-area-inset-top)) 1.5rem max(2rem, env(safe-area-inset-bottom));
+      font-family: "Heebo", system-ui, -apple-system, sans-serif;
+      background: #0f172a; color: #f8fafc; text-align: center;
+    }
+    .icon { width: 64px; height: 64px; opacity: .9; }
+    h1 { font-size: 1.4rem; font-weight: 700; }
+    p { color: #94a3b8; max-width: 22rem; line-height: 1.6; }
+    button {
+      margin-top: .5rem; padding: .7rem 1.6rem; border: 0; border-radius: 9999px;
+      background: #6366f1; color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer;
+    }
+    button:active { opacity: .85; }
+  </style>
+</head>
+<body>
+  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.8" stroke-linecap="round">
+    <path d="M3 3l18 18M8.5 16.5a5 5 0 017 0M5 12.86a10 10 0 0114 0M2 8.82a15 15 0 0120 0"/>
+  </svg>
+  <h1>אין חיבור לאינטרנט</h1>
+  <p>נראה שאתה במצב לא מקוון. בדוק את החיבור ונסה שוב — הסידור האחרון שצפית בו עדיין זמין.</p>
+  <button onclick="location.reload()">נסה שוב</button>
+</body>
+</html>

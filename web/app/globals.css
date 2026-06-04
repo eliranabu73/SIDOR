@@ -437,6 +437,40 @@ html[data-theme="dark"] .bento-card:hover {
 }
 
 /* ============================================================
+   Fluid type — scales 360px→1440px, no breakpoints. RTL-safe.
+============================================================ */
+.text-fluid-xs   { font-size: clamp(0.75rem, 0.71rem + 0.20vw, 0.875rem); }
+.text-fluid-sm   { font-size: clamp(0.875rem, 0.83rem + 0.22vw, 1rem); }
+.text-fluid-base { font-size: clamp(1rem, 0.93rem + 0.31vw, 1.125rem); line-height: 1.55; }
+.text-fluid-lg   { font-size: clamp(1.125rem, 1.02rem + 0.47vw, 1.5rem); line-height: 1.4; }
+.text-fluid-xl   { font-size: clamp(1.5rem, 1.27rem + 1.02vw, 2.25rem); line-height: 1.2; }
+.text-fluid-2xl  { font-size: clamp(2rem, 1.55rem + 2.0vw, 3rem); line-height: 1.1; }
+
+/* Dynamic viewport helpers (svh = stable, dvh = grows with URL bar) */
+.min-h-screen-safe { min-height: 100svh; }
+.h-dvh             { height: 100dvh; }
+.full-sheet        { min-height: 100dvh; padding-bottom: max(1.5rem, env(safe-area-inset-bottom)); }
+
+/* Page container — caps width, logical gutters, shrinks <390px */
+.container-page {
+  width: 100%;
+  max-width: 48rem;            /* 768px; bump per page as needed */
+  margin-inline: auto;
+  padding-inline: 1rem;        /* logical → RTL-safe */
+  min-width: 0;                /* let long Hebrew strings wrap, not overflow */
+}
+@media (min-width: 640px) { .container-page { padding-inline: 1.5rem; } }
+
+/* Full-bleed gutter that clears the landscape notch (use on sticky bars/sheets) */
+.gutter-safe {
+  padding-inline-start: max(1rem, env(safe-area-inset-left));
+  padding-inline-end:   max(1rem, env(safe-area-inset-right));
+}
+
+/* Universal min tap target — apply to any standalone interactive control */
+.tap { min-width: 44px; min-height: 44px; }
+
+/* ============================================================
    Print stylesheet — manager → employee schedule export
    "ייצוא לעובדים" prints the board only; hide chrome + side rails.
    The exported PDF/PNG is shared in WhatsApp manually.
