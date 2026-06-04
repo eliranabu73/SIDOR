@@ -61,10 +61,12 @@ export function DemoBoundary({
           setStatus("demo");
           return;
         }
-        if (skipMembershipCheck) {
-          setStatus("ok");
-          return;
-        }
+        // Session present → render IMMEDIATELY (instant local read). Never block
+        // first paint on /v1/me — it is a slow cold-start call (~6s observed)
+        // and was the dominant cause of the blank-screen-until-LCP. The
+        // membership → onboarding redirect runs in the background.
+        setStatus("ok");
+        if (skipMembershipCheck) return;
         try {
           const me = await fetchMe();
           if (!mounted) return;
@@ -83,15 +85,11 @@ export function DemoBoundary({
               skipped = false;
             }
             if (!skipped) {
-              setStatus("redirect");
               router.replace("/onboarding/setup/business");
-              return;
             }
           }
-          setStatus("ok");
         } catch {
-          // /v1/me failure → let user through; pages surface their own errors.
-          setStatus("ok");
+          // /v1/me failure → already rendering; pages surface their own errors.
         }
       } catch {
         // Supabase not configured at all → treat as demo (safe public fallback).

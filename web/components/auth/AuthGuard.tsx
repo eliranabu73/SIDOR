@@ -43,10 +43,14 @@ export function AuthGuard({ children, skipMembershipCheck }: AuthGuardProps) {
           router.replace("/login");
           return;
         }
-        if (skipMembershipCheck) {
-          setStatus("ok");
-          return;
-        }
+        // Session is present (this is an instant, local read). Render the page
+        // IMMEDIATELY — do NOT block first paint on /v1/me, which is a slow
+        // cold-start serverless call (observed ~6s) and was the dominant cause
+        // of the blank-screen-until-LCP. The membership → onboarding redirect
+        // runs in the background; a freshly-onboarded user with ≥1 membership
+        // (the common case) never sees a delay.
+        setStatus("ok");
+        if (skipMembershipCheck) return;
         try {
           const me = await fetchMe();
           if (!mounted) return;
@@ -65,16 +69,12 @@ export function AuthGuard({ children, skipMembershipCheck }: AuthGuardProps) {
               skipped = false;
             }
             if (!skipped) {
-              setStatus("redirect");
               router.replace("/onboarding/setup/business");
-              return;
             }
           }
-          setStatus("ok");
         } catch {
-          // /v1/me failed (cold start / backend transient) — let user through;
-          // pages will surface their own errors.
-          setStatus("ok");
+          // /v1/me failed (cold start / backend transient) — already rendering;
+          // pages surface their own errors.
         }
       } catch {
         // No supabase configured — treat as logged-in for local dev.
