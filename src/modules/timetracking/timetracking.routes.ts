@@ -62,9 +62,19 @@ const ClockOutBody = z.object({
   lng: z.number().min(-180).max(180).optional(),
 });
 
+// Accept BOTH full ISO datetimes (2026-06-01T00:00:00Z) AND date-only strings
+// (2026-06-01). The frontend sends date-only week bounds; `new Date('2026-06-01')`
+// parses to UTC midnight, which is exactly the intended week start/end. Requiring
+// full datetime here was rejecting every real request with a 400.
+const DateOrDateTime = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$/, {
+    message: 'Expected YYYY-MM-DD or full ISO datetime',
+  });
+
 const EntriesQuery = z.object({
-  from: z.string().datetime({ offset: true }),
-  to: z.string().datetime({ offset: true }),
+  from: DateOrDateTime,
+  to: DateOrDateTime,
   employeeId: z.string().uuid().optional(),
 });
 

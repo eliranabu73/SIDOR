@@ -78,6 +78,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     try {
       const supabase = getSupabase();
       await supabase.auth.signOut();
+      // Drop the persisted react-query snapshot so the next user on this device
+      // never sees the previous user's cached schedule/employee data.
+      window.localStorage.removeItem("sidor-rq-cache");
       window.location.href = "/login";
     } catch {
       toast.error("שגיאה ביציאה");

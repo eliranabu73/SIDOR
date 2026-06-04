@@ -43,6 +43,7 @@ export default function AdminLayout({
     try {
       const supabase = getSupabase();
       await supabase.auth.signOut();
+      window.localStorage.removeItem("sidor-rq-cache");
       window.location.href = "/login";
     } catch {
       toast.error("שגיאה ביציאה");
