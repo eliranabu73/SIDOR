@@ -854,9 +854,13 @@ function ScheduleInner() {
   ) => {
     toast.loading("משבץ עובדים…", { id: toastId });
     let placed = 0;
+    let proposalsCount = 0;
+    let unfilled = 0;
     try {
       const auto = await autoSchedule.mutateAsync({ scheduleId, dryRun: true });
       const proposals = auto.proposals ?? [];
+      proposalsCount = proposals.length;
+      unfilled = auto.unfilled?.length ?? 0;
       if (proposals.length > 0) {
         const res = await applyProposals.mutateAsync({ scheduleId, proposals });
         placed = res?.applied ?? proposals.length;
@@ -881,7 +885,18 @@ function ScheduleInner() {
     await scheduleQueryReal.refetch();
 
     if (placed > 0) {
-      toast.success(`השבוע נבנה ושובצו ${placed} משמרות 🎉`, { id: toastId });
+      // Surface partial fills instead of a blanket success: some proposals can
+      // fail to apply (timeout/concurrency) or some shifts stay unfilled (no
+      // eligible employee) — the manager must know to complete them manually.
+      const partial = (proposalsCount > 0 && placed < proposalsCount) || unfilled > 0;
+      if (partial) {
+        toast.warning(
+          `שובצו ${placed} משמרות. ${unfilled > 0 ? `${unfilled} משמרות נותרו ללא שיבוץ — ` : ""}השלימו ידנית את השאר.`,
+          { id: toastId },
+        );
+      } else {
+        toast.success(`השבוע נבנה ושובצו ${placed} משמרות 🎉`, { id: toastId });
+      }
     } else if (createdShifts > 0) {
       toast.info(
         `נוצרו ${createdShifts} משמרות. אין כרגע עובדים זמינים לשיבוץ אוטומטי.`,

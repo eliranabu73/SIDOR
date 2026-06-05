@@ -32,8 +32,10 @@ export function DayPartEditor({ dayParts, onChange }: Props) {
 
   const add = () =>
     onChange([
+      // Name starts EMPTY (placeholder guides the user). A literal default like
+      // "חלק יום" caused typed input to append → "חלק יוםבוקר".
       ...dayParts,
-      { id: newId(), name: "חלק יום", start: "09:00", end: "17:00", headcount: 1 },
+      { id: newId(), name: "", start: "09:00", end: "17:00", headcount: 1 },
     ]);
 
   return (

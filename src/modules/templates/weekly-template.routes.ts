@@ -48,10 +48,26 @@ export async function weeklyTemplateRoutes(app: FastifyInstance): Promise<void> 
       const rows = await dbFor(req).query((tx) => listWeeklyTemplates(orgIdFor(req), tx));
       return reply.send(rows);
     } catch (err) {
-      // The list is a non-critical read (used only to populate the template
-      // dialog). A transient DB/migration hiccup must NOT surface as a 500 that
-      // the client retries — degrade to an empty list so the UI stays usable.
-      req.log.error({ err }, 'listWeeklyTemplates failed — returning empty list');
+      // Distinguish SCHEMA/permission problems from transient hiccups. A missing
+      // table (P2021) or permission error (42501) must NOT be masked as an empty
+      // list — that hid a real "weekly_templates table missing on the runtime DB"
+      // bug for a long time. Surface those as 503; only swallow genuinely
+      // transient errors as an empty list so the UI stays usable.
+      const code = (err as { code?: string }).code;
+      const msg = (err as Error)?.message ?? '';
+      const isSchemaProblem =
+        code === 'P2021' ||
+        code === 'P2022' ||
+        code === '42501' ||
+        /does not exist|permission denied/i.test(msg);
+      if (isSchemaProblem) {
+        req.log.error({ err }, 'listWeeklyTemplates failed — schema/permission problem');
+        return reply.code(503).send({
+          code: 'SCHEMA_UNAVAILABLE',
+          message: 'תבניות הסידור אינן זמינות כעת. נסו שוב בעוד רגע.',
+        });
+      }
+      req.log.error({ err }, 'listWeeklyTemplates failed (transient) — returning empty list');
       return reply.send([]);
     }
   });

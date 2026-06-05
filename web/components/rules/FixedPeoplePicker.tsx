@@ -18,6 +18,7 @@ type Props = {
 };
 
 const DAY_NAMES = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
+const DAY_FULL = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 
 const selectClass =
   "h-11 sm:h-10 w-full rounded-md border border-input bg-background px-2 text-base sm:text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-primary/30";
@@ -75,6 +76,7 @@ export function FixedPeoplePicker({
             <div className="min-w-[9rem] flex-1 space-y-1">
               <Label className="text-xs">עובד</Label>
               <select
+                dir="rtl"
                 className={selectClass}
                 value={row.employeeId}
                 onChange={(e) => update(i, { employeeId: e.target.value })}
@@ -91,6 +93,7 @@ export function FixedPeoplePicker({
             <div className="min-w-[8rem] flex-1 space-y-1">
               <Label className="text-xs">קבוע ב</Label>
               <select
+                dir="rtl"
                 className={selectClass}
                 value={row.dayPartId}
                 onChange={(e) => update(i, { dayPartId: e.target.value })}
@@ -128,6 +131,8 @@ export function FixedPeoplePicker({
                     type="button"
                     onClick={() => toggleDay(i, day)}
                     aria-pressed={on}
+                    aria-label={`יום ${DAY_FULL[day]}`}
+                    title={`יום ${DAY_FULL[day]}`}
                     className={
                       "min-w-[2.5rem] rounded-full px-3 py-1.5 text-sm font-medium transition-colors " +
                       (on
