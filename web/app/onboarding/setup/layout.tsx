@@ -30,7 +30,9 @@ interface WizardNavContextValue {
   canAdvance: boolean;
   setCanAdvance: (v: boolean) => void;
   onNext: (() => void | Promise<void>) | null;
-  setOnNext: (fn: (() => void | Promise<void>) | null) => void;
+  setOnNext: React.Dispatch<
+    React.SetStateAction<(() => void | Promise<void>) | null>
+  >;
   nextLabel: string;
   setNextLabel: (s: string) => void;
   hideNext: boolean;
@@ -57,7 +59,11 @@ export function useWizardNav(opts: {
   const { canAdvance, onNext, nextLabel = "הבא", hideNext = false } = opts;
   React.useEffect(() => {
     ctx.setCanAdvance(canAdvance);
-    ctx.setOnNext(onNext ?? null);
+    // IMPORTANT: store the handler via the functional-update form. Passing a
+    // function value directly to a React state setter makes React execute it as
+    // an updater — which would fire onNext (e.g. router.push) on mount and
+    // auto-skip the step. `() => (onNext ?? null)` stores the function itself.
+    ctx.setOnNext(() => onNext ?? null);
     ctx.setNextLabel(nextLabel);
     ctx.setHideNext(hideNext);
     // We intentionally re-run whenever any of the inputs change.
