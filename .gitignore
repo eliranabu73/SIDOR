@@ -11,3 +11,7 @@ coverage/
 .claude/
 generated-images/
 prisma/migrations/dev.db*
+
+# Playwright artifacts
+web/test-results/
+web/playwright-report/
