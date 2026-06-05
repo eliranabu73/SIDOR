@@ -853,12 +853,30 @@ function ScheduleInner() {
     toastId: string | number = "build-week",
   ) => {
     toast.loading("משבץ עובדים…", { id: toastId });
-    const auto = await autoSchedule.mutateAsync({ scheduleId, dryRun: true });
-    const proposals = auto.proposals ?? [];
     let placed = 0;
-    if (proposals.length > 0) {
-      const res = await applyProposals.mutateAsync({ scheduleId, proposals });
-      placed = res?.applied ?? proposals.length;
+    try {
+      const auto = await autoSchedule.mutateAsync({ scheduleId, dryRun: true });
+      const proposals = auto.proposals ?? [];
+      if (proposals.length > 0) {
+        const res = await applyProposals.mutateAsync({ scheduleId, proposals });
+        placed = res?.applied ?? proposals.length;
+      }
+    } catch (err) {
+      // Auto-assignment failed (cold start / timeout / no availability). The
+      // shifts (if any) are already created, so degrade to a manual-fill message
+      // instead of failing the entire build.
+      // eslint-disable-next-line no-console
+      console.warn("auto-schedule failed; shifts remain for manual fill", err);
+      await scheduleQueryReal.refetch();
+      if (createdShifts > 0) {
+        toast.info(
+          `נוצרו ${createdShifts} משמרות. השיבוץ האוטומטי לא זמין כרגע — אפשר לשבץ ידנית.`,
+          { id: toastId },
+        );
+      } else {
+        toast.error("השיבוץ האוטומטי לא זמין כרגע. נסו שוב בעוד רגע.", { id: toastId });
+      }
+      return;
     }
     await scheduleQueryReal.refetch();
 
@@ -889,22 +907,50 @@ function ScheduleInner() {
     const weeklyTpls = (weeklyTemplates.data ?? []).filter((t) => t.shifts.length > 0);
     const canonical =
       weeklyTpls.find((t) => t.name === DEFAULT_TEMPLATE_NAME) ?? weeklyTpls[0];
+
+    // Each strategy is attempted INDEPENDENTLY: a failure in one degrades to the
+    // next instead of aborting the whole build. This is what prevents a single
+    // throwing call (e.g. apply-template 404/5xx) from surfacing the generic
+    // "בניית השבוע נכשלה" toast.
     if (canonical) {
-      const res = await applyTemplate.mutateAsync({ scheduleId, templateId: canonical.id });
-      if (res.shiftsCreated > 0) return res.shiftsCreated;
+      try {
+        const res = await applyTemplate.mutateAsync({ scheduleId, templateId: canonical.id });
+        if (res.shiftsCreated > 0) return res.shiftsCreated;
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("apply-template failed; falling back", err);
+      }
     }
-    // 2) Legacy shift templates, if the org still uses them.
-    const genT = await generateFromTemplatesMut.mutateAsync(scheduleId);
-    if (genT.shiftsCreated > 0) return genT.shiftsCreated;
+    // 2) Legacy shift templates, if the org still uses them. Default templatesFound
+    // to 1 (assume present) so a thrown error never wrongly triggers the nudge.
+    let templatesFound = 1;
+    try {
+      const genT = await generateFromTemplatesMut.mutateAsync(scheduleId);
+      templatesFound = genT.templatesFound;
+      if (genT.shiftsCreated > 0) return genT.shiftsCreated;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("generate-from-templates failed; falling back", err);
+    }
     // 3) Otherwise split the business operating hours (zero setup).
-    const gen = await generateFromHoursMut.mutateAsync(scheduleId);
-    if (gen.shiftsCreated > 0) return gen.shiftsCreated;
+    try {
+      const gen = await generateFromHoursMut.mutateAsync(scheduleId);
+      if (gen.shiftsCreated > 0) return gen.shiftsCreated;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("generate-from-hours failed; falling back", err);
+    }
     // 4) Otherwise carry over last week (shifts + same employees).
-    const copied = await copyWeek.mutateAsync(scheduleId);
-    if (copied.copied > 0) return copied.copied;
+    try {
+      const copied = await copyWeek.mutateAsync(scheduleId);
+      if (copied.copied > 0) return copied.copied;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("copy-week failed", err);
+    }
     // Nothing could be laid down AND no rules/templates exist → nudge the user to
     // define their schedule rules (the friendly path), not the raw templates page.
-    if (!canonical && genT.templatesFound === 0) {
+    if (!canonical && templatesFound === 0) {
       toast.error("לא הוגדרו עדיין כללי סידור", {
         id: "build-week-templates-nudge",
         action: {
@@ -951,8 +997,11 @@ function ScheduleInner() {
         toast.loading(`נוצרו ${genT.shiftsCreated} משמרות…`, { id: toastId });
       }
       await fillAndSummarize(scheduleId, genT.shiftsCreated, toastId);
-    } catch {
-      toast.error("בניית השבוע נכשלה", { id: toastId });
+    } catch (err) {
+      const msg = err instanceof Error && err.message ? err.message : null;
+      toast.error(msg ? `בניית השבוע נכשלה — ${msg}` : "בניית השבוע נכשלה", {
+        id: toastId,
+      });
     } finally {
       setBuildingWeek(false);
     }
@@ -1000,8 +1049,12 @@ function ScheduleInner() {
         }
       }
       await fillAndSummarize(scheduleId, createdShifts, toastId);
-    } catch {
-      toast.error("בניית השבוע נכשלה", { id: toastId });
+    } catch (err) {
+      // Surface the real error to aid diagnosis instead of a generic message.
+      const msg = err instanceof Error && err.message ? err.message : null;
+      toast.error(msg ? `בניית השבוע נכשלה — ${msg}` : "בניית השבוע נכשלה", {
+        id: toastId,
+      });
     } finally {
       setBuildingWeek(false);
     }
