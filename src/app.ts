@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { env } from './env';
 import { captureException, initSentry } from './shared/sentry';
 import { prisma } from './db/prisma';
+import { ensureWeeklyTemplatesSchema } from './db/ensure-weekly-templates';
 import { authPlugin } from './modules/auth/auth.plugin';
 import { assignmentsRoutes } from './modules/assignments/assignments.routes';
 import { openShiftsRoutes } from './modules/openshifts/openshifts.routes';
@@ -148,6 +149,12 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(timetrackingRoutes, { prefix: '/v1' });
   await app.register(whatsappRoutes, { prefix: '/v1' });
   await app.register(realtimeRoutes);
+
+  // TEMPORARY: ensure the weekly_templates schema exists on the runtime DB
+  // (recorded-but-not-applied migration drift). Idempotent + non-fatal. Runs
+  // once per cold-start via the backend's own Prisma/Accelerate connection.
+  // Remove once prod is confirmed fixed.
+  await ensureWeeklyTemplatesSchema(prisma);
 
   return app;
 }

@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "installCommand": "npm install --include=dev",
-  "buildCommand": "npx prisma db execute --url \"$DIRECT_URL\" --file scripts/_apply_weekly_templates_idempotent.sql && npx prisma generate",
+  "buildCommand": "npx prisma generate",
   "framework": null,
   "outputDirectory": ".vercel-empty",
   "functions": {
