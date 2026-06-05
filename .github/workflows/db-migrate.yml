@@ -1,0 +1,63 @@
+name: DB migrate (prod)
+
+# Applies Prisma migrations to the PRODUCTION runtime database.
+#
+# Why this exists: the Vercel build only runs `prisma generate`, never
+# `prisma migrate deploy`. The runtime DB sits behind Prisma Accelerate / Prisma
+# Postgres ("DB-B"), which the Vercel build cannot reach over the direct port and
+# whose pooled runtime role cannot run DDL. As a result a migration
+# (weekly_templates) was recorded-but-never-applied and every related query 500'd.
+#
+# This workflow runs migrations from a CI runner using a privileged DIRECT
+# connection to DB-B, kept out of the app build entirely (the recommended Prisma
+# pattern: migrate in CI, not at app build time).
+#
+# REQUIRED SECRET (add once in GitHub → Settings → Secrets and variables →
+# Actions → New repository secret):
+#   MIGRATE_DATABASE_URL = the DIRECT postgres connection string for DB-B.
+#   Get it from the Prisma Console → project → Databases → "Connection strings"
+#   → the DIRECT / TCP `postgres://...` string (NOT the `prisma+postgres://`
+#   Accelerate URL — migrate needs a direct connection).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "prisma/migrations/**"
+  workflow_dispatch: {}
+
+concurrency:
+  group: db-migrate-prod
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    env:
+      # migrate uses directUrl; set both so it targets DB-B regardless.
+      DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm ci --include=dev
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      # One-time drift reconciliation (#2): the weekly_templates table was
+      # hand-created on DB-B but its row is missing from _prisma_migrations, so a
+      # bare `migrate deploy` would try to recreate it and fail ("already exists").
+      # Marking it applied makes history consistent. Idempotent via `|| true`
+      # (after the first successful run it is already recorded). Safe to remove
+      # once you've confirmed one green run.
+      - name: Reconcile weekly_templates drift (one-time, idempotent)
+        run: npx prisma migrate resolve --applied 20260603120000_weekly_templates || true
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
