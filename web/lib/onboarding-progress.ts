@@ -5,6 +5,7 @@ import {
   fetchEmployees,
   fetchMe,
   fetchSettings,
+  fetchWeeklyTemplates,
   listShiftTemplates,
   type MeResponse,
   type OrgSettings,
@@ -68,14 +69,21 @@ export function useOnboardingProgress(): OnboardingProgress {
         staleTime: 10_000,
         retry: false,
       },
+      {
+        queryKey: ["onboarding-progress", "weekly-templates"],
+        queryFn: () => fetchWeeklyTemplates(),
+        staleTime: 10_000,
+        retry: false,
+      },
     ],
   });
 
-  const [meQ, settingsQ, employeesQ, templatesQ] = results;
+  const [meQ, settingsQ, employeesQ, templatesQ, weeklyQ] = results;
   const me = meQ.data;
   const settings = settingsQ.data;
   const employees = employeesQ.data;
   const shiftTemplates = templatesQ.data;
+  const weeklyTemplates = weeklyQ.data;
 
   const hasOrg = (me?.memberships?.length ?? 0) > 0;
   const businessDone = Boolean(
@@ -84,7 +92,10 @@ export function useOnboardingProgress(): OnboardingProgress {
       settings.laborRules.businessHoursStart,
   );
   const employeesDone = (employees?.length ?? 0) >= 1;
-  const shiftsDone = (shiftTemplates?.length ?? 0) >= 1;
+  // The "shifts" step is satisfied by EITHER legacy shift templates OR the new
+  // schedule-rules wizard (which writes a recurring weekly template with shifts).
+  const hasWeeklyRules = (weeklyTemplates ?? []).some((t) => t.shifts.length > 0);
+  const shiftsDone = (shiftTemplates?.length ?? 0) >= 1 || hasWeeklyRules;
   const allDone = businessDone && employeesDone && shiftsDone;
 
   const completedCount =

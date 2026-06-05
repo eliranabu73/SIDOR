@@ -36,6 +36,7 @@ import {
   listShiftTemplates,
   type ShiftTemplate,
 } from "@/lib/api";
+import { DEFAULT_TEMPLATE_NAME } from "@/lib/rules-mapping";
 import { useAssignMutation, useValidateAssignment, useDashboard, useEmployeeMetricsLazy } from "@/lib/queries";
 import { ConfirmWarningsDialog } from "@/components/schedule/ConfirmWarningsDialog";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -882,36 +883,38 @@ function ScheduleInner() {
     toastId: string | number = "build-week",
   ): Promise<number> => {
     toast.loading("יוצר משמרות…", { id: toastId });
-    // 1) The org's defined shift templates are the source of truth.
-    const genT = await generateFromTemplatesMut.mutateAsync(scheduleId);
-    if (genT.shiftsCreated > 0) return genT.shiftsCreated;
-    // No templates at all → point the user to settings to define them.
-    // (Non-fatal here: the ladder still tries weekly template / operating hours
-    // / copy below. We surface the nudge on a separate toast id so it doesn't
-    // clobber the shared build-week progress toast.)
-    if (genT.templatesFound === 0) {
-      toast.error("לא הוגדרו תבניות משמרת", {
-        id: "build-week-templates-nudge",
-        action: {
-          label: "פתח הגדרות",
-          onClick: () => {
-            window.location.href = "/settings/shift-templates";
-          },
-        },
-      });
-    }
-    // 2) A custom weekly template, if one was defined.
-    const tpls = (weeklyTemplates.data ?? []).filter((t) => t.shifts.length > 0);
-    if (tpls.length >= 1) {
-      const res = await applyTemplate.mutateAsync({ scheduleId, templateId: tpls[0]!.id });
+    // 1) The canonical "schedule rules" weekly template is now the primary source
+    // of truth (set up in onboarding / settings → "כללי סידור"). Applying it both
+    // creates the week's shifts AND pre-assigns the fixed people.
+    const weeklyTpls = (weeklyTemplates.data ?? []).filter((t) => t.shifts.length > 0);
+    const canonical =
+      weeklyTpls.find((t) => t.name === DEFAULT_TEMPLATE_NAME) ?? weeklyTpls[0];
+    if (canonical) {
+      const res = await applyTemplate.mutateAsync({ scheduleId, templateId: canonical.id });
       if (res.shiftsCreated > 0) return res.shiftsCreated;
     }
+    // 2) Legacy shift templates, if the org still uses them.
+    const genT = await generateFromTemplatesMut.mutateAsync(scheduleId);
+    if (genT.shiftsCreated > 0) return genT.shiftsCreated;
     // 3) Otherwise split the business operating hours (zero setup).
     const gen = await generateFromHoursMut.mutateAsync(scheduleId);
     if (gen.shiftsCreated > 0) return gen.shiftsCreated;
     // 4) Otherwise carry over last week (shifts + same employees).
     const copied = await copyWeek.mutateAsync(scheduleId);
     if (copied.copied > 0) return copied.copied;
+    // Nothing could be laid down AND no rules/templates exist → nudge the user to
+    // define their schedule rules (the friendly path), not the raw templates page.
+    if (!canonical && genT.templatesFound === 0) {
+      toast.error("לא הוגדרו עדיין כללי סידור", {
+        id: "build-week-templates-nudge",
+        action: {
+          label: "הגדר כללים",
+          onClick: () => {
+            window.location.href = "/settings?tab=rules";
+          },
+        },
+      });
+    }
     return -1;
   };
 
@@ -1134,6 +1137,14 @@ function ScheduleInner() {
             <DropdownMenuItem onClick={() => setTemplateOpen(true)}>
               <CalendarCog className="h-4 w-4" />
               תבנית שבועית קבועה
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                window.location.href = "/settings?tab=rules";
+              }}
+            >
+              <CalendarCog className="h-4 w-4" />
+              ערוך כללי סידור
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={copyFromPreviousWeek}

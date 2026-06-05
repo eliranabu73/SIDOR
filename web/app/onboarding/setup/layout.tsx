@@ -22,7 +22,7 @@ interface Step {
 const STEPS: Step[] = [
   { id: "business", label: "עסק", href: "/onboarding/setup/business", doneKey: "businessDone" },
   { id: "employees", label: "עובדים", href: "/onboarding/setup/employees", doneKey: "employeesDone" },
-  { id: "shifts", label: "משמרות", href: "/onboarding/setup/shifts", doneKey: "shiftsDone" },
+  { id: "shifts", label: "כללי סידור", href: "/onboarding/setup/shifts", doneKey: "shiftsDone" },
   { id: "review", label: "סקירה", href: "/onboarding/setup/review", doneKey: "allDone" },
 ];
 

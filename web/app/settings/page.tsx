@@ -3,7 +3,7 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { Building2, MapPin, Users } from "lucide-react";
+import { Building2, CalendarClock, MapPin, Users } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import {
@@ -16,10 +16,11 @@ import {
 } from "@/lib/api";
 import { getSupabase } from "@/lib/supabase";
 
-type Tab = "general" | "branches-roles" | "managers";
+type Tab = "general" | "rules" | "branches-roles" | "managers";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "general", label: "כללי", icon: <Building2 className="h-4 w-4" /> },
+  { id: "rules", label: "כללי סידור", icon: <CalendarClock className="h-4 w-4" /> },
   {
     id: "branches-roles",
     label: "סניפים ותפקידים",
@@ -47,9 +48,20 @@ const ManagersTab = dynamic(() => import("./ManagersTab"), {
   ssr: false,
   loading: () => <TabSkeleton />,
 });
+const RulesTab = dynamic(() => import("./RulesTab"), {
+  ssr: false,
+  loading: () => <TabSkeleton />,
+});
+
+const VALID_TABS: Tab[] = ["general", "rules", "branches-roles", "managers"];
 
 function SettingsContent() {
-  const [tab, setTab] = React.useState<Tab>("general");
+  const initialTab: Tab = React.useMemo(() => {
+    if (typeof window === "undefined") return "general";
+    const t = new URLSearchParams(window.location.search).get("tab");
+    return (VALID_TABS as string[]).includes(t ?? "") ? (t as Tab) : "general";
+  }, []);
+  const [tab, setTab] = React.useState<Tab>(initialTab);
   const [settings, setSettings] = React.useState<OrgSettings | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
@@ -262,6 +274,12 @@ function SettingsContent() {
             onLogoRemove={handleLogoRemove}
             logoUploading={logoUploading}
           />
+        </div>
+      )}
+
+      {tab === "rules" && (
+        <div role="tabpanel" id="tabpanel-rules" aria-labelledby="tab-rules">
+          <RulesTab />
         </div>
       )}
 
