@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Building2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getSupabase } from "@/lib/supabase";
@@ -273,6 +272,9 @@ export default function BusinessStepPage() {
               </option>
             ))}
           </select>
+          <p className="text-xs text-muted-foreground">
+            התחום קובע תבנית משמרות מוצעת (בוקר/צהריים/ערב) שאפשר לשנות בהמשך.
+          </p>
         </div>
         <div className="space-y-1">
           <Label htmlFor="timezone">אזור זמן</Label>
@@ -299,6 +301,9 @@ export default function BusinessStepPage() {
           onChange={(e) => setBranchName(e.target.value)}
           placeholder="לדוגמה: סניף מרכזי"
         />
+        <p className="text-xs text-muted-foreground">
+          לא חובה — אם תשאירו ריק, נשתמש בשם העסק. אפשר להוסיף סניפים נוספים בהגדרות.
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -352,18 +357,6 @@ export default function BusinessStepPage() {
         )}
       </div>
 
-      <div className="border-t pt-3">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="text-xs"
-          onClick={onNext}
-          disabled={!canAdvance}
-        >
-          {saving ? "שומר…" : "שמור והמשך"}
-        </Button>
-      </div>
     </div>
   );
 }

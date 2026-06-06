@@ -61,9 +61,10 @@ function SummaryCard({
         </div>
         <Link
           href={href}
+          aria-label={`ערוך — ${title}`}
           className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
         >
-          <Edit2 className="h-3 w-3" />
+          <Edit2 className="h-3 w-3" aria-hidden="true" />
           ערוך
         </Link>
       </div>

@@ -185,6 +185,8 @@ export function WeeklyTemplateDialog({ open, onOpenChange, scheduleId }: Props) 
               key={t.id}
               type="button"
               onClick={() => loadTemplate(t)}
+              aria-pressed={editingId === t.id}
+              aria-label={`טען תבנית ${t.name}`}
               className={`rounded-full border px-3 py-1 text-sm transition-colors ${
                 editingId === t.id
                   ? "bg-indigo-500 text-white"
@@ -219,6 +221,7 @@ export function WeeklyTemplateDialog({ open, onOpenChange, scheduleId }: Props) 
                   <select
                     value={r.dayOfWeek}
                     onChange={(e) => setRow(i, { dayOfWeek: Number(e.target.value) })}
+                    aria-label="יום בשבוע"
                     className="h-10 w-full rounded-md border bg-background px-2 text-sm"
                   >
                     {DAYS.map((d, idx) => (
@@ -247,6 +250,7 @@ export function WeeklyTemplateDialog({ open, onOpenChange, scheduleId }: Props) 
                   <select
                     value={r.roleId ?? ""}
                     onChange={(e) => setRow(i, { roleId: e.target.value || null })}
+                    aria-label="תפקיד נדרש למשמרת"
                     className="h-10 w-full rounded-md border bg-background px-2 text-sm"
                   >
                     <option value="">ללא</option>
@@ -267,6 +271,8 @@ export function WeeklyTemplateDialog({ open, onOpenChange, scheduleId }: Props) 
                     onChange={(e) =>
                       setRow(i, { requiredEmployeeCount: Math.max(1, Number(e.target.value)) })
                     }
+                    aria-label="מספר עובדים נדרש למשמרת"
+                    title="כמה עובדים נדרשים למשמרת הזו"
                     className="h-10"
                   />
                 </div>
@@ -286,6 +292,8 @@ export function WeeklyTemplateDialog({ open, onOpenChange, scheduleId }: Props) 
                           key={e.id}
                           type="button"
                           onClick={() => toggleEmp(i, e.id)}
+                          aria-pressed={on}
+                          aria-label={`${on ? "הסר" : "הוסף"} את ${e.fullName} כעובד קבוע במשמרת`}
                           className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
                             on
                               ? "border-indigo-500 bg-indigo-500 text-white"

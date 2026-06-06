@@ -70,12 +70,17 @@ export function AutoScheduleDialog({
     return `${day} ${start.toFormat("HH:mm")}–${DateTime.fromISO(s.endsAt).toLocal().toFormat("HH:mm")}`;
   };
 
-  const slider = (key: keyof AutoScheduleWeights, label: string) => (
+  // Translate the 0–1 weight into a Hebrew word for screen readers / the hint,
+  // so the control isn't an opaque "0.50".
+  const importanceWord = (v: number): string =>
+    v <= 0.15 ? "לא חשוב" : v < 0.45 ? "חשיבות נמוכה" : v < 0.75 ? "חשיבות בינונית" : "חשוב מאוד";
+
+  const slider = (key: keyof AutoScheduleWeights, label: string, hint: string) => (
     <div className="space-y-1">
       <div className="flex justify-between">
         <Label htmlFor={`w-${key}`}>{label}</Label>
         <span className="text-xs tabular-nums text-muted-foreground">
-          {weights[key].toFixed(2)}
+          {importanceWord(weights[key])}
         </span>
       </div>
       <input
@@ -85,11 +90,13 @@ export function AutoScheduleDialog({
         max={1}
         step={0.05}
         value={weights[key]}
+        aria-valuetext={`${label}: ${importanceWord(weights[key])}`}
         onChange={(e) =>
           setWeights((w) => ({ ...w, [key]: Number(e.target.value) }))
         }
         className="w-full accent-primary"
       />
+      <p className="text-[11px] leading-tight text-muted-foreground">{hint}</p>
     </div>
   );
 
@@ -129,10 +136,10 @@ export function AutoScheduleDialog({
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-4">
-          {slider("fairness", "הוגנות")}
-          {slider("preference", "העדפות עובדים")}
-          {slider("continuity", "רציפות משמרות")}
-          {slider("cost", "עלות")}
+          {slider("fairness", "הוגנות", "חלוקת שעות שווה בין העובדים")}
+          {slider("preference", "העדפות עובדים", "התחשבות בימים/שעות שהעובד ביקש")}
+          {slider("continuity", "רציפות משמרות", "אותו עובד באותה משמרת לאורך השבוע")}
+          {slider("cost", "עלות", "העדפת עובדים בשכר נמוך יותר לחיסכון")}
         </div>
 
         {preview ? (
