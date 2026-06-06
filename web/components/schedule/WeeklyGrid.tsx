@@ -35,21 +35,18 @@ function empColor(name: string) {
   return AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length]!;
 }
 
-// Each distinct shift TEMPLATE (role + time-of-day) gets its own colour, so
-// morning vs evening (and per-role variants) are instantly scannable across the
-// grid. Keyed off a stable template key, not just the raw time-string, so the
-// same logical shift always renders the same colour. Tint raised to 25% and
-// text darkened (900/200) for >=4.5:1 contrast in light + dark.
-const SHIFT_COLORS = [
-  "bg-sky-500/25 border-sky-500/60 text-sky-900 dark:text-sky-100",
-  "bg-violet-500/25 border-violet-500/60 text-violet-900 dark:text-violet-100",
-  "bg-emerald-500/25 border-emerald-500/60 text-emerald-900 dark:text-emerald-100",
-  "bg-amber-500/25 border-amber-500/60 text-amber-900 dark:text-amber-100",
-  "bg-rose-500/25 border-rose-500/60 text-rose-900 dark:text-rose-100",
-  "bg-fuchsia-500/25 border-fuchsia-500/60 text-fuchsia-900 dark:text-fuchsia-100",
-  "bg-cyan-500/25 border-cyan-500/60 text-cyan-900 dark:text-cyan-100",
-  "bg-lime-500/25 border-lime-500/60 text-lime-900 dark:text-lime-100",
-];
+// Shifts are coloured by DAY-PART (morning / noon / evening / night) so the
+// schedule is instantly scannable: בוקר ירוק · צהריים צהוב · ערב סגול — the exact
+// mapping requested. Deterministic by local start-hour (not a hash), so every
+// morning shift is the same green regardless of role. Tint 25% + text 900/200
+// keeps >=4.5:1 contrast in light + dark. Never colour-only: the Legend and each
+// chip carry the time/role text label too.
+const DAYPART_COLORS = {
+  morning: "bg-emerald-500/25 border-emerald-500/60 text-emerald-900 dark:text-emerald-100",
+  noon: "bg-amber-500/25 border-amber-500/60 text-amber-900 dark:text-amber-100",
+  evening: "bg-violet-500/25 border-violet-500/60 text-violet-900 dark:text-violet-100",
+  night: "bg-indigo-500/25 border-indigo-500/60 text-indigo-900 dark:text-indigo-100",
+} as const;
 
 /** Stable template key for a shift: prefer role + time-of-day over raw ISO. */
 function shiftTemplateKey(shift: Shift): string {
@@ -62,8 +59,17 @@ function hashIndex(key: string, mod: number): number {
   return h % mod;
 }
 
+/** Day-part bucket from the shift's LOCAL start hour. */
+function dayPartOf(startIso: string): keyof typeof DAYPART_COLORS {
+  const h = DateTime.fromISO(startIso).toLocal().hour;
+  if (h < 12) return "morning"; // בוקר → ירוק
+  if (h < 16) return "noon"; // צהריים → צהוב
+  if (h < 22) return "evening"; // ערב → סגול
+  return "night"; // לילה → אינדיגו
+}
+
 function shiftColor(shift: Shift): string {
-  return SHIFT_COLORS[hashIndex(shiftTemplateKey(shift), SHIFT_COLORS.length)]!;
+  return DAYPART_COLORS[dayPartOf(shift.startsAt)];
 }
 
 const ROLE_DOTS = [

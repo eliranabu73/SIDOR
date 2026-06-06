@@ -15,6 +15,7 @@ import { SCHEDULE_TEMPLATES, type ScheduleTemplate } from '../templates/schedule
 import { SchedulerService } from '../scheduler/scheduler.service.js';
 import { findExistingOrgForUser } from './onboarding.service.js';
 import { startOfWeek, addDays, format } from 'date-fns';
+import { DateTime } from 'luxon';
 
 export interface QuickBootstrapInput {
   userId: string;
@@ -217,14 +218,15 @@ export async function quickBootstrap(
           const shiftDate = addDays(weekStart, dow);
           const dateStr = format(shiftDate, 'yyyy-MM-dd');
 
-          const [startHHRaw] = shiftDef.startTime.split(':').map(Number);
-          const [endHHRaw] = shiftDef.endTime.split(':').map(Number);
-          const startHH = startHHRaw ?? 0;
-          const endHH = endHHRaw ?? 0;
-          const isOvernight = endHH < startHH || (endHH === 0 && startHH > 0);
-          const endDateStr = isOvernight
-            ? format(addDays(shiftDate, 1), 'yyyy-MM-dd')
-            : dateStr;
+          // Build start/end in the ORG timezone (Luxon), matching
+          // weekly-template.service + operating-hours.service. The previous
+          // `new Date("YYYY-MM-DDTHH:mm:00")` parsed in the SERVER's local zone
+          // (UTC on Vercel), so bootstrap shifts landed 2-3h off from every
+          // later-built week — breaking the grid's template-match comparison
+          // and triggering a spurious rebuild dialog.
+          const start = DateTime.fromISO(`${dateStr}T${shiftDef.startTime}`, { zone: tz });
+          let end = DateTime.fromISO(`${dateStr}T${shiftDef.endTime}`, { zone: tz });
+          if (end <= start) end = end.plus({ days: 1 }); // crosses midnight
 
           await tx.shift.create({
             data: {
@@ -232,11 +234,11 @@ export async function quickBootstrap(
               scheduleId: schedule.id,
               locationId: location.id,
               roleId,
-              startAtUtc: new Date(`${dateStr}T${shiftDef.startTime}:00`),
-              endAtUtc: new Date(`${endDateStr}T${shiftDef.endTime}:00`),
+              startAtUtc: start.toUTC().toJSDate(),
+              endAtUtc: end.toUTC().toJSDate(),
               timezone: tz,
-              localStartDate: shiftDate,
-              localEndDate: isOvernight ? addDays(shiftDate, 1) : shiftDate,
+              localStartDate: new Date(`${dateStr}T00:00:00Z`),
+              localEndDate: new Date(`${end.toFormat('yyyy-MM-dd')}T00:00:00Z`),
               status: 'PLANNED',
               requiredEmployeeCount: 1,
             },

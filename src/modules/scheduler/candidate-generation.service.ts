@@ -197,7 +197,15 @@ async function evaluatePair(
   };
 
   const validation = await validateAssignment(ctx);
-  const eligible = validation.outcome !== 'blocked';
+  // Branch isolation: an employee tied to one location must never be auto-placed
+  // in another branch's shift. Only applies when BOTH carry a location — single-
+  // branch orgs (location-less shifts, or employees with no defaultLocationId)
+  // keep the previous behaviour, so this never narrows a single-branch org.
+  const locationMismatch =
+    !!shift.locationId &&
+    !!employee.defaultLocationId &&
+    shift.locationId !== employee.defaultLocationId;
+  const eligible = validation.outcome !== 'blocked' && !locationMismatch;
 
   const signals = computeSignals({
     shift,

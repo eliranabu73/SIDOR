@@ -214,6 +214,10 @@ async function fetchEmployeesForOrg(
     phone: e.phone,
     roles: e.roles.map((er) => er.role.name),
     primaryLocationId: e.defaultLocationId,
+    // Keep byte-compatible with GET /employees: it returns hourlyRate, so the
+    // dashboard (now the page's single source) must too — otherwise client-side
+    // labour-cost calc reads undefined/0.
+    hourlyRate: Number(e.hourlyRate),
     active: e.isActive,
   }));
 }
