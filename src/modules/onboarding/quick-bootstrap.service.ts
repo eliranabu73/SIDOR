@@ -78,18 +78,40 @@ export async function quickBootstrap(
 ): Promise<QuickBootstrapResult> {
   const { userId, name, industry, employeeCount } = input;
 
-  // Idempotency: one organization per user. A returning user (or a second
-  // device whose JWT lacks the org id) must land on their existing org+schedule
-  // instead of bootstrapping a fresh duplicate.
-  const existing = await findExistingOrgForUser(userId);
-  if (existing && existing.scheduleId) {
-    return { organizationId: existing.orgId, scheduleId: existing.scheduleId };
-  }
-
   const tpl = resolveTemplate(industry);
   const tz = 'Asia/Jerusalem';
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 0 });
   const weekEnd = addDays(weekStart, 6);
+
+  // Idempotency: STRICTLY one organization per user. A returning user (or a
+  // second device whose JWT lacks the org id) must land on their existing org
+  // instead of bootstrapping a duplicate. The previous guard only reused the
+  // org when it ALSO had a schedule — so a user whose org had no schedule yet
+  // (mid-onboarding, or a failed/cleared schedule) silently got a SECOND
+  // organization. We now reuse the existing org unconditionally, creating only
+  // a schedule inside it when one is missing. (Matches createOrgForUser.)
+  const existing = await findExistingOrgForUser(userId);
+  if (existing) {
+    if (existing.scheduleId) {
+      return { organizationId: existing.orgId, scheduleId: existing.scheduleId };
+    }
+    const schedule = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      await tx.$executeRawUnsafe(`SET LOCAL app.current_org_id = '${existing.orgId}'`);
+      return tx.schedule.create({
+        data: {
+          organizationId: existing.orgId,
+          name: `שבוע ${format(weekStart, 'yyyy-MM-dd')}`,
+          periodStartDate: weekStart,
+          periodEndDate: weekEnd,
+          timezone: tz,
+          status: 'DRAFT',
+          createdByUserId: userId,
+        },
+        select: { id: true },
+      });
+    });
+    return { organizationId: existing.orgId, scheduleId: schedule.id };
+  }
   const dominantRoleName = dominantRole(tpl);
   const placeholderCount = Math.max(1, Math.min(employeeCount, 200));
 
