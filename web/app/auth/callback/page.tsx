@@ -62,7 +62,7 @@ export default function AuthCallbackPage() {
           return;
         }
         if (!me.memberships || me.memberships.length === 0) {
-          router.replace("/onboarding");
+          router.replace("/onboarding/setup/business");
         } else {
           router.replace("/schedule");
         }

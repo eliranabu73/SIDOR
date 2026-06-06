@@ -146,7 +146,7 @@ export default function LoginPage() {
       if (error) throw error;
       // If session is returned, email confirmation is OFF — sign user in.
       if (data.session) {
-        router.replace("/onboarding");
+        router.replace("/onboarding/setup/business");
         return;
       }
       // Email confirmation ON — show "check your inbox" screen with resend.
