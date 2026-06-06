@@ -50,14 +50,8 @@ jobs:
       - name: Prisma generate
         run: npx prisma generate
 
-      # One-time drift reconciliation (#2): the weekly_templates table was
-      # hand-created on DB-B but its row is missing from _prisma_migrations, so a
-      # bare `migrate deploy` would try to recreate it and fail ("already exists").
-      # Marking it applied makes history consistent. Idempotent via `|| true`
-      # (after the first successful run it is already recorded). Safe to remove
-      # once you've confirmed one green run.
-      - name: Reconcile weekly_templates drift (one-time, idempotent)
-        run: npx prisma migrate resolve --applied 20260603120000_weekly_templates || true
-
+      # DB-B drift was already reconciled manually on 2026-06-06 (all 23
+      # migrations applied; `migrate status` = up to date). From here this is a
+      # clean forward-only deploy of any new migration.
       - name: Apply migrations
         run: npx prisma migrate deploy
