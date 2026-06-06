@@ -37,7 +37,10 @@ const UpsertBody = z.object({
 
 const IdParam = z.object({ id: z.string().uuid() });
 const ScheduleIdParam = z.object({ scheduleId: z.string().uuid() });
-const ApplyBody = z.object({ templateId: z.string().uuid() });
+const ApplyBody = z.object({
+  templateId: z.string().uuid(),
+  replace: z.boolean().optional(),
+});
 
 export async function weeklyTemplateRoutes(app: FastifyInstance): Promise<void> {
   const authHandlers = process.env['AUTH_DISABLED'] === 'true' ? [] : [app.authenticate];
@@ -143,11 +146,17 @@ export async function weeklyTemplateRoutes(app: FastifyInstance): Promise<void> 
     { schema: { params: ScheduleIdParam, body: ApplyBody }, preHandler: authHandlers },
     async (req, reply) => {
       const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
-      const { templateId } = req.body as z.infer<typeof ApplyBody>;
+      const { templateId, replace } = req.body as z.infer<typeof ApplyBody>;
       try {
         const result = await dbFor(req).query((tx) =>
           applyTemplateToSchedule(
-            { scheduleId, templateId, organizationId: orgIdFor(req), actingUserId: req.user?.id ?? null },
+            {
+              scheduleId,
+              templateId,
+              organizationId: orgIdFor(req),
+              actingUserId: req.user?.id ?? null,
+              ...(replace !== undefined ? { replace } : {}),
+            },
             tx,
           ),
         );

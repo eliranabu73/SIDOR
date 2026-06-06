@@ -139,10 +139,22 @@ export interface ApplyTemplateResult {
  * auto-schedule. Skipped if the target week already has shifts (no duplicates).
  */
 export async function applyTemplateToSchedule(
-  args: { scheduleId: string; templateId: string; organizationId: string; actingUserId?: string | null },
+  args: {
+    scheduleId: string;
+    templateId: string;
+    organizationId: string;
+    actingUserId?: string | null;
+    /** Upgrade path: when true, drop only AUTO-GENERATED shifts (templateId set,
+     * OR PLANNED with no assignments) before laying down the template — instead
+     * of bailing on a week that already has shifts. Mirrors the `replace` flag in
+     * generateShiftsFromShiftTemplates so a week locked into a 2-window
+     * operating-hours split can be upgraded to the real day-part template without
+     * clobbering shifts a manager already staffed. */
+    replace?: boolean;
+  },
   db: Db = defaultPrisma,
 ): Promise<ApplyTemplateResult> {
-  const { scheduleId, templateId, organizationId, actingUserId } = args;
+  const { scheduleId, templateId, organizationId, actingUserId, replace } = args;
 
   const schedule = await db.schedule.findFirst({
     where: { id: scheduleId, organizationId },
@@ -161,6 +173,24 @@ export async function applyTemplateToSchedule(
   }
   if (template.shifts.length === 0) {
     return { shiftsCreated: 0, assignmentsCreated: 0, message: 'template_has_no_shifts' };
+  }
+
+  if (replace === true) {
+    // Drop only the auto-generated shifts (safe to regenerate): those carrying a
+    // templateId, or PLANNED shifts with no assignments. Manually-built/staffed
+    // shifts are preserved. This lets build-week upgrade an operating-hours
+    // 2-window week into the canonical day-part template.
+    await db.shift.deleteMany({
+      where: {
+        organizationId,
+        scheduleId,
+        status: { not: 'CANCELLED' },
+        OR: [
+          { templateId: { not: null } },
+          { status: 'PLANNED', assignments: { none: {} } },
+        ],
+      },
+    });
   }
 
   const existing = await db.shift.count({

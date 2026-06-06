@@ -555,8 +555,9 @@ export function useDeleteWeeklyTemplate() {
 
 export function useApplyWeeklyTemplate() {
   const qc = useQueryClient();
-  return useMutation<ApplyTemplateResult, Error, { scheduleId: ID; templateId: ID }>({
-    mutationFn: ({ scheduleId, templateId }) => applyWeeklyTemplate(scheduleId, templateId),
+  return useMutation<ApplyTemplateResult, Error, { scheduleId: ID; templateId: ID; replace?: boolean }>({
+    mutationFn: ({ scheduleId, templateId, replace }) =>
+      applyWeeklyTemplate(scheduleId, templateId, replace),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["schedule"] });
       qc.invalidateQueries({ queryKey: ["shifts"] });

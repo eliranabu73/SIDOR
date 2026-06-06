@@ -1783,10 +1783,14 @@ export interface ApplyTemplateResult {
 export function applyWeeklyTemplate(
   scheduleId: ID,
   templateId: ID,
+  replace?: boolean,
 ): Promise<ApplyTemplateResult> {
   return request<ApplyTemplateResult>(
     `/v1/schedules/${scheduleId}/apply-template`,
-    { method: "POST", body: JSON.stringify({ templateId }) },
+    {
+      method: "POST",
+      body: JSON.stringify(replace === undefined ? { templateId } : { templateId, replace }),
+    },
   );
 }
 

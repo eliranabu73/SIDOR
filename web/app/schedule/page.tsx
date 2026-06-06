@@ -936,7 +936,16 @@ function ScheduleInner() {
     // "בניית השבוע נכשלה" toast.
     if (canonical) {
       try {
-        const res = await applyTemplate.mutateAsync({ scheduleId, templateId: canonical.id });
+        // replace:true makes the canonical day-part template AUTHORITATIVE. On a
+        // truly empty week it deletes nothing; on a week the UI thinks is empty
+        // but the DB locked into an operating-hours 2-window split (a prior build
+        // bound this schedule), it drops those auto-generated shifts first so the
+        // real 3 day-parts win instead of silently falling through to hours-split.
+        const res = await applyTemplate.mutateAsync({
+          scheduleId,
+          templateId: canonical.id,
+          replace: true,
+        });
         if (res.shiftsCreated > 0) return res.shiftsCreated;
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -1002,14 +1011,42 @@ function ScheduleInner() {
         return;
       }
       toast.loading("יוצר משמרות מהתבניות…", { id: toastId });
+
+      // PRIMARY: the canonical day-part weekly template ("כללי סידור"). Rebuild
+      // must produce the SAME 3 day-parts the user configured — not the legacy
+      // shift-templates and not the operating-hours 2-window split. replace:true
+      // drops the existing auto-generated shifts first (keeps staffed ones).
+      const tplRes = await weeklyTemplates.refetch();
+      const weeklyTpls = (tplRes.data ?? []).filter((t) => t.shifts.length > 0);
+      const canonical =
+        weeklyTpls.find((t) => t.name === DEFAULT_TEMPLATE_NAME) ?? weeklyTpls[0];
+      if (canonical) {
+        try {
+          const applied = await applyTemplate.mutateAsync({
+            scheduleId,
+            templateId: canonical.id,
+            replace: true,
+          });
+          if (applied.shiftsCreated > 0) {
+            toast.loading(`נוצרו ${applied.shiftsCreated} משמרות…`, { id: toastId });
+            await fillAndSummarize(scheduleId, applied.shiftsCreated, toastId);
+            return;
+          }
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn("rebuild apply-template failed; falling back to legacy", err);
+        }
+      }
+
+      // FALLBACK: legacy shift-templates.
       const genT = await generateFromTemplates(scheduleId, { replace: true });
-      if (genT.templatesFound === 0) {
+      if (genT.templatesFound === 0 && !canonical) {
         toast.error("לא הוגדרו תבניות משמרת", {
           id: toastId,
           action: {
             label: "פתח הגדרות",
             onClick: () => {
-              window.location.href = "/settings/shift-templates";
+              window.location.href = "/settings?tab=rules";
             },
           },
         });
