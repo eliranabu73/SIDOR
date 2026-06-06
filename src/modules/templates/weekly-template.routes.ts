@@ -156,8 +156,11 @@ export async function weeklyTemplateRoutes(app: FastifyInstance): Promise<void> 
         // 2-window split (so the configured day-parts never appear). Give this
         // transaction the same headroom quick-bootstrap uses. The demo/no-auth
         // path (no req.user) keeps the plain non-tx wrapper.
+        // 14s: comfortably covers a cold-start materialise (~5s observed) while
+        // staying under Prisma Accelerate's hard 15s interactive-tx ceiling
+        // (20s → P6005). Same value quick-bootstrap uses.
         const db = req.user?.orgId
-          ? withOrgContext(req.user.orgId, { timeout: 20_000, maxWait: 8_000 })
+          ? withOrgContext(req.user.orgId, { timeout: 14_000, maxWait: 8_000 })
           : dbFor(req);
         const result = await db.query((tx) =>
           applyTemplateToSchedule(
