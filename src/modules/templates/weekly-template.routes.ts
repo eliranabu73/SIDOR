@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { prisma } from '../../db/prisma';
+import { prisma, withOrgContext } from '../../db/prisma';
 import type { PrismaClient } from '@prisma/client';
 import {
   applyTemplateToSchedule,
@@ -148,7 +148,18 @@ export async function weeklyTemplateRoutes(app: FastifyInstance): Promise<void> 
       const { scheduleId } = req.params as z.infer<typeof ScheduleIdParam>;
       const { templateId, replace } = req.body as z.infer<typeof ApplyBody>;
       try {
-        const result = await dbFor(req).query((tx) =>
+        // Materialising a full week (≈15 shifts + their default-employee
+        // assignments) one row at a time can exceed Prisma's DEFAULT 5 s
+        // interactive-transaction cap on a cold Accelerate connection — the call
+        // then throws P2028 ("Transaction already closed"), surfaces as a 500,
+        // and the build cascade silently falls back to the operating-hours
+        // 2-window split (so the configured day-parts never appear). Give this
+        // transaction the same headroom quick-bootstrap uses. The demo/no-auth
+        // path (no req.user) keeps the plain non-tx wrapper.
+        const db = req.user?.orgId
+          ? withOrgContext(req.user.orgId, { timeout: 20_000, maxWait: 8_000 })
+          : dbFor(req);
+        const result = await db.query((tx) =>
           applyTemplateToSchedule(
             {
               scheduleId,
