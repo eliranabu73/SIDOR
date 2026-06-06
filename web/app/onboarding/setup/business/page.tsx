@@ -47,6 +47,11 @@ async function postQuickBootstrap(payload: {
   name: string;
   industry: string;
   employeeCount: number;
+  timezone?: string;
+  branchName?: string;
+  businessHoursStart?: string;
+  businessHoursEnd?: string;
+  activeDaysOfWeek?: number[];
 }): Promise<QuickBootstrapResult> {
   const apiUrl =
     process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ??
@@ -138,51 +143,53 @@ export default function BusinessStepPage() {
   const onNext = React.useCallback(async () => {
     setSaving(true);
     try {
-      // 1. Ensure org exists. If not, quick-bootstrap creates org + default
-      // location + empty schedule + initial roles.
       if (!orgAlreadyExists) {
+        // NEW org → quick-bootstrap performs the ENTIRE setup atomically on the
+        // server (org name/industry/timezone/business-hours/active-days + the
+        // typed branch name + roles + a first schedule). This avoids the old
+        // race where the client did org-scoped follow-up writes (patchSettings /
+        // location rename) before the refreshed JWT carried the new org id —
+        // which silently failed and left the org half-configured (empty name,
+        // no roles, default hours).
         await postQuickBootstrap({
           name: orgName.trim(),
           industry,
           employeeCount: 1,
+          timezone,
+          branchName: effectiveBranchName,
+          businessHoursStart: bizStart,
+          businessHoursEnd: bizEnd,
+          activeDaysOfWeek: activeDays,
         });
-        // Refresh JWT so the new organization_id claim arrives.
+        // Refresh JWT so the new organization_id claim arrives for later steps.
         try {
           const supabase = getSupabase();
           await supabase.auth.refreshSession();
         } catch {
           /* ignored — backend resolves org via DB lookup if claim missing */
         }
-      }
-
-      // 2. Re-fetch settings so we know whether the location quick-bootstrap
-      // created matches the name the user typed.
-      const fresh = await fetchSettings();
-
-      // 3. Patch org name + industry + timezone + business hours.
-      await patchSettings({
-        name: orgName.trim(),
-        industry,
-        defaultTimezone: timezone,
-        laborRules: {
-          ...fresh.laborRules,
-          businessHoursStart: bizStart,
-          businessHoursEnd: bizEnd,
-          // activeDaysOfWeek is not yet a typed LaborRules field — backend
-          // accepts arbitrary JSON in laborRulesJsonb so we widen here.
-          ...({ activeDaysOfWeek: activeDays } as unknown as object),
-        },
-      });
-
-      // 4. Ensure first location exists / matches the typed branch name. The
-      // quick-bootstrap seeds a default location (e.g. "ראשי"); if the user typed
-      // a different branch name, apply it so their choice isn't silently dropped.
-      if (fresh.locations.length === 0) {
-        await createLocation({ name: effectiveBranchName, timezone });
       } else {
-        const first = fresh.locations[0]!;
-        if (effectiveBranchName && first.name !== effectiveBranchName) {
-          await updateLocation(first.id, { name: effectiveBranchName, timezone });
+        // EXISTING org → the JWT already carries the org id, so client writes are
+        // safe. Patch the editable business details + apply the typed branch name.
+        const fresh = await fetchSettings();
+        await patchSettings({
+          name: orgName.trim(),
+          industry,
+          defaultTimezone: timezone,
+          laborRules: {
+            ...fresh.laborRules,
+            businessHoursStart: bizStart,
+            businessHoursEnd: bizEnd,
+            ...({ activeDaysOfWeek: activeDays } as unknown as object),
+          },
+        });
+        if (fresh.locations.length === 0) {
+          await createLocation({ name: effectiveBranchName, timezone });
+        } else {
+          const first = fresh.locations[0]!;
+          if (effectiveBranchName && first.name !== effectiveBranchName) {
+            await updateLocation(first.id, { name: effectiveBranchName, timezone });
+          }
         }
       }
 

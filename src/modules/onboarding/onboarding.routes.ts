@@ -24,6 +24,13 @@ const QuickBootstrapBody = z.object({
   name: z.string().min(2).max(120),
   industry: z.string().min(1).max(40),
   employeeCount: z.number().int().min(1).max(200),
+  // Optional full-setup fields — when present the bootstrap persists the entire
+  // business config atomically (no flaky client follow-up writes).
+  timezone: z.string().min(3).max(64).optional(),
+  branchName: z.string().min(1).max(120).optional(),
+  businessHoursStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  businessHoursEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  activeDaysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
 });
 
 const OrgIdParam = z.object({ id: z.string().uuid() });
@@ -83,6 +90,11 @@ export async function onboardingRoutes(app: FastifyInstance): Promise<void> {
         name: body.name,
         industry: body.industry,
         employeeCount: body.employeeCount,
+        timezone: body.timezone,
+        branchName: body.branchName,
+        businessHoursStart: body.businessHoursStart,
+        businessHoursEnd: body.businessHoursEnd,
+        activeDaysOfWeek: body.activeDaysOfWeek,
       });
       return reply.code(201).send(result);
     },

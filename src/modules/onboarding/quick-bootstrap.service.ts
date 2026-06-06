@@ -21,6 +21,16 @@ export interface QuickBootstrapInput {
   name: string;
   industry: string;
   employeeCount: number;
+  /** All optional — when provided, the bootstrap applies the FULL business setup
+   * atomically (org name/industry/hours/days/branch + roles) in one server call,
+   * so the onboarding client never has to do org-scoped follow-up writes that
+   * depend on the JWT already carrying the new org id (a race that left orgs
+   * half-configured: empty name, no roles, default hours). */
+  timezone?: string;
+  branchName?: string;
+  businessHoursStart?: string;
+  businessHoursEnd?: string;
+  activeDaysOfWeek?: number[];
 }
 
 export interface QuickBootstrapResult {
@@ -79,7 +89,13 @@ export async function quickBootstrap(
   const { userId, name, industry, employeeCount } = input;
 
   const tpl = resolveTemplate(industry);
-  const tz = 'Asia/Jerusalem';
+  const tz = input.timezone?.trim() || 'Asia/Jerusalem';
+  // Full business setup persisted on the org up-front (atomic) — see input doc.
+  const laborRules: Record<string, string | number[]> = {};
+  if (input.businessHoursStart) laborRules['businessHoursStart'] = input.businessHoursStart;
+  if (input.businessHoursEnd) laborRules['businessHoursEnd'] = input.businessHoursEnd;
+  if (input.activeDaysOfWeek) laborRules['activeDaysOfWeek'] = input.activeDaysOfWeek;
+  const branchName = input.branchName?.trim() || 'ראשי';
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 0 });
   const weekEnd = addDays(weekStart, 6);
 
@@ -132,6 +148,9 @@ export async function quickBootstrap(
           defaultTimezone: tz,
           industry: industry.trim(),
           ownerUserId: userId,
+          ...(Object.keys(laborRules).length > 0
+            ? { laborRulesJsonb: laborRules as Prisma.InputJsonObject }
+            : {}),
         },
       });
 
@@ -140,7 +159,7 @@ export async function quickBootstrap(
       });
 
       const location = await tx.location.create({
-        data: { organizationId: org.id, name: 'ראשי', timezone: tz },
+        data: { organizationId: org.id, name: branchName, timezone: tz },
       });
 
       // Roles — upsert-by-create since the org is brand new.
