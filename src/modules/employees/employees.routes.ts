@@ -5,6 +5,7 @@ import { employeeLocationScope } from '../../shared/location-scope.js';
 import {
   createEmployee,
   createLocation,
+  updateLocation,
   createRole,
   listLocations,
   listRoles,
@@ -72,6 +73,14 @@ const CreateLocationBody = z.object({
   name: z.string().min(1).max(120),
   timezone: z.string().min(3).max(64).optional(),
 });
+const UpdateLocationBody = z
+  .object({
+    name: z.string().min(1).max(120).optional(),
+    timezone: z.string().min(3).max(64).optional(),
+  })
+  .refine((b) => b.name !== undefined || b.timezone !== undefined, {
+    message: 'at least one field required',
+  });
 
 export async function employeesRoutes(app: FastifyInstance): Promise<void> {
   const authHandlers = process.env['AUTH_DISABLED'] === 'true' ? [] : [app.authenticate];
@@ -300,6 +309,24 @@ export async function employeesRoutes(app: FastifyInstance): Promise<void> {
           createLocation(orgIdFor(req), body.name, body.timezone, tx),
         );
         return reply.code(201).send(row);
+      } catch (err) {
+        return handleHttpError(reply, err);
+      }
+    },
+  );
+
+  app.patch(
+    '/locations/:id',
+    { schema: { params: IdParam, body: UpdateLocationBody }, preHandler: authHandlers },
+    async (req, reply) => {
+      const { id } = req.params as z.infer<typeof IdParam>;
+      const body = req.body as z.infer<typeof UpdateLocationBody>;
+      try {
+        const row = await dbFor(req).query((tx) =>
+          updateLocation(orgIdFor(req), id, body, tx),
+        );
+        if (!row) return reply.code(404).send({ code: 'NOT_FOUND', message: 'Location not found' });
+        return reply.send(row);
       } catch (err) {
         return handleHttpError(reply, err);
       }

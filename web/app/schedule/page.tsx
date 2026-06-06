@@ -914,12 +914,19 @@ function ScheduleInner() {
   const layDownEmptyWeek = async (
     scheduleId: string,
     toastId: string | number = "build-week",
+    templatesOverride?: NonNullable<typeof weeklyTemplates.data>,
   ): Promise<number> => {
     toast.loading("יוצר משמרות…", { id: toastId });
     // 1) The canonical "schedule rules" weekly template is now the primary source
     // of truth (set up in onboarding / settings → "כללי סידור"). Applying it both
     // creates the week's shifts AND pre-assigns the fixed people.
-    const weeklyTpls = (weeklyTemplates.data ?? []).filter((t) => t.shifts.length > 0);
+    // Use the freshly-refetched list passed by the caller when available — reading
+    // `weeklyTemplates.data` here can be a STALE closure (an empty list cached
+    // before onboarding saved the template), which silently skips apply-template
+    // and wrongly falls through to the operating-hours split.
+    const weeklyTpls = (templatesOverride ?? weeklyTemplates.data ?? []).filter(
+      (t) => t.shifts.length > 0,
+    );
     const canonical =
       weeklyTpls.find((t) => t.name === DEFAULT_TEMPLATE_NAME) ?? weeklyTpls[0];
 
@@ -1039,10 +1046,13 @@ function ScheduleInner() {
     toast.loading("מכין את השבוע…", { id: toastId });
     try {
       // Independent prep runs in parallel: creating the real schedule row and
-      // warming the weekly-templates list (the lay-down ladder may need it).
-      const [scheduleId] = await Promise.all([
+      // ALWAYS refetching the weekly-templates list. We must use the refetch
+      // result directly (not weeklyTemplates.data) — the hook's state isn't
+      // updated until a re-render, so reading it mid-build is a stale closure
+      // that silently skips the canonical template.
+      const [scheduleId, tplRes] = await Promise.all([
         ensureRealScheduleId(),
-        weeklyTemplates.isFetched ? Promise.resolve() : weeklyTemplates.refetch(),
+        weeklyTemplates.refetch(),
       ]);
       if (!scheduleId) {
         toast.error("לא ניתן ליצור סידור לשבוע זה", { id: toastId });
@@ -1050,7 +1060,7 @@ function ScheduleInner() {
       }
       let createdShifts = 0;
       if (!hasShifts) {
-        const laid = await layDownEmptyWeek(scheduleId, toastId);
+        const laid = await layDownEmptyWeek(scheduleId, toastId, tplRes.data ?? undefined);
         if (laid < 0) {
           toast.info(
             "כדי לבנות שבוע אוטומטית, הגדירו שעות פעילות בהגדרות העסק (או צרו משמרות / תבנית).",

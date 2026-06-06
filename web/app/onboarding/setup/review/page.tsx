@@ -183,14 +183,16 @@ export default function ReviewStepPage() {
           title="תבניות משמרת"
           done={progress.shiftsDone}
         >
-          {templatesCount === 0 ? (
+          {!progress.shiftsDone ? (
             <span className="text-amber-700 dark:text-amber-300">
               עדיין לא הוגדרו תבניות
             </span>
-          ) : (
+          ) : templatesCount > 0 ? (
             <span>
               {templatesCount} תבנית{templatesCount === 1 ? "" : "ות"}
             </span>
+          ) : (
+            <span>כללי הסידור הוגדרו</span>
           )}
         </SummaryCard>
       </div>

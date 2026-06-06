@@ -238,6 +238,16 @@ export function createLocation(body: CreateLocationBody): Promise<LocationItem> 
   });
 }
 
+export function updateLocation(
+  id: string,
+  body: { name?: string; timezone?: string },
+): Promise<LocationItem> {
+  return request<LocationItem>(`/v1/locations/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
 export function createRole(body: CreateRoleBody): Promise<RoleItem> {
   return request<RoleItem>(`/v1/roles`, {
     method: "POST",

@@ -295,6 +295,7 @@ export async function readsRoutes(app: FastifyInstance): Promise<void> {
             phone: e.phone,
             roles: e.roles.map((er) => er.role.name),
             primaryLocationId: e.defaultLocationId,
+            hourlyRate: Number(e.hourlyRate),
             active: e.isActive,
           })),
         );

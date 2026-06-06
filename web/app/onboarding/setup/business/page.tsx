@@ -12,6 +12,7 @@ import { getSupabase } from "@/lib/supabase";
 import {
   ApiError,
   createLocation,
+  updateLocation,
   fetchSettings,
   patchSettings,
 } from "@/lib/api";
@@ -173,9 +174,16 @@ export default function BusinessStepPage() {
         },
       });
 
-      // 4. Ensure first location exists / matches the typed branch name.
+      // 4. Ensure first location exists / matches the typed branch name. The
+      // quick-bootstrap seeds a default location (e.g. "ראשי"); if the user typed
+      // a different branch name, apply it so their choice isn't silently dropped.
       if (fresh.locations.length === 0) {
         await createLocation({ name: effectiveBranchName, timezone });
+      } else {
+        const first = fresh.locations[0]!;
+        if (effectiveBranchName && first.name !== effectiveBranchName) {
+          await updateLocation(first.id, { name: effectiveBranchName, timezone });
+        }
       }
 
       // 5. Invalidate the progress hook so the next step sees fresh data.

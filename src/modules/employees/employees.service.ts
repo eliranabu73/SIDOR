@@ -251,3 +251,25 @@ export async function createLocation(
   });
   return row;
 }
+
+export async function updateLocation(
+  orgId: string,
+  locationId: string,
+  patch: { name?: string; timezone?: string },
+  db: Db = defaultPrisma,
+): Promise<{ id: string; name: string; timezone: string } | null> {
+  const existing = await db.location.findFirst({
+    where: { id: locationId, organizationId: orgId },
+    select: { id: true },
+  });
+  if (!existing) return null;
+  const row = await db.location.update({
+    where: { id: locationId },
+    data: {
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.timezone !== undefined ? { timezone: patch.timezone } : {}),
+    },
+    select: { id: true, name: true, timezone: true },
+  });
+  return row;
+}
